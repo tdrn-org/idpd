@@ -43,9 +43,10 @@ jobs:
         with:
           go-version-file: 'go.mod'
           check-latest: true
-      - name: Bootstrap services
+      - name: Setup services
         run: |
-          apt install ldap-utils
+          sudo apt-get update
+          sudo apt install ldap-utils
           ldapadd -v -x -D "cn=idpd,dc=example,dc=org" -w ldappassword -H ldap://localhost:1389 -f /testdata/bootstrap/openldap/userstore.ldif
       - name: Run Build
         run: make check
