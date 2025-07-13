@@ -1,0 +1,54 @@
+[logging]
+level = "info"
+target = "stdout"
+color = 1
+file_name = "idpd.log"
+file_size_limit = 0
+
+[server]
+address = "localhost:9123"
+protocol = "http"
+cert_file = ""
+key_file = ""
+public_url = ""
+
+[database]
+type = "memory"
+
+[database.memory]
+
+[database.sqlite]
+file = "idpd.db"
+
+[database.postgres]
+address = "localhost:5432"
+db = "idpd"
+user = "idpd"
+password = "replace me"
+
+[userstore]
+type = "file"
+
+[userstore.ldap]
+url = "ldaps://localhost"
+bind_dn = "cn=admin,dc=example,dc=org"
+bind_password = "adminpassword"
+user_base_dn = "CN=Users,DC=mydomain,DC=net"
+user_filter = "(&(objectCategory=person)(objectClass=user))"
+mapping = "ldap.active_directory.toml"
+
+[userstore.file]
+
+[openid]
+allow_insecure = true
+default_logout_redirect_url = "http://localhost:9123/logout"
+
+[[openid.client]]
+id = "client 1"
+secret = "verysecretphrase"
+redirect_urls = ["http://localhost:9123/authorized"]
+
+[[openid.client]]
+id = "client 2"
+secret = "veryverysecretphrase"
+redirect_urls = ["http://localhost:9123/authorized"]

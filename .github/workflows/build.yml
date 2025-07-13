@@ -1,0 +1,50 @@
+name: build
+
+on:
+  - workflow_dispatch
+  - push
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    services:
+      openldap:
+        image: bitnami/openldap
+        ports:
+          - '1389:1389'
+          - '1636:1636'
+        volumes:
+          - ./testdata/bootstrap/openldap/ldifs:/ldifs
+        env:
+          LDAP_ADMIN_USERNAME: idpd
+          LDAP_ADMIN_PASSWORD: ldappassword
+          LDAP_ROOT: dc=example,dc=org
+          LDAP_ADMIN_DN: cn=admin,dc=example,dc=org
+      postgres:
+        image: library/postgres
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_DB: idpd
+          POSTGRES_USER: idpd
+          POSTGRES_PASSWORD: dbpassword
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          check-latest: true
+      - name: Run Build
+        run: make check
+      - name: Run SonarQube
+        uses: SonarSource/sonarqube-scan-action@v5

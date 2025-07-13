@@ -1,0 +1,41 @@
+dn: dc=example,dc=org
+objectClass: dcObject
+objectClass: organization
+dc: example
+o: example
+
+dn: ou=users,dc=example,dc=org
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=example,dc=org
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=user0,ou=users,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: user0
+displayName: User 0
+givenName: User
+sn: 0
+initials: U0
+userPassword: user0secret
+uid: user0
+uidNumber: 1000
+gidNumber: 1000
+homeDirectory: /home/user0
+mail: user0@example.org
+homePostalAddress: Somewhere street 1, 1234 There, also there, TA
+street: Somewhere street 1
+l: There
+st: Also there
+postalCode: 1234
+#c: TA
+telephoneNumber: +12 2345 6789
+
+dn: cn=oauth2 users,ou=groups,dc=example,dc=org
+cn: oauth2 users
+objectClass: groupOfNames
+member: cn=user0,ou=users,dc=example,dc=org
