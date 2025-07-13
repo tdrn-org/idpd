@@ -45,8 +45,11 @@ jobs:
           check-latest: true
       - name: Bootstrap services
         run: |
+          apt install ldap-utils
           ldapadd -v -x -D "cn=idpd,dc=example,dc=org" -w ldappassword -H ldap://localhost:1389 -f /testdata/bootstrap/openldap/userstore.ldif
       - name: Run Build
         run: make check
       - name: Run SonarQube
         uses: SonarSource/sonarqube-scan-action@v5
+
+        
