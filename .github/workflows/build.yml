@@ -47,7 +47,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt install ldap-utils
-          ldapadd -v -x -D "cn=idpd,dc=example,dc=org" -w ldappassword -H ldap://localhost:1389 -f /testdata/bootstrap/openldap/userstore.ldif
+          ldapadd -v -x -D "cn=idpd,dc=example,dc=org" -w ldappassword -H ldap://localhost:1389 -f ./testdata/bootstrap/openldap/userstore.ldif
       - name: Run Build
         run: make check
       - name: Run SonarQube
