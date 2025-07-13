@@ -19,13 +19,12 @@ jobs:
         ports:
           - '1389:1389'
           - '1636:1636'
-        volumes:
-          - ./testdata/bootstrap/openldap/ldifs:/ldifs
         env:
           LDAP_ADMIN_USERNAME: idpd
           LDAP_ADMIN_PASSWORD: ldappassword
           LDAP_ROOT: dc=example,dc=org
           LDAP_ADMIN_DN: cn=admin,dc=example,dc=org
+          LDAP_SKIP_DEFAULT_TREE: yes
       postgres:
         image: library/postgres
         ports:
@@ -44,6 +43,9 @@ jobs:
         with:
           go-version-file: 'go.mod'
           check-latest: true
+      - name: Bootstrap services
+        run: |
+          ldapadd -v -x -D "cn=idpd,dc=example,dc=org" -w ldappassword -H ldap://localhost:1389 -f /testdata/bootstrap/openldap/userstore.ldif
       - name: Run Build
         run: make check
       - name: Run SonarQube
