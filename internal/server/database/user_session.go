@@ -19,6 +19,7 @@ package database
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
 
@@ -27,6 +28,15 @@ type UserSessionRequest struct {
 	State      string
 	CreateTime int64
 	Remember   bool
+}
+
+func NewUserSessionRequest(state string, remember bool) *UserSessionRequest {
+	return &UserSessionRequest{
+		ID:         uuid.NewString(),
+		State:      state,
+		CreateTime: time.Now().UnixMicro(),
+		Remember:   remember,
+	}
 }
 
 type UserSession struct {
@@ -38,12 +48,27 @@ type UserSession struct {
 	Expiration   int64
 }
 
+func NewUserSession(token *oauth2.Token, remember bool) *UserSession {
+	return &UserSession{
+		ID:           uuid.NewString(),
+		Remember:     remember,
+		AccessToken:  token.AccessToken,
+		TokenType:    token.TokenType,
+		RefreshToken: token.RefreshToken,
+		Expiration:   token.Expiry.UnixMicro(),
+	}
+}
+
 func (session *UserSession) OAuth2Token() *oauth2.Token {
+	expiresIn := session.Expiration - time.Now().UnixMicro()
+	if expiresIn < 0 {
+		expiresIn = 0
+	}
 	return &oauth2.Token{
 		AccessToken:  session.AccessToken,
 		TokenType:    session.TokenType,
 		RefreshToken: session.RefreshToken,
 		Expiry:       time.UnixMicro(session.Expiration),
-		ExpiresIn:    session.Expiration - time.Now().UnixMicro(),
+		ExpiresIn:    expiresIn,
 	}
 }

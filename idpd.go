@@ -227,7 +227,7 @@ func (s *idpdServer) initAuthFlow(config *Config) error {
 		Issuer:          s.issuerURI,
 		ClientId:        s.authClient.ID,
 		ClientSecret:    s.authClient.Secret,
-		Scopes:          []string{"openid", "profile", "email", "groups"},
+		Scopes:          []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
 		EnablePKCE:      true,
 	}
 	authFlow, err := authFlowConfig.NewFlow(&http.Client{}, context.Background(), s.tokenExchange)
@@ -279,6 +279,10 @@ func (s *idpdServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	userInfoResponse, err := httpClient.Get(userinfoEndpoint)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if userInfoResponse.StatusCode != http.StatusOK {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

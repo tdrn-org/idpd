@@ -55,6 +55,30 @@ CREATE TABLE token_scope(
     token_id TEXT,
     FOREIGN KEY(token_id) REFERENCES token(id)
 );
+CREATE TABLE refresh_token(
+    id TEXT PRIMARY KEY,
+    auth_time BIGINT,
+    user_id TEXT,
+    application_id TEXT,
+    expiration BIGINT,
+    access_token_id TEXT,
+    FOREIGN KEY(access_token_id) REFERENCES token(id)
+);
+CREATE TABLE refresh_token_amr(
+    amr TEXT,
+    refresh_token_id TEXT,
+    FOREIGN KEY(refresh_token_id) REFERENCES refresh_token(id)
+);
+CREATE TABLE refresh_token_audience(
+    audience TEXT,
+    refresh_token_id TEXT,
+    FOREIGN KEY(refresh_token_id) REFERENCES refresh_token(id)
+);
+CREATE TABLE refresh_token_scope(
+    scope TEXT,
+    refresh_token_id TEXT,
+    FOREIGN KEY(refresh_token_id) REFERENCES refresh_token(id)
+);
 CREATE TABLE signing_key(
     id TEXT PRIMARY KEY,
     algorithm TEXT,

@@ -65,6 +65,7 @@ func testDriver(t *testing.T, d database.Driver) {
 	authRequest(t, d)
 	authCode(t, d)
 	token(t, d)
+	refreshToken(t, d)
 	signingKey(t, d)
 	userSession(t, d)
 }
@@ -174,6 +175,60 @@ func token(t *testing.T, d database.Driver) {
 	token1, err := d.SelectToken(ctx, token0.ID)
 	require.NoError(t, err)
 	require.Equal(t, token0, token1)
+}
+
+func generateAndInsertRefreshToken(t *testing.T, d database.Driver) *database.RefreshToken {
+	refreshTokenID := uuid.NewString()
+	token := &database.Token{
+		ID:             uuid.NewString(),
+		ApplicationID:  "applicationId",
+		Subject:        "subject",
+		RefreshTokenID: refreshTokenID,
+		Audience:       []string{"audience0", "audience1"},
+		Expiration:     time.Now().UnixMicro(),
+		Scopes:         []string{"scope0", "scope1"},
+	}
+	refreshToken := &database.RefreshToken{
+		ID:            refreshTokenID,
+		AuthTime:      time.Now().UnixMicro(),
+		AMR:           []string{"amr0", "amr1"},
+		Audience:      []string{"audience0", "audience1"},
+		UserID:        "userId",
+		ApplicationID: "applicationId",
+		Expiration:    time.Now().UnixMicro(),
+		Scopes:        []string{"scope0", "scope1"},
+		AccessTokenID: token.ID,
+	}
+	err := d.InsertRefreshToken(t.Context(), refreshToken, token)
+	require.NoError(t, err)
+	return refreshToken
+}
+
+func refreshToken(t *testing.T, d database.Driver) {
+	ctx := t.Context()
+	refreshToken0 := generateAndInsertRefreshToken(t, d)
+
+	refreshToken1, err := d.SelectRefreshToken(ctx, refreshToken0.ID)
+	require.NoError(t, err)
+	require.Equal(t, refreshToken0, refreshToken1)
+
+	newRefreshTokenID := uuid.NewString()
+	newToken := &database.Token{
+		ID:             uuid.NewString(),
+		ApplicationID:  "applicationId",
+		Subject:        "subject",
+		RefreshTokenID: newRefreshTokenID,
+		Audience:       []string{"audience0", "audience1"},
+		Expiration:     time.Now().UnixMicro(),
+		Scopes:         []string{"scope0", "scope1"},
+	}
+	newRefreshToken0, err := d.RenewRefreshToken(ctx, refreshToken1.ID, newToken)
+	require.NoError(t, err)
+	require.Equal(t, refreshToken1.AMR, newRefreshToken0.AMR)
+	require.Equal(t, refreshToken1.Audience, newRefreshToken0.Audience)
+	require.Equal(t, refreshToken1.UserID, newRefreshToken0.UserID)
+	require.Equal(t, refreshToken1.ApplicationID, newRefreshToken0.ApplicationID)
+	require.Equal(t, refreshToken1.Scopes, newRefreshToken0.Scopes)
 }
 
 func signingKey(t *testing.T, d database.Driver) {

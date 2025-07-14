@@ -25,7 +25,6 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	t.SkipNow()
 	err := idpd.RunArgs([]string{"--debug", "--config=idpd-local.toml"})
 	require.NoError(t, err)
 }

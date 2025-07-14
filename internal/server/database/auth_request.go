@@ -19,6 +19,7 @@ package database
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -40,6 +41,33 @@ type AuthRequest struct {
 	State         string
 	Subject       string
 	Done          bool
+}
+
+func NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, userID string) *AuthRequest {
+	var codeChallenge *oidc.CodeChallenge
+	if oidcAuthRequest.CodeChallenge != "" {
+		codeChallenge = &oidc.CodeChallenge{
+			Challenge: oidcAuthRequest.CodeChallenge,
+			Method:    oidcAuthRequest.CodeChallengeMethod,
+		}
+	}
+	return &AuthRequest{
+		ID:            uuid.NewString(),
+		ACR:           "",
+		AMR:           []string{"pwd"},
+		Audience:      []string{oidcAuthRequest.ClientID},
+		CreateTime:    time.Now().UnixMicro(),
+		ClientID:      oidcAuthRequest.ClientID,
+		CodeChallenge: codeChallenge,
+		Nonce:         oidcAuthRequest.Nonce,
+		RedirectURI:   oidcAuthRequest.RedirectURI,
+		ResponseType:  oidcAuthRequest.ResponseType,
+		ResponseMode:  oidcAuthRequest.ResponseMode,
+		Scopes:        oidcAuthRequest.Scopes,
+		State:         oidcAuthRequest.State,
+		Subject:       userID,
+		Done:          false,
+	}
 }
 
 func (r *AuthRequest) OpAuthRequest() op.AuthRequest {

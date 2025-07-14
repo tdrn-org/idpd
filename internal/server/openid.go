@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
-	"github.com/google/uuid"
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
@@ -40,6 +39,14 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 	"golang.org/x/text/language"
 )
+
+var ErrClientIDAlreadyRegistered = errors.New("client ID already registered")
+
+var ErrUnknownClient = errors.New("unknown client")
+
+var ErrInvalidClientSecret = errors.New("invalid client secret")
+
+var ErrNoSigningKey = errors.New("no signing key")
 
 type OpenIDClient struct {
 	ID           string
@@ -160,8 +167,8 @@ func (config *OpenIDProviderConfig) NewProvider(driver database.Driver, backend 
 		GrantTypeRefreshToken:    false,
 		RequestObjectSupported:   false,
 		SupportedUILocales:       []language.Tag{language.English},
-		SupportedClaims:          []string{"openid", "profile", "email", "groups"},
-		SupportedScopes:          []string{"openid", "profile", "email", "groups"},
+		SupportedClaims:          []string{},
+		SupportedScopes:          []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
 		DeviceAuthorization:      op.DeviceAuthorizationConfig{
 			// TODO
 		},
@@ -188,6 +195,8 @@ type OpenIDProvider struct {
 	mutex               sync.RWMutex
 }
 
+const defaultClockSkew = 10 * time.Second
+
 func (p *OpenIDProvider) AddClient(client *OpenIDClient, loginURLPattern string) error {
 	opClient := &opClient{
 		id:                             client.ID,
@@ -203,13 +212,13 @@ func (p *OpenIDProvider) AddClient(client *OpenIDClient, loginURLPattern string)
 		idTokenLifetime:                1 * time.Hour,
 		devMode:                        false,
 		idTokenUserinfoClaimsAssertion: false,
-		clockSkew:                      0,
+		clockSkew:                      defaultClockSkew,
 	}
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	_, exists := p.opClients[opClient.id]
 	if exists {
-
+		return fmt.Errorf("%w (client ID '%s' already registered)", ErrClientIDAlreadyRegistered, opClient.id)
 	}
 	p.opClients[opClient.id] = *opClient
 	return nil
@@ -250,29 +259,7 @@ func (p *OpenIDProvider) Authenticate(ctx context.Context, id string, email stri
 }
 
 func (p *OpenIDProvider) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
-	authRequest := &database.AuthRequest{
-		ID:            uuid.NewString(),
-		ACR:           "",
-		AMR:           []string{"pwd"},
-		Audience:      []string{oidcAuthRequest.ClientID},
-		CreateTime:    time.Now().UnixMicro(),
-		ClientID:      oidcAuthRequest.ClientID,
-		CodeChallenge: nil,
-		Nonce:         oidcAuthRequest.Nonce,
-		RedirectURI:   oidcAuthRequest.RedirectURI,
-		ResponseType:  oidcAuthRequest.ResponseType,
-		ResponseMode:  oidcAuthRequest.ResponseMode,
-		Scopes:        oidcAuthRequest.Scopes,
-		State:         oidcAuthRequest.State,
-		Subject:       userID,
-		Done:          false,
-	}
-	if oidcAuthRequest.CodeChallenge != "" {
-		authRequest.CodeChallenge = &oidc.CodeChallenge{
-			Challenge: oidcAuthRequest.CodeChallenge,
-			Method:    oidcAuthRequest.CodeChallengeMethod,
-		}
-	}
+	authRequest := database.NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest, userID)
 	err := p.driver.InsertAuthRequest(ctx, authRequest)
 	if err != nil {
 		return nil, err
@@ -304,26 +291,18 @@ func (p *OpenIDProvider) DeleteAuthRequest(ctx context.Context, id string) error
 	return p.driver.DeleteAuthRequest(ctx, id)
 }
 
-func (p *OpenIDProvider) CreateAccessToken(ctx context.Context, tokenRequest op.TokenRequest) (string, time.Time, error) {
-	switch request := tokenRequest.(type) {
+func (p *OpenIDProvider) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
+	switch tokenRequest := request.(type) {
 	case *database.OpAuthRequest:
-		return p.createAccessTokenFromOpAuthRequest(ctx, request)
+		return p.createAccessTokenFromOpAuthRequest(ctx, tokenRequest)
 	case op.TokenExchangeRequest:
-		return p.createAccessTokenFromTokenExchangeRequest(ctx, request)
+		return p.createAccessTokenFromTokenExchangeRequest(ctx, tokenRequest)
 	}
-	return "", time.Time{}, fmt.Errorf("unexpected token request type: %s", reflect.TypeOf(tokenRequest))
+	return "", time.Time{}, fmt.Errorf("unexpected token request type: %s", reflect.TypeOf(request))
 }
 
 func (p *OpenIDProvider) createAccessTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest) (string, time.Time, error) {
-	token := &database.Token{
-		ID:             uuid.NewString(),
-		ApplicationID:  opAuthRequest.GetClientID(),
-		Subject:        opAuthRequest.GetSubject(),
-		RefreshTokenID: "",
-		Audience:       opAuthRequest.GetAudience(),
-		Expiration:     time.Now().Add(5 * time.Minute).UnixMicro(),
-		Scopes:         opAuthRequest.GetScopes(),
-	}
+	token := database.NewTokenFromAuthRequest(opAuthRequest, "")
 	err := p.driver.InsertToken(ctx, token)
 	if err != nil {
 		return "", time.Time{}, err
@@ -332,15 +311,7 @@ func (p *OpenIDProvider) createAccessTokenFromOpAuthRequest(ctx context.Context,
 }
 
 func (p *OpenIDProvider) createAccessTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest) (string, time.Time, error) {
-	token := &database.Token{
-		ID:             uuid.NewString(),
-		ApplicationID:  tokenExchangeRequest.GetClientID(),
-		Subject:        tokenExchangeRequest.GetSubject(),
-		RefreshTokenID: "",
-		Audience:       tokenExchangeRequest.GetAudience(),
-		Expiration:     time.Now().Add(5 * time.Minute).UnixMicro(),
-		Scopes:         tokenExchangeRequest.GetScopes(),
-	}
+	token := database.NewTokenFromTokenExchangeRequest(tokenExchangeRequest, "")
 	err := p.driver.InsertToken(ctx, token)
 	if err != nil {
 		return "", time.Time{}, err
@@ -348,9 +319,37 @@ func (p *OpenIDProvider) createAccessTokenFromTokenExchangeRequest(ctx context.C
 	return token.ID, time.UnixMicro(token.Expiration), nil
 }
 
-func (p *OpenIDProvider) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (accessTokenID string, newRefreshTokenID string, expiration time.Time, err error) {
-	p.logStubCall()
-	return "", "", time.Now(), nil
+func (p *OpenIDProvider) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
+	switch refreshTokenRequest := request.(type) {
+	case *database.OpAuthRequest:
+		return p.createAccessAndRefreshTokenFromOpAuthRequest(ctx, refreshTokenRequest, currentRefreshToken)
+	case op.TokenExchangeRequest:
+		return "", "", time.Time{}, nil
+	case op.RefreshTokenRequest:
+		return "", "", time.Time{}, nil
+	}
+	return "", "", time.Time{}, fmt.Errorf("unexpected refresh token request type: %s", reflect.TypeOf(request))
+}
+
+func (p *OpenIDProvider) createAccessAndRefreshTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest, currentRefreshToken string) (string, string, time.Time, error) {
+	var accessToken *database.Token
+	var refreshToken *database.RefreshToken
+	refreshTokenID := database.NewRefreshTokenID()
+	accessToken = database.NewTokenFromAuthRequest(opAuthRequest, refreshTokenID)
+	if currentRefreshToken == "" {
+		refreshToken = database.NewRefreshTokenFromAuthRequest(refreshTokenID, accessToken.ID, opAuthRequest)
+		err := p.driver.InsertRefreshToken(ctx, refreshToken, accessToken)
+		if err != nil {
+			return "", "", time.Time{}, err
+		}
+	} else {
+		newRefreshToken, err := p.driver.RenewRefreshToken(ctx, refreshTokenID, accessToken)
+		if err != nil {
+			return "", "", time.Time{}, err
+		}
+		refreshToken = newRefreshToken
+	}
+	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
 }
 
 func (p *OpenIDProvider) TokenRequestByRefreshToken(ctx context.Context, refreshTokenID string) (op.RefreshTokenRequest, error) {
@@ -368,19 +367,17 @@ func (p *OpenIDProvider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 	return nil
 }
 
-func (p *OpenIDProvider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (userID string, tokenID string, err error) {
-	p.logStubCall()
-	return "", "", nil
+func (p *OpenIDProvider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (string, string, error) {
+	refreshToken, err := p.driver.SelectRefreshToken(ctx, token)
+	if errors.Is(err, database.ErrObjectNotFound) {
+		return "", "", op.ErrInvalidRefreshToken
+	} else if err != nil {
+		return "", "", op.ErrInvalidRefreshToken
+	} else if refreshToken.ApplicationID != clientID {
+		return "", "", op.ErrInvalidRefreshToken
+	}
+	return refreshToken.UserID, refreshToken.ID, nil
 }
-
-func (p *OpenIDProvider) generateSigningKey(algorithm string) (*database.SigningKey, error) {
-	now := time.Now()
-	passivation := now.Add(p.signingKeyLifetime).UnixMicro()
-	expiration := now.Add(p.signingKeyExpiry).UnixMicro()
-	return SigningKeyForAlgorithm(jose.SignatureAlgorithm(algorithm), passivation, expiration)
-}
-
-var ErrNoSigningKey = errors.New("no signing key")
 
 func (p *OpenIDProvider) SigningKey(ctx context.Context) (op.SigningKey, error) {
 	p.mutex.Lock()
@@ -397,9 +394,14 @@ func (p *OpenIDProvider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 	return nil, ErrNoSigningKey
 }
 
+func (p *OpenIDProvider) generateSigningKey(algorithm string) (*database.SigningKey, error) {
+	now := time.Now()
+	passivation := now.Add(p.signingKeyLifetime).UnixMicro()
+	expiration := now.Add(p.signingKeyExpiry).UnixMicro()
+	return SigningKeyForAlgorithm(jose.SignatureAlgorithm(algorithm), passivation, expiration)
+}
+
 func (p *OpenIDProvider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
 	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
@@ -416,8 +418,6 @@ func (p *OpenIDProvider) SignatureAlgorithms(ctx context.Context) ([]jose.Signat
 }
 
 func (p *OpenIDProvider) KeySet(ctx context.Context) ([]op.Key, error) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
 	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
@@ -449,13 +449,21 @@ func (p *OpenIDProvider) GetClientByClientID(ctx context.Context, clientID strin
 	defer p.mutex.RUnlock()
 	opClient, exists := p.opClients[clientID]
 	if !exists {
-		return nil, fmt.Errorf("unknown client '%s'", clientID)
+		return nil, fmt.Errorf("%w (unknown client: '%s')", ErrUnknownClient, clientID)
 	}
 	return &opClient, nil
 }
 
-func (p *OpenIDProvider) AuthorizeClientIDSecret(ctx context.Context, clientID, clientSecret string) error {
-	p.logStubCall()
+func (p *OpenIDProvider) AuthorizeClientIDSecret(ctx context.Context, clientID string, clientSecret string) error {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	opClient, exists := p.opClients[clientID]
+	if !exists {
+		return fmt.Errorf("%w (unknown client: '%s')", ErrUnknownClient, clientID)
+	}
+	if opClient.secret != clientSecret {
+		return fmt.Errorf("%w (invalid client secret: '%s')", ErrInvalidClientSecret, clientID)
+	}
 	return nil
 }
 
@@ -465,7 +473,11 @@ func (p *OpenIDProvider) SetUserinfoFromScopes(ctx context.Context, userInfo *oi
 }
 
 func (p *OpenIDProvider) SetUserinfoFromRequest(ctx context.Context, userInfo *oidc.UserInfo, token op.IDTokenRequest, scopes []string) error {
-	user, err := p.backend.LookupUserByEmail(token.GetSubject())
+	return p.setUserInfoFromSubject(ctx, userInfo, token.GetSubject(), scopes)
+}
+
+func (p *OpenIDProvider) setUserInfoFromSubject(_ context.Context, userInfo *oidc.UserInfo, subject string, scopes []string) error {
+	user, err := p.backend.LookupUserByEmail(subject)
 	if err != nil {
 		return err
 	}
@@ -478,11 +490,10 @@ func (p *OpenIDProvider) SetUserinfoFromToken(ctx context.Context, userInfo *oid
 	if err != nil {
 		return err
 	}
-	userInfo.Subject = token.Subject
-	return nil
+	return p.setUserInfoFromSubject(ctx, userInfo, token.Subject, token.Scopes)
 }
 
-func (p *OpenIDProvider) SetIntrospectionFromToken(ctx context.Context, userinfo *oidc.IntrospectionResponse, tokenID, subject, clientID string) error {
+func (p *OpenIDProvider) SetIntrospectionFromToken(ctx context.Context, userinfo *oidc.IntrospectionResponse, tokenID string, subject string, clientID string) error {
 	p.logStubCall()
 	return nil
 }
@@ -508,6 +519,6 @@ func (p *OpenIDProvider) Health(context.Context) error {
 }
 
 func (p *OpenIDProvider) logStubCall() {
-	_, file, line, _ := runtime.Caller(0)
+	_, file, line, _ := runtime.Caller(1)
 	p.logger.Warn("stub call", slog.String("location", fmt.Sprintf("%s:%d", file, line)))
 }

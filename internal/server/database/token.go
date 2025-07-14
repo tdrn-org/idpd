@@ -16,6 +16,13 @@
 
 package database
 
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/zitadel/oidc/v3/pkg/op"
+)
+
 type Token struct {
 	ID             string
 	ApplicationID  string
@@ -26,9 +33,32 @@ type Token struct {
 	Scopes         []string
 }
 
+func NewTokenFromAuthRequest(request op.AuthRequest, refreshTokenID string) *Token {
+	return &Token{
+		ID:             uuid.NewString(),
+		ApplicationID:  request.GetClientID(),
+		Subject:        request.GetSubject(),
+		RefreshTokenID: refreshTokenID,
+		Audience:       request.GetAudience(),
+		Expiration:     time.Now().Add(5 * time.Minute).UnixMicro(),
+		Scopes:         request.GetScopes(),
+	}
+}
+
+func NewTokenFromTokenExchangeRequest(request op.TokenExchangeRequest, refreshTokenID string) *Token {
+	return &Token{
+		ID:             uuid.NewString(),
+		ApplicationID:  request.GetClientID(),
+		Subject:        request.GetSubject(),
+		RefreshTokenID: refreshTokenID,
+		Audience:       request.GetAudience(),
+		Expiration:     time.Now().Add(5 * time.Minute).UnixMicro(),
+		Scopes:         request.GetScopes(),
+	}
+}
+
 type RefreshToken struct {
 	ID            string
-	Token         string
 	AuthTime      int64
 	AMR           []string
 	Audience      []string
@@ -36,5 +66,37 @@ type RefreshToken struct {
 	ApplicationID string
 	Expiration    int64
 	Scopes        []string
-	AccessToken   string
+	AccessTokenID string
+}
+
+func NewRefreshTokenID() string {
+	return uuid.NewString()
+}
+
+func NewRefreshTokenFromAuthRequest(id string, tokenID string, request op.AuthRequest) *RefreshToken {
+	return &RefreshToken{
+		ID:            id,
+		AuthTime:      request.GetAuthTime().UnixMicro(),
+		AMR:           request.GetAMR(),
+		Audience:      request.GetAudience(),
+		UserID:        request.GetSubject(),
+		ApplicationID: request.GetClientID(),
+		Expiration:    time.Now().Add(5 * time.Minute).UnixMicro(),
+		Scopes:        request.GetScopes(),
+		AccessTokenID: tokenID,
+	}
+}
+
+func NewRefreshTokenFromRefreshToken(id string, tokenID string, refreshToken *RefreshToken) *RefreshToken {
+	return &RefreshToken{
+		ID:            id,
+		AuthTime:      refreshToken.AuthTime,
+		AMR:           refreshToken.AMR,
+		Audience:      refreshToken.Audience,
+		UserID:        refreshToken.UserID,
+		ApplicationID: refreshToken.ApplicationID,
+		Expiration:    time.Now().Add(5 * time.Minute).UnixMicro(),
+		Scopes:        refreshToken.Scopes,
+		AccessTokenID: tokenID,
+	}
 }

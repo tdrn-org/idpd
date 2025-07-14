@@ -128,10 +128,34 @@ func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context, token *oauth2.
 	return provider.OAuthConfig().Client(ctx, token), nil
 }
 
+func (flow *AuthorizationCodeFlow[C]) GetEndSessionEndpoint() (string, error) {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return "", err
+	}
+	return provider.GetEndSessionEndpoint(), nil
+}
+
+func (flow *AuthorizationCodeFlow[C]) GetRevokeEndpoint() (string, error) {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return "", err
+	}
+	return provider.GetRevokeEndpoint(), nil
+}
+
 func (flow *AuthorizationCodeFlow[C]) UserinfoEndpoint() (string, error) {
 	provider, err := flow.providerFunc()
 	if err != nil {
 		return "", err
 	}
 	return provider.UserinfoEndpoint(), nil
+}
+
+func (flow *AuthorizationCodeFlow[C]) GetDeviceAuthorizationEndpoint() (string, error) {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return "", err
+	}
+	return provider.GetDeviceAuthorizationEndpoint(), nil
 }

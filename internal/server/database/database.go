@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"golang.org/x/oauth2"
 )
@@ -44,6 +43,9 @@ type Driver interface {
 	InsertAuthCode(ctx context.Context, code string, id string) error
 	InsertToken(ctx context.Context, token *Token) error
 	SelectToken(ctx context.Context, id string) (*Token, error)
+	InsertRefreshToken(ctx context.Context, refreshToken *RefreshToken, token *Token) error
+	RenewRefreshToken(ctx context.Context, id string, newToken *Token) (*RefreshToken, error)
+	SelectRefreshToken(ctx context.Context, id string) (*RefreshToken, error)
 	RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey func(string) (*SigningKey, error)) (SigningKeys, error)
 	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, error)
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
@@ -398,12 +400,7 @@ func (d *databaseDriver) AuthenticateAndTransformAuthRequestToUserSessionRequest
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	userSessionRequest := &UserSessionRequest{
-		ID:         uuid.NewString(),
-		State:      authRequest.State,
-		CreateTime: time.Now().UnixMicro(),
-		Remember:   remember,
-	}
+	userSessionRequest := NewUserSessionRequest(authRequest.State, remember)
 	args1 := []any{
 		userSessionRequest.ID,
 		userSessionRequest.State,
@@ -473,6 +470,14 @@ func (d *databaseDriver) InsertToken(ctx context.Context, token *Token) error {
 	if err != nil {
 		return err
 	}
+	err = d.insertToken(tx, ctx, token)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	return d.commitTx(tx)
+}
+
+func (d *databaseDriver) insertToken(tx *sql.Tx, ctx context.Context, token *Token) error {
 	args0 := []any{
 		token.ID,
 		token.ApplicationID,
@@ -480,23 +485,23 @@ func (d *databaseDriver) InsertToken(ctx context.Context, token *Token) error {
 		token.RefreshTokenID,
 		token.Expiration,
 	}
-	err = d.execTx(tx, ctx, "INSERT INTO token (id,application_id,subject,refresh_token_id,expiration) VALUES($1,$2,$3,$4,$5)", args0...)
+	err := d.execTx(tx, ctx, "INSERT INTO token (id,application_id,subject,refresh_token_id,expiration) VALUES($1,$2,$3,$4,$5)", args0...)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return err
 	}
 	for _, audience := range token.Audience {
 		err = d.execTx(tx, ctx, "INSERT INTO token_audience (audience,token_id) VALUES($1,$2)", audience, token.ID)
 		if err != nil {
-			return d.rollbackTx(tx, err)
+			return err
 		}
 	}
 	for _, scope := range token.Scopes {
 		err = d.execTx(tx, ctx, "INSERT INTO token_scope (scope,token_id) VALUES($1,$2)", scope, token.ID)
 		if err != nil {
-			return d.rollbackTx(tx, err)
+			return err
 		}
 	}
-	return d.commitTx(tx)
+	return nil
 }
 
 func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, error) {
@@ -510,25 +515,19 @@ func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, er
 		Audience: []string{},
 		Scopes:   []string{},
 	}
-	rows0, err := d.queryTx(tx, ctx, "SELECT application_id,subject,refresh_token_id,expiration FROM token WHERE id=$1", token.ID)
-	if err != nil {
-		return nil, d.rollbackTx(tx, err)
-	}
-	defer rows0.Close()
-	if !rows0.Next() {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown token: %s)", ErrObjectNotFound, id))
-	}
+	row := d.queryRowTx(tx, ctx, "SELECT application_id,subject,refresh_token_id,expiration FROM token WHERE id=$1", token.ID)
 	args0 := []any{
 		&token.ApplicationID,
 		&token.Subject,
 		&token.RefreshTokenID,
 		&token.Expiration,
 	}
-	err = rows0.Scan(args0...)
-	if err != nil {
+	err = row.Scan(args0...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown token: %s)", ErrObjectNotFound, token.ID))
+	} else if err != nil {
 		return nil, d.rollbackTx(tx, fmt.Errorf("select token failure (cause: %w)", err))
 	}
-	rows0.Close()
 	rows1, err := d.queryTx(tx, ctx, "SELECT audience FROM token_audience WHERE token_id=$1", token.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
@@ -558,6 +557,223 @@ func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, er
 	}
 	rows2.Close()
 	return token, d.commitTx(tx)
+}
+
+func (d *databaseDriver) deleteToken(tx *sql.Tx, ctx context.Context, id string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM token_scope WHERE token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM token_audience WHERE token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM token WHERE id=$1", id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) InsertRefreshToken(ctx context.Context, refreshToken *RefreshToken, token *Token) error {
+	d.logger.Debug("inserting refresh token", slog.String("id", refreshToken.ID))
+	tx, err := d.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	err = d.insertToken(tx, ctx, token)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	err = d.insertRefreshToken(tx, ctx, refreshToken)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	return d.commitTx(tx)
+}
+
+func (d *databaseDriver) insertRefreshToken(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
+	args0 := []any{
+		refreshToken.ID,
+		refreshToken.AuthTime,
+		refreshToken.UserID,
+		refreshToken.ApplicationID,
+		refreshToken.Expiration,
+		refreshToken.AccessTokenID,
+	}
+	err := d.execTx(tx, ctx, "INSERT INTO refresh_token (id,auth_time,user_id,application_id,expiration,access_token_id) VALUES($1,$2,$3,$4,$5,$6)", args0...)
+	if err != nil {
+		return err
+	}
+	for _, amr := range refreshToken.AMR {
+		err = d.execTx(tx, ctx, "INSERT INTO refresh_token_amr (amr,refresh_token_id) VALUES($1,$2)", amr, refreshToken.ID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, audience := range refreshToken.Audience {
+		err = d.execTx(tx, ctx, "INSERT INTO refresh_token_audience (audience,refresh_token_id) VALUES($1,$2)", audience, refreshToken.ID)
+		if err != nil {
+			return err
+		}
+	}
+	for _, scope := range refreshToken.Scopes {
+		err = d.execTx(tx, ctx, "INSERT INTO refresh_token_scope (scope,refresh_token_id) VALUES($1,$2)", scope, refreshToken.ID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *databaseDriver) RenewRefreshToken(ctx context.Context, id string, newToken *Token) (*RefreshToken, error) {
+	d.logger.Debug("renewing refresh token", slog.String("id", id))
+	tx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	oldRefreshToken, err := d.selectRefreshToken(tx, ctx, id)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	newRefreshToken := NewRefreshTokenFromRefreshToken(newToken.RefreshTokenID, newToken.ID, oldRefreshToken)
+	err = d.deleteRefreshToken(tx, ctx, oldRefreshToken.ID)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	err = d.deleteToken(tx, ctx, oldRefreshToken.AccessTokenID)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	err = d.insertToken(tx, ctx, newToken)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	err = d.insertRefreshToken(tx, ctx, newRefreshToken)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	return newRefreshToken, d.commitTx(tx)
+}
+
+func (d *databaseDriver) SelectRefreshToken(ctx context.Context, id string) (*RefreshToken, error) {
+	d.logger.Debug("selecting refresh token", slog.String("id", id))
+	tx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	refreshToken, err := d.selectRefreshToken(tx, ctx, id)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	return refreshToken, d.commitTx(tx)
+}
+
+func (d *databaseDriver) selectRefreshToken(tx *sql.Tx, ctx context.Context, id string) (*RefreshToken, error) {
+	refreshToken := &RefreshToken{
+		ID:       id,
+		AMR:      []string{},
+		Audience: []string{},
+		Scopes:   []string{},
+	}
+	row := d.queryRowTx(tx, ctx, "SELECT auth_time,user_id,application_id,expiration,access_token_id FROM refresh_token WHERE id=$1", refreshToken.ID)
+	args := []any{
+		&refreshToken.AuthTime,
+		&refreshToken.UserID,
+		&refreshToken.ApplicationID,
+		&refreshToken.Expiration,
+		&refreshToken.AccessTokenID,
+	}
+	err := row.Scan(args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w (unknown refresh token: %s)", ErrObjectNotFound, refreshToken.ID)
+	} else if err != nil {
+		return nil, fmt.Errorf("select refresh token failure (cause: %w)", err)
+	}
+	err = d.selectRefreshTokenAMRs(tx, ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	err = d.selectRefreshTokenAudiences(tx, ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	err = d.selectRefreshTokenScopes(tx, ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	return refreshToken, nil
+}
+
+func (d *databaseDriver) selectRefreshTokenAMRs(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT amr FROM refresh_token_amr WHERE refresh_token_id=$1", refreshToken.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var amr string
+		err = rows.Scan(&amr)
+		if err != nil {
+			return fmt.Errorf("select refresh token amr failure (cause: %w)", err)
+		}
+		refreshToken.AMR = append(refreshToken.AMR, amr)
+	}
+	return nil
+}
+
+func (d *databaseDriver) selectRefreshTokenAudiences(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT audience FROM refresh_token_audience WHERE refresh_token_id=$1", refreshToken.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var audience string
+		err = rows.Scan(&audience)
+		if err != nil {
+			return fmt.Errorf("select refresh token audience failure (cause: %w)", err)
+		}
+		refreshToken.Audience = append(refreshToken.Audience, audience)
+	}
+	return nil
+}
+
+func (d *databaseDriver) selectRefreshTokenScopes(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT scope FROM refresh_token_scope WHERE refresh_token_id=$1", refreshToken.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var scope string
+		err = rows.Scan(&scope)
+		if err != nil {
+			return fmt.Errorf("select refresh token scope failure (cause: %w)", err)
+		}
+		refreshToken.Scopes = append(refreshToken.Scopes, scope)
+	}
+	return nil
+}
+
+func (d *databaseDriver) deleteRefreshToken(tx *sql.Tx, ctx context.Context, id string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM refresh_token_scope WHERE refresh_token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM refresh_token_audience WHERE refresh_token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM refresh_token_amr WHERE refresh_token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM refresh_token WHERE id=$1", id)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey func(string) (*SigningKey, error)) (SigningKeys, error) {
@@ -652,14 +868,7 @@ func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Contex
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	userSession := &UserSession{
-		ID:           uuid.NewString(),
-		Remember:     userSessionRequest.Remember,
-		AccessToken:  token.AccessToken,
-		TokenType:    token.TokenType,
-		RefreshToken: token.RefreshToken,
-		Expiration:   token.Expiry.UnixMicro(),
-	}
+	userSession := NewUserSession(token, userSessionRequest.Remember)
 	args := []any{
 		userSession.ID,
 		userSession.Remember,
@@ -679,21 +888,16 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, ctx context
 	userSessionRequest := &UserSessionRequest{
 		State: state,
 	}
-	rows, err := d.queryTx(tx, ctx, "SELECT id,create_time,remember FROM user_session_request WHERE state=$1", userSessionRequest.State)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		return nil, fmt.Errorf("%w (unknown user session request state: %s)", ErrObjectNotFound, userSessionRequest.State)
-	}
+	row := d.queryRowTx(tx, ctx, "SELECT id,create_time,remember FROM user_session_request WHERE state=$1", userSessionRequest.State)
 	args := []any{
 		&userSessionRequest.ID,
 		&userSessionRequest.CreateTime,
 		&userSessionRequest.Remember,
 	}
-	err = rows.Scan(args...)
-	if err != nil {
+	err := row.Scan(args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w (unknown user session request state: %s)", ErrObjectNotFound, userSessionRequest.State)
+	} else if err != nil {
 		return nil, fmt.Errorf("select user session request failure (cause: %w)", err)
 	}
 	return userSessionRequest, nil
@@ -708,14 +912,7 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	userSession := &UserSession{
 		ID: id,
 	}
-	rows, err := d.queryTx(tx, ctx, "SELECT remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
-	if err != nil {
-		return nil, d.rollbackTx(tx, err)
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user session: %s)", ErrObjectNotFound, userSession.ID))
-	}
+	row := d.queryRowTx(tx, ctx, "SELECT remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
 	args := []any{
 		&userSession.Remember,
 		&userSession.AccessToken,
@@ -723,8 +920,10 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 		&userSession.RefreshToken,
 		&userSession.Expiration,
 	}
-	err = rows.Scan(args...)
-	if err != nil {
+	err = row.Scan(args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user session: %s)", ErrObjectNotFound, userSession.ID))
+	} else if err != nil {
 		return nil, d.rollbackTx(tx, fmt.Errorf("select user session failure (cause: %w)", err))
 	}
 	return userSession, d.commitTx(tx)
