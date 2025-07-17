@@ -50,7 +50,7 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 	}
 	authURL := parsedBaseURL.JoinPath(config.AuthURLPath)
 	redirectURL := parsedBaseURL.JoinPath(config.RedirectURLPath)
-	cookieHandler, err := NewCookieHandler(parsedBaseURL)
+	cookieHandler, err := newCookieHandler(parsedBaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cookie handler (cause: %w)", err)
 	}
@@ -77,7 +77,7 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 		redirectURL:          redirectURL,
 		providerFunc:         providerFunc,
 		codeExchangeCallback: codeExchangeCallback,
-		logger:               slog.With(slog.String("redirectURL", redirectURL.String()), slog.String("client", config.ClientId)),
+		logger:               slog.With(slog.Any("redirectURL", redirectURL), slog.String("client", config.ClientId)),
 	}
 	return flow, nil
 }

@@ -209,7 +209,7 @@ func (p *OpenIDProvider) AddClient(client *OpenIDClient) error {
 		authMethod:                     oidc.AuthMethodNone,
 		responseTypes:                  []oidc.ResponseType{oidc.ResponseTypeCode},
 		grantTypes:                     []oidc.GrantType{oidc.GrantTypeCode, oidc.GrantTypeRefreshToken},
-		loginURLPattern:                p.issuerURL + "/user/?id=%s",
+		loginURLPattern:                p.issuerURL + "/user?id=%s",
 		accessTokenType:                op.AccessTokenTypeBearer,
 		idTokenLifetime:                1 * time.Hour,
 		devMode:                        false,

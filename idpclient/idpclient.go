@@ -24,16 +24,16 @@ import (
 	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 )
 
-func NewCookieHandler(url *url.URL) (*httphelper.CookieHandler, error) {
+func newCookieHandler(url *url.URL) (*httphelper.CookieHandler, error) {
 	hashKey := make([]byte, 64)
 	_, err := rand.Read(hashKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed read radnom bytes (cause: %w)", err)
+		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
 	}
 	encryptKey := make([]byte, 32)
 	_, err = rand.Read(encryptKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed read radnom bytes (cause: %w)", err)
+		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
 	}
 	opts := make([]httphelper.CookieHandlerOpt, 0, 1)
 	if url.Scheme == "http" {

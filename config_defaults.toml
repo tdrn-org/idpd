@@ -11,6 +11,7 @@ protocol = "http"
 cert_file = ""
 key_file = ""
 public_url = ""
+session_cookie = "idpd_session"
 
 [database]
 type = "memory"

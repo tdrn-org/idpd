@@ -18,6 +18,7 @@ package idpd
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
+	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -96,14 +98,16 @@ func startConfig(config *Config) (*Server, error) {
 }
 
 type Server struct {
-	httpServer *httpserver.Instance
-	issuerURL  string
-	database   database.Driver
-	userStore  userstore.Backend
-	provider   *server.OpenIDProvider
-	authClient *server.OpenIDClient
-	authFLow   *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]
-	stoppedWG  sync.WaitGroup
+	httpServer    *httpserver.Instance
+	cookieHandler *httphelper.CookieHandler
+	sessionCookie string
+	issuerURL     string
+	database      database.Driver
+	userStore     userstore.Backend
+	provider      *server.OpenIDProvider
+	authClient    *server.OpenIDClient
+	authFLow      *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]
+	stoppedWG     sync.WaitGroup
 }
 
 func (s *Server) Issuer() string {
@@ -141,7 +145,8 @@ func (s *Server) run() {
 
 func (s *Server) shutdown(ctx context.Context) error {
 	slog.Info("initiating shutdown")
-	shutdownCtx, _ := context.WithTimeout(ctx, shutdownTimeout)
+	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, shutdownTimeout)
+	defer cancelShutdown()
 	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.provider.Close(), s.database.Close())
 	if err != nil {
 		return err
@@ -176,7 +181,13 @@ func (s *Server) initHttpServer(config *Config) error {
 	if err != nil {
 		return err
 	}
+	cookieHandler, err := newCookieHandler(config.OpenID.AllowInsecure)
+	if err != nil {
+		return err
+	}
 	s.httpServer = httpServer
+	s.cookieHandler = cookieHandler
+	s.sessionCookie = config.Server.SessionCookie
 	config.Server.Address = httpServer.ListenerAddr()
 	s.issuerURL = config.OpenIDIssuerURL()
 	return nil
@@ -296,13 +307,13 @@ func (s *Server) startServer(config *Config) error {
 	if !config.Mock.Enabled {
 		web.Mount(s.httpServer)
 	} else {
-		s.httpServer.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
+		s.httpServer.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
 			s.handleUserMock(w, r, config.Mock.Email, config.Mock.Password, config.Mock.Rembemer)
 		})
 	}
-	s.httpServer.HandleFunc("/session/", s.handleSession)
-	s.httpServer.HandleFunc("/session/login/", s.handleSessionLogin)
-	s.httpServer.HandleFunc("/session/logoff/", s.handleSessionLogoff)
+	s.httpServer.HandleFunc("/session", s.handleSession)
+	s.httpServer.HandleFunc("/session/login", s.handleSessionLogin)
+	s.httpServer.HandleFunc("/session/logoff", s.handleSessionLogoff)
 	switch config.Server.Protocol {
 	case "http":
 		return s.httpServer.Serve()
@@ -330,7 +341,7 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, email st
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	sessionId, err := s.getSessionCookie(r)
+	sessionId, err := s.cookieHandler.CheckCookie(r, s.sessionCookie)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -396,7 +407,7 @@ func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
-	s.deleteSessionCookie(w)
+	s.cookieHandler.DeleteCookie(w, s.sessionCookie)
 }
 
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty) {
@@ -406,32 +417,24 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.setSessionCookie(w, userSession.ID)
+	s.cookieHandler.SetCookie(w, s.sessionCookie, userSession.ID)
 	http.Redirect(w, r, s.issuerURL, http.StatusFound)
 }
 
-const sessionCookieName = "idpd_session"
-
-func (s *Server) getSessionCookie(r *http.Request) (string, error) {
-	cookie, err := r.Cookie(sessionCookieName)
+func newCookieHandler(unsecure bool) (*httphelper.CookieHandler, error) {
+	hashKey := make([]byte, 64)
+	_, err := rand.Read(hashKey)
 	if err != nil {
-		return "", fmt.Errorf("no session cookie")
+		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
 	}
-	return cookie.Value, nil
-}
-
-func (s *Server) setSessionCookie(w http.ResponseWriter, sessionId string) {
-	cookie := &http.Cookie{
-		Name:  sessionCookieName,
-		Value: sessionId,
+	encryptKey := make([]byte, 32)
+	_, err = rand.Read(encryptKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
 	}
-	http.SetCookie(w, cookie)
-}
-
-func (s *Server) deleteSessionCookie(w http.ResponseWriter) {
-	cookie := &http.Cookie{
-		Name:   sessionCookieName,
-		MaxAge: -1,
+	opts := make([]httphelper.CookieHandlerOpt, 0, 1)
+	if unsecure {
+		opts = append(opts, httphelper.WithUnsecure())
 	}
-	http.SetCookie(w, cookie)
+	return httphelper.NewCookieHandler(hashKey, encryptKey, opts...), nil
 }

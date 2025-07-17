@@ -41,11 +41,12 @@ type Config struct {
 		FileSizeLimit int64  `toml:"file_size_limit"`
 	} `toml:"logging"`
 	Server struct {
-		Address   string `toml:"address"`
-		Protocol  string `toml:"protocol"`
-		CertFile  string `toml:"cert_file"`
-		KeyFile   string `toml:"key_file"`
-		PublicURL string `toml:"public_url"`
+		Address       string `toml:"address"`
+		Protocol      string `toml:"protocol"`
+		CertFile      string `toml:"cert_file"`
+		KeyFile       string `toml:"key_file"`
+		PublicURL     string `toml:"public_url"`
+		SessionCookie string `toml:"session_cookie"`
 	} `toml:"server"`
 	Database struct {
 		Type   string `toml:"type"`
