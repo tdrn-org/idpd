@@ -146,17 +146,33 @@ type Config struct {
 		} `toml:"static"`
 	} `toml:"userstore"`
 	OpenID struct {
-		AllowInsecure            bool   `toml:"allow_insecure"`
-		DefaultLogoutRedirectURL string `toml:"default_logout_redirect_url"`
-		SigningKeyAlgorithm      string `toml:"signing_key_algorithm"`
-		SigningKeyLifetime       int64  `toml:"signing_key_lifetime"`
-		SigningKeyExpiry         int64  `toml:"signing_key_expiry"`
-		Clients                  []struct {
-			ID           string   `toml:"id"`
-			Secret       string   `toml:"secret"`
-			RedirectURLs []string `toml:"redirect_urls"`
-		} `toml:"client"`
+		AllowInsecure            bool     `toml:"allow_insecure"`
+		DefaultLogoutRedirectURL string   `toml:"default_logout_redirect_url"`
+		SigningKeyAlgorithm      string   `toml:"signing_key_algorithm"`
+		SigningKeyLifetime       int64    `toml:"signing_key_lifetime"`
+		SigningKeyExpiry         int64    `toml:"signing_key_expiry"`
+		Clients                  []Client `toml:"client"`
 	} `toml:"openid"`
+	Mock struct {
+		Enabled  bool   `toml:"enabled"`
+		Email    string `toml:"email"`
+		Password string `toml:"password"`
+		Rembemer bool   `toml:"remember"`
+	} `toml:"mock"`
+}
+
+type Client struct {
+	ID           string   `toml:"id"`
+	Secret       string   `toml:"secret"`
+	RedirectURLs []string `toml:"redirect_urls"`
+}
+
+func (client *Client) openIDClient() *server.OpenIDClient {
+	return &server.OpenIDClient{
+		ID:           client.ID,
+		Secret:       client.Secret,
+		RedirectURLs: client.RedirectURLs,
+	}
 }
 
 //go:embed config_defaults.toml
@@ -290,38 +306,33 @@ func (c *Config) staticUsers() []userstore.StaticUser {
 	return users
 }
 
-func (c *Config) OpenIDIssuerURI() string {
-	issuerURI := c.Server.PublicURL
-	if issuerURI == "" {
-		issuerURI = c.Server.Protocol + "://" + c.Server.Address
+func (c *Config) OpenIDIssuerURL() string {
+	issuerURL := c.Server.PublicURL
+	if issuerURL == "" {
+		issuerURL = c.Server.Protocol + "://" + c.Server.Address
 	}
-	return issuerURI
+	return issuerURL
 }
 
 func (c *Config) openIDProviderConfig() *server.OpenIDProviderConfig {
-	issuerURI := c.OpenIDIssuerURI()
-	defaultLogoutRedirectURI := c.OpenID.DefaultLogoutRedirectURL
-	if defaultLogoutRedirectURI == "" {
-		defaultLogoutRedirectURI = issuerURI
+	issuerURL := c.OpenIDIssuerURL()
+	defaultLogoutRedirectURL := c.OpenID.DefaultLogoutRedirectURL
+	if defaultLogoutRedirectURL == "" {
+		defaultLogoutRedirectURL = issuerURL
 	}
 	return &server.OpenIDProviderConfig{
-		Issuer:                   issuerURI,
-		DefaultLogoutRedirectURI: defaultLogoutRedirectURI,
+		Issuer:                   issuerURL,
+		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
 		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OpenID.SigningKeyAlgorithm),
 		SigningKeyLifetime:       time.Duration(c.OpenID.SigningKeyLifetime) * time.Second,
 		SigningKeyExpiry:         time.Duration(c.OpenID.SigningKeyExpiry) * time.Second,
 	}
 }
 
-func (c *Config) openIDClients() []server.OpenIDClient {
-	openIDClients := make([]server.OpenIDClient, 0, len(c.OpenID.Clients))
+func (c *Config) openIDClients() []*server.OpenIDClient {
+	openIDClients := make([]*server.OpenIDClient, 0, len(c.OpenID.Clients))
 	for _, client := range c.OpenID.Clients {
-		openIDClient := server.OpenIDClient{
-			ID:           client.ID,
-			Secret:       client.Secret,
-			RedirectURIs: client.RedirectURLs,
-		}
-		openIDClients = append(openIDClients, openIDClient)
+		openIDClients = append(openIDClients, client.openIDClient())
 	}
 	return openIDClients
 }

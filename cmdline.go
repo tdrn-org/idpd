@@ -48,7 +48,12 @@ func (cmd *runCmd) Run(args *cmdLine) error {
 	}
 	cmd.applyGlobalArgs(config, args)
 	cmd.initLogging(config)
-	return RunConfig(config)
+	s, err := startConfig(config)
+	if err != nil {
+		return err
+	}
+	s.WaitStopped()
+	return nil
 }
 
 func (cmd *runCmd) loadConfig() (*Config, error) {

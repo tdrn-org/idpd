@@ -1,0 +1,39 @@
+[logging]
+level = "info"
+target = "stdout"
+color = 0
+
+[server]
+address = "localhost:"
+protocol = "http"
+cert_file = ""
+key_file = ""
+public_url = ""
+
+[database]
+type = "memory"
+
+[database.memory]
+
+[userstore]
+type = "static"
+
+[[userstore.static]]
+password = "password1"
+[userstore.static.profile]
+name = "user1"
+[userstore.static.email]
+address = "user1@example.org"
+
+[openid]
+allow_insecure = true
+
+[[openid.client]]
+id = "authorization_code_flow"
+secret = "secret"
+redirect_urls = ["http://localhost:9123/authorized"]
+
+[mock]
+enabled = true
+email = "user1@example.org"
+password = "password1"

@@ -33,9 +33,9 @@ import (
 )
 
 type AuthorizationCodeFlowConfig[C oidc.IDClaims] struct {
-	BaseURI         string
-	AuthURIPath     string
-	RedirectURIPath string
+	BaseURL         string
+	AuthURLPath     string
+	RedirectURLPath string
 	Issuer          string
 	ClientId        string
 	ClientSecret    string
@@ -44,13 +44,13 @@ type AuthorizationCodeFlowConfig[C oidc.IDClaims] struct {
 }
 
 func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, ctx context.Context, codeExchangeCallback rp.CodeExchangeCallback[C]) (*AuthorizationCodeFlow[C], error) {
-	parsedBaseURI, err := url.Parse(config.BaseURI)
+	parsedBaseURL, err := url.Parse(config.BaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid base URI '%s' (cause: %w)", config.BaseURI, err)
+		return nil, fmt.Errorf("invalid base URL '%s' (cause: %w)", config.BaseURL, err)
 	}
-	authURI := parsedBaseURI.JoinPath(config.AuthURIPath)
-	redirectURI := parsedBaseURI.JoinPath(config.RedirectURIPath)
-	cookieHandler, err := NewCookieHandler(parsedBaseURI)
+	authURL := parsedBaseURL.JoinPath(config.AuthURLPath)
+	redirectURL := parsedBaseURL.JoinPath(config.RedirectURLPath)
+	cookieHandler, err := NewCookieHandler(parsedBaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cookie handler (cause: %w)", err)
 	}
@@ -66,33 +66,33 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 		options = append(options, rp.WithPKCE(cookieHandler))
 	}
 	providerFunc := sync.OnceValues(func() (rp.RelyingParty, error) {
-		provider, err := rp.NewRelyingPartyOIDC(ctx, config.Issuer, config.ClientId, config.ClientSecret, redirectURI.String(), config.Scopes, options...)
+		provider, err := rp.NewRelyingPartyOIDC(ctx, config.Issuer, config.ClientId, config.ClientSecret, redirectURL.String(), config.Scopes, options...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OpenID provider (cause: %w)", err)
 		}
 		return provider, nil
 	})
 	flow := &AuthorizationCodeFlow[C]{
-		authURI:              authURI,
-		redirectURI:          redirectURI,
+		authURL:              authURL,
+		redirectURL:          redirectURL,
 		providerFunc:         providerFunc,
 		codeExchangeCallback: codeExchangeCallback,
-		logger:               slog.With(slog.String("redirectURI", redirectURI.String()), slog.String("client", config.ClientId)),
+		logger:               slog.With(slog.String("redirectURL", redirectURL.String()), slog.String("client", config.ClientId)),
 	}
 	return flow, nil
 }
 
 type AuthorizationCodeFlow[C oidc.IDClaims] struct {
-	authURI              *url.URL
-	redirectURI          *url.URL
+	authURL              *url.URL
+	redirectURL          *url.URL
 	providerFunc         func() (rp.RelyingParty, error)
 	codeExchangeCallback rp.CodeExchangeCallback[C]
 	logger               *slog.Logger
 }
 
 func (flow *AuthorizationCodeFlow[C]) Mount(handler httpserver.Handler) *AuthorizationCodeFlow[C] {
-	handler.HandleFunc("/"+flow.authURI.Path, flow.authHandler)
-	handler.HandleFunc("/"+flow.redirectURI.Path, flow.redirectHandler)
+	handler.HandleFunc("/"+flow.authURL.Path, flow.authHandler)
+	handler.HandleFunc("/"+flow.redirectURL.Path, flow.redirectHandler)
 	return flow
 }
 
@@ -116,8 +116,8 @@ func (flow *AuthorizationCodeFlow[C]) redirectHandler(w http.ResponseWriter, r *
 	rp.CodeExchangeHandler(flow.codeExchangeCallback, provider)(w, r)
 }
 
-func (flow *AuthorizationCodeFlow[C]) AuthURI() *url.URL {
-	return flow.authURI
+func (flow *AuthorizationCodeFlow[C]) AuthURL() *url.URL {
+	return flow.authURL
 }
 
 func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context, token *oauth2.Token) (*http.Client, error) {

@@ -34,7 +34,7 @@ type AuthRequest struct {
 	ClientID      string
 	CodeChallenge *oidc.CodeChallenge
 	Nonce         string
-	RedirectURI   string
+	RedirectURL   string
 	ResponseType  oidc.ResponseType
 	ResponseMode  oidc.ResponseMode
 	Scopes        []string
@@ -60,7 +60,7 @@ func NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, userID
 		ClientID:      oidcAuthRequest.ClientID,
 		CodeChallenge: codeChallenge,
 		Nonce:         oidcAuthRequest.Nonce,
-		RedirectURI:   oidcAuthRequest.RedirectURI,
+		RedirectURL:   oidcAuthRequest.RedirectURI,
 		ResponseType:  oidcAuthRequest.ResponseType,
 		ResponseMode:  oidcAuthRequest.ResponseMode,
 		Scopes:        oidcAuthRequest.Scopes,
@@ -111,7 +111,7 @@ func (r *OpAuthRequest) GetNonce() string {
 }
 
 func (r *OpAuthRequest) GetRedirectURI() string {
-	return r.authRequest.RedirectURI
+	return r.authRequest.RedirectURL
 }
 
 func (r *OpAuthRequest) GetResponseType() oidc.ResponseType {

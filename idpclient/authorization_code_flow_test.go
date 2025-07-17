@@ -18,11 +18,13 @@ package idpclient_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/go-log"
+	"github.com/tdrn-org/idpd"
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/idpclient"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
@@ -30,24 +32,46 @@ import (
 )
 
 func TestAuthorizationCodeFlow(t *testing.T) {
-	t.SkipNow()
-	config := &idpclient.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		Issuer:          "https://login.holger.mobi",
-		ClientId:        "idpdtest",
-		ClientSecret:    "Secret1234",
-		BaseURI:         "http://localhost:9123",
-		RedirectURIPath: "/oauth2/authorized",
-		AuthURIPath:     "/login",
-		Scopes:          []string{"openid", "profile", "email", "groups"},
-		EnablePKCE:      false,
+	idpdServer := idpd.MustStart("testdata/idpd.toml")
+	callbackServer := (&httpserver.Instance{Addr: "localhost:"}).MustListen()
+	clientBaseURL := "http://" + callbackServer.ListenerAddr()
+	client := &idpd.Client{
+		ID:           "authorizationCodeFlowClient",
+		Secret:       "secret",
+		RedirectURLs: []string{clientBaseURL + "/authorized"},
 	}
-	flow, err := config.NewFlow(&http.Client{}, context.Background(), rp.UserinfoCallback(func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty, info *oidc.UserInfo) {
-		fmt.Println(info)
+	idpdServer.AddClient(client)
+	config := &idpclient.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
+		Issuer:          idpdServer.Issuer(),
+		ClientId:        client.ID,
+		ClientSecret:    client.Secret,
+		BaseURL:         clientBaseURL,
+		AuthURLPath:     "/login",
+		RedirectURLPath: "/authorized",
+		Scopes:          []string{"openid", "profile", "email", "groups"},
+		EnablePKCE:      true,
+	}
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	httpClient := &http.Client{
+		Jar: jar,
+	}
+	flow, err := config.NewFlow(httpClient, context.Background(), rp.UserinfoCallback(func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty, info *oidc.UserInfo) {
+		http.Redirect(w, r, clientBaseURL, http.StatusFound)
 	}))
 	require.NoError(t, err)
-	server := &httpserver.Instance{Addr: "localhost:9123"}
-	flow.Mount(server)
-	err = server.Serve()
+	flow.Mount(callbackServer)
+	callbackServer.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	err = callbackServer.Serve()
 	require.NoError(t, err)
-	server.WaitStopped()
+	rsp, err := httpClient.Get(clientBaseURL + "/login")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	callbackServer.Shutdown(context.Background())
+}
+
+func init() {
+	log.InitDefault()
 }

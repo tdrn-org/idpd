@@ -41,7 +41,7 @@ func TestHttpServerServe(t *testing.T) {
 	err := server.Serve()
 	require.NoError(t, err)
 	client := &http.Client{}
-	rsp, err := client.Get(server.BaseURI().JoinPath(httpServerShutdownPath).String())
+	rsp, err := client.Get(server.BaseURL().JoinPath(httpServerShutdownPath).String())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rsp.StatusCode)
 	server.WaitStopped()
@@ -65,7 +65,7 @@ func TestHttpServerServeTLS(t *testing.T) {
 			},
 		},
 	}
-	rsp, err := client.Get(server.BaseURI().JoinPath(httpServerShutdownPath).String())
+	rsp, err := client.Get(server.BaseURL().JoinPath(httpServerShutdownPath).String())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rsp.StatusCode)
 	server.WaitStopped()

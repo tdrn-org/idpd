@@ -98,7 +98,7 @@ func generateAndInsertAuthRequest(t *testing.T, d database.Driver) *database.Aut
 			Method:    oidc.CodeChallengeMethodS256,
 		},
 		Nonce:        "nonce",
-		RedirectURI:  "redirectURI",
+		RedirectURL:  "redirectURL",
 		ResponseType: oidc.ResponseTypeCode,
 		ResponseMode: oidc.ResponseModeFormPost,
 		Scopes:       []string{"scope0", "scope1"},

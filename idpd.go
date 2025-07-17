@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -43,7 +44,7 @@ import (
 
 const shutdownTimeout time.Duration = 5 * time.Second
 
-func RunArgs(args []string) error {
+func Run(args []string) error {
 	cmd := &cmdLine{}
 	parser, err := kong.New(cmd, cmdLineVars)
 	if err != nil {
@@ -60,12 +61,71 @@ func RunArgs(args []string) error {
 	return nil
 }
 
-func RunConfig(config *Config) error {
-	s := &idpdServer{}
-	err := s.init(config)
+func Start(path string) (*Server, error) {
+	config, err := LoadConfig(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return startConfig(config)
+}
+
+func MustStart(path string) *Server {
+	config, err := LoadConfig(path)
+	if err != nil {
+		panic(err)
+	}
+	s, err := startConfig(config)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}
+
+func startConfig(config *Config) (*Server, error) {
+	s := &Server{}
+	err := s.initAndStart(config)
+	if err != nil {
+		return nil, err
+	}
+	s.stoppedWG.Add(1)
+	go func() {
+		defer s.stoppedWG.Done()
+		s.run()
+	}()
+	return s, nil
+}
+
+type Server struct {
+	httpServer *httpserver.Instance
+	issuerURL  string
+	database   database.Driver
+	userStore  userstore.Backend
+	provider   *server.OpenIDProvider
+	authClient *server.OpenIDClient
+	authFLow   *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]
+	stoppedWG  sync.WaitGroup
+}
+
+func (s *Server) Issuer() string {
+	return s.issuerURL
+}
+
+func (s *Server) AddClient(client *Client) error {
+	return s.provider.AddClient(client.openIDClient())
+}
+
+func (s *Server) Shutdown(ctx context.Context) {
+	err := s.shutdown(ctx)
+	if err != nil {
+		slog.Warn("shutdown failed; exiting", slog.Any("err", err))
+	}
+}
+
+func (s *Server) WaitStopped() {
+	s.stoppedWG.Wait()
+}
+
+func (s *Server) run() {
 	sigint := make(chan os.Signal, 1)
 	signal.Notify(sigint, os.Interrupt)
 	sigintCtx, cancelListenAndServe := context.WithCancel(context.Background())
@@ -76,10 +136,13 @@ func RunConfig(config *Config) error {
 	}()
 	slog.Info("startup complete; running")
 	<-sigintCtx.Done()
+	s.shutdown(context.Background())
+}
+
+func (s *Server) shutdown(ctx context.Context) error {
 	slog.Info("initiating shutdown")
-	shutdownCtx, shutdownCtxCancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer shutdownCtxCancel()
-	err = errors.Join(s.httpServer.Shutdown(shutdownCtx), s.provider.Close(), s.database.Close())
+	shutdownCtx, _ := context.WithTimeout(ctx, shutdownTimeout)
+	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.provider.Close(), s.database.Close())
 	if err != nil {
 		return err
 	}
@@ -87,18 +150,7 @@ func RunConfig(config *Config) error {
 	return nil
 }
 
-type idpdServer struct {
-	issuerURI  string
-	httpServer *httpserver.Instance
-	database   database.Driver
-	userStore  userstore.Backend
-	provider   *server.OpenIDProvider
-	authClient *server.OpenIDClient
-	authFLow   *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]
-}
-
-func (s *idpdServer) init(config *Config) error {
-	s.issuerURI = config.OpenIDIssuerURI()
+func (s *Server) initAndStart(config *Config) error {
 	inits := []func(*Config) error{
 		s.initHttpServer,
 		s.initDatabase,
@@ -116,7 +168,7 @@ func (s *idpdServer) init(config *Config) error {
 	return nil
 }
 
-func (s *idpdServer) initHttpServer(config *Config) error {
+func (s *Server) initHttpServer(config *Config) error {
 	httpServer := &httpserver.Instance{
 		Addr: config.Server.Address,
 	}
@@ -126,10 +178,11 @@ func (s *idpdServer) initHttpServer(config *Config) error {
 	}
 	s.httpServer = httpServer
 	config.Server.Address = httpServer.ListenerAddr()
+	s.issuerURL = config.OpenIDIssuerURL()
 	return nil
 }
 
-func (s *idpdServer) initDatabase(config *Config) error {
+func (s *Server) initDatabase(config *Config) error {
 	logger := slog.With(slog.String("driver", config.Database.Type))
 	logger.Info("initializing database")
 	var driver database.Driver
@@ -161,7 +214,7 @@ func (s *idpdServer) initDatabase(config *Config) error {
 	return nil
 }
 
-func (s *idpdServer) initUserStore(config *Config) error {
+func (s *Server) initUserStore(config *Config) error {
 	logger := slog.With(slog.String("store", config.UserStore.Type))
 	logger.Info("initializing user store")
 	var backend userstore.Backend
@@ -173,7 +226,7 @@ func (s *idpdServer) initUserStore(config *Config) error {
 		if err == nil {
 			backend, err = userstore.NewLDAPBackend(ldapConfig, logger)
 		}
-	case "file":
+	case "static":
 		backend, err = userstore.NewStaticBackend(config.staticUsers(), logger)
 	default:
 		err = fmt.Errorf("unrecognized user store type: '%s'", config.UserStore.Type)
@@ -185,8 +238,8 @@ func (s *idpdServer) initUserStore(config *Config) error {
 	return nil
 }
 
-func (s *idpdServer) initProvider(config *Config) error {
-	logger := slog.With(slog.String("issuer", s.issuerURI))
+func (s *Server) initProvider(config *Config) error {
+	logger := slog.With(slog.String("issuer", s.issuerURL))
 	opOpts := make([]op.Option, 0, 2)
 	opOpts = append(opOpts, op.WithLogger(logger))
 	if config.OpenID.AllowInsecure {
@@ -198,9 +251,8 @@ func (s *idpdServer) initProvider(config *Config) error {
 	if err != nil {
 		return err
 	}
-	loginURLPattern := providerConfig.Issuer + "/user/?id=%s"
 	for _, client := range config.openIDClients() {
-		err = provider.AddClient(&client, loginURLPattern)
+		err = provider.AddClient(client)
 		if err != nil {
 			return err
 		}
@@ -208,9 +260,9 @@ func (s *idpdServer) initProvider(config *Config) error {
 	authClient := &server.OpenIDClient{
 		ID:           uuid.NewString(),
 		Secret:       uuid.NewString(),
-		RedirectURIs: []string{providerConfig.Issuer + "/authorized"},
+		RedirectURLs: []string{providerConfig.Issuer + "/authorized"},
 	}
-	err = provider.AddClient(authClient, loginURLPattern)
+	err = provider.AddClient(authClient)
 	if err != nil {
 		return err
 	}
@@ -219,12 +271,12 @@ func (s *idpdServer) initProvider(config *Config) error {
 	return nil
 }
 
-func (s *idpdServer) initAuthFlow(config *Config) error {
+func (s *Server) initAuthFlow(config *Config) error {
 	authFlowConfig := &idpclient.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		BaseURI:         s.issuerURI,
-		AuthURIPath:     "/login",
-		RedirectURIPath: "/authorized",
-		Issuer:          s.issuerURI,
+		BaseURL:         s.issuerURL,
+		AuthURLPath:     "/login",
+		RedirectURLPath: "/authorized",
+		Issuer:          s.issuerURL,
 		ClientId:        s.authClient.ID,
 		ClientSecret:    s.authClient.Secret,
 		Scopes:          []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
@@ -238,13 +290,19 @@ func (s *idpdServer) initAuthFlow(config *Config) error {
 	return nil
 }
 
-func (s *idpdServer) startServer(config *Config) error {
+func (s *Server) startServer(config *Config) error {
 	s.provider.Mount(s.httpServer)
 	s.authFLow.Mount(s.httpServer)
-	web.Mount(s.httpServer)
-	s.httpServer.HandleFunc("/session", s.handleSession)
-	s.httpServer.HandleFunc("/session/login", s.handleSessionLogin)
-	s.httpServer.HandleFunc("/session/logoff", s.handleSessionLogoff)
+	if !config.Mock.Enabled {
+		web.Mount(s.httpServer)
+	} else {
+		s.httpServer.HandleFunc("/user/", func(w http.ResponseWriter, r *http.Request) {
+			s.handleUserMock(w, r, config.Mock.Email, config.Mock.Password, config.Mock.Rembemer)
+		})
+	}
+	s.httpServer.HandleFunc("/session/", s.handleSession)
+	s.httpServer.HandleFunc("/session/login/", s.handleSessionLogin)
+	s.httpServer.HandleFunc("/session/logoff/", s.handleSessionLogoff)
 	switch config.Server.Protocol {
 	case "http":
 		return s.httpServer.Serve()
@@ -255,7 +313,23 @@ func (s *idpdServer) startServer(config *Config) error {
 	}
 }
 
-func (s *idpdServer) handleSession(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, email string, password string, remember bool) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+	redirectURL, err := s.provider.Authenticate(r.Context(), id, email, password, remember)
+	if errors.Is(err, userstore.ErrInvalidLogin) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	sessionId, err := s.getSessionCookie(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -289,7 +363,7 @@ func (s *idpdServer) handleSession(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, userInfoResponse.Body)
 }
 
-func (s *idpdServer) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -321,11 +395,11 @@ func (s *idpdServer) handleSessionLogin(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
-func (s *idpdServer) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
 	s.deleteSessionCookie(w)
 }
 
-func (s *idpdServer) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty) {
+func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty) {
 	ctx := r.Context()
 	userSession, err := s.database.TransformAndDeleteUserSessionRequest(ctx, state, tokens.Token)
 	if err != nil {
@@ -333,12 +407,12 @@ func (s *idpdServer) tokenExchange(w http.ResponseWriter, r *http.Request, token
 		return
 	}
 	s.setSessionCookie(w, userSession.ID)
-	http.Redirect(w, r, s.issuerURI, http.StatusFound)
+	http.Redirect(w, r, s.issuerURL, http.StatusFound)
 }
 
 const sessionCookieName = "idpd_session"
 
-func (s *idpdServer) getSessionCookie(r *http.Request) (string, error) {
+func (s *Server) getSessionCookie(r *http.Request) (string, error) {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
 		return "", fmt.Errorf("no session cookie")
@@ -346,7 +420,7 @@ func (s *idpdServer) getSessionCookie(r *http.Request) (string, error) {
 	return cookie.Value, nil
 }
 
-func (s *idpdServer) setSessionCookie(w http.ResponseWriter, sessionId string) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, sessionId string) {
 	cookie := &http.Cookie{
 		Name:  sessionCookieName,
 		Value: sessionId,
@@ -354,7 +428,7 @@ func (s *idpdServer) setSessionCookie(w http.ResponseWriter, sessionId string) {
 	http.SetCookie(w, cookie)
 }
 
-func (s *idpdServer) deleteSessionCookie(w http.ResponseWriter) {
+func (s *Server) deleteSessionCookie(w http.ResponseWriter) {
 	cookie := &http.Cookie{
 		Name:   sessionCookieName,
 		MaxAge: -1,

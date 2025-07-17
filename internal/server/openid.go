@@ -51,14 +51,14 @@ var ErrNoSigningKey = errors.New("no signing key")
 type OpenIDClient struct {
 	ID           string
 	Secret       string
-	RedirectURIs []string
+	RedirectURLs []string
 }
 
 type opClient struct {
 	id                             string
 	secret                         string
-	redirectURIs                   []string
-	postLogoutRedirectURIs         []string
+	redirectURLs                   []string
+	postLogoutRedirectURLs         []string
 	applicationType                op.ApplicationType
 	authMethod                     oidc.AuthMethod
 	responseTypes                  []oidc.ResponseType
@@ -80,11 +80,11 @@ func (c *opClient) GetSecret() string {
 }
 
 func (c *opClient) RedirectURIs() []string {
-	return c.redirectURIs
+	return c.redirectURLs
 }
 
 func (c *opClient) PostLogoutRedirectURIs() []string {
-	return c.postLogoutRedirectURIs
+	return c.postLogoutRedirectURLs
 }
 
 func (c *opClient) ApplicationType() op.ApplicationType {
@@ -141,7 +141,7 @@ func (c *opClient) ClockSkew() time.Duration {
 
 type OpenIDProviderConfig struct {
 	Issuer                   string
-	DefaultLogoutRedirectURI string
+	DefaultLogoutRedirectURL string
 	SigningKeyAlgorithm      jose.SignatureAlgorithm
 	SigningKeyLifetime       time.Duration
 	SigningKeyExpiry         time.Duration
@@ -150,6 +150,7 @@ type OpenIDProviderConfig struct {
 func (config *OpenIDProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OpenIDProvider, error) {
 	logger := slog.With(slog.String("issuer", config.Issuer))
 	provider := &OpenIDProvider{
+		issuerURL:           config.Issuer,
 		driver:              driver,
 		backend:             backend,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
@@ -160,7 +161,7 @@ func (config *OpenIDProviderConfig) NewProvider(driver database.Driver, backend 
 	}
 	opConfig := &op.Config{
 		CryptoKey:                sha256.Sum256([]byte(rand.Text())),
-		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURI,
+		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURL,
 		CodeMethodS256:           true,
 		AuthMethodPost:           true,
 		AuthMethodPrivateKeyJWT:  true,
@@ -184,6 +185,7 @@ func (config *OpenIDProviderConfig) NewProvider(driver database.Driver, backend 
 }
 
 type OpenIDProvider struct {
+	issuerURL           string
 	driver              database.Driver
 	backend             userstore.Backend
 	signingKeyAlgorithm jose.SignatureAlgorithm
@@ -197,17 +199,17 @@ type OpenIDProvider struct {
 
 const defaultClockSkew = 10 * time.Second
 
-func (p *OpenIDProvider) AddClient(client *OpenIDClient, loginURLPattern string) error {
+func (p *OpenIDProvider) AddClient(client *OpenIDClient) error {
 	opClient := &opClient{
 		id:                             client.ID,
 		secret:                         client.Secret,
-		redirectURIs:                   client.RedirectURIs,
-		postLogoutRedirectURIs:         []string{},
+		redirectURLs:                   client.RedirectURLs,
+		postLogoutRedirectURLs:         []string{},
 		applicationType:                op.ApplicationTypeNative,
 		authMethod:                     oidc.AuthMethodNone,
 		responseTypes:                  []oidc.ResponseType{oidc.ResponseTypeCode},
 		grantTypes:                     []oidc.GrantType{oidc.GrantTypeCode, oidc.GrantTypeRefreshToken},
-		loginURLPattern:                loginURLPattern,
+		loginURLPattern:                p.issuerURL + "/user/?id=%s",
 		accessTokenType:                op.AccessTokenTypeBearer,
 		idTokenLifetime:                1 * time.Hour,
 		devMode:                        false,

@@ -5,7 +5,7 @@ CREATE TABLE auth_request(
 	auth_time INTEGER,
 	client_id TEXT,
 	nonce TEXT,
-	redirect_uri TEXT,
+	redirect_url TEXT,
 	response_type TEXT,
 	response_mode TEXT,
 	state TEXT,

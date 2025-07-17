@@ -47,10 +47,10 @@ type Instance struct {
 	listener     net.Listener
 	listenerAddr string
 	mux          *http.ServeMux
-	baseURI      string
+	baseURL      string
 	logger       *slog.Logger
 	httpServer   *http.Server
-	stoppedWG    *sync.WaitGroup
+	stoppedWG    sync.WaitGroup
 }
 
 func (s *Instance) Listen() error {
@@ -96,16 +96,16 @@ func (s *Instance) HandleFunc(pattern string, handler http.HandlerFunc) {
 	s.mux.HandleFunc(pattern, handler)
 }
 
-func (s *Instance) BaseURI() *url.URL {
-	if s.baseURI == "" {
+func (s *Instance) BaseURL() *url.URL {
+	if s.baseURL == "" {
 		return nil
 	}
-	baseURI, err := url.Parse(s.baseURI)
+	baseURL, err := url.Parse(s.baseURL)
 	if err != nil {
 		s.logger.Error(serverFailureMessage, slog.Any("err", err))
 		panic(err)
 	}
-	return baseURI
+	return baseURL
 }
 
 func (s *Instance) Serve() error {
@@ -116,13 +116,12 @@ func (s *Instance) Serve() error {
 	if s.mux == nil {
 		s.mux = http.NewServeMux()
 	}
-	s.baseURI = "http://" + s.listenerAddr
-	s.logger = slog.With(slog.String("baseURI", s.baseURI))
+	s.baseURL = "http://" + s.listenerAddr
+	s.logger = slog.With(slog.String("baseURL", s.baseURL))
 	s.httpServer = &http.Server{
 		Addr:    s.Addr,
 		Handler: s,
 	}
-	s.stoppedWG = &sync.WaitGroup{}
 	s.stoppedWG.Add(1)
 	go func() {
 		defer s.stoppedWG.Done()
@@ -145,8 +144,8 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 	if s.mux == nil {
 		s.mux = http.NewServeMux()
 	}
-	s.baseURI = "https://" + s.listenerAddr
-	s.logger = slog.With(slog.String("baseURI", s.baseURI))
+	s.baseURL = "https://" + s.listenerAddr
+	s.logger = slog.With(slog.String("baseURL", s.baseURL))
 	var certificates []tls.Certificate
 	if certFile == "" && keyFile == "" {
 		s.logger.Info("using ephemeral certificate")
@@ -163,7 +162,6 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 			Certificates: certificates,
 		},
 	}
-	s.stoppedWG = &sync.WaitGroup{}
 	s.stoppedWG.Add(1)
 	go func() {
 		defer s.stoppedWG.Done()

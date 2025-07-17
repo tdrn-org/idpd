@@ -140,14 +140,14 @@ func (d *databaseDriver) InsertAuthRequest(ctx context.Context, authRequest *Aut
 		authRequest.AuthTime,
 		authRequest.ClientID,
 		authRequest.Nonce,
-		authRequest.RedirectURI,
+		authRequest.RedirectURL,
 		authRequest.ResponseType,
 		authRequest.ResponseMode,
 		authRequest.State,
 		authRequest.Subject,
 		authRequest.Done,
 	}
-	err = d.execTx(tx, ctx, "INSERT INTO auth_request (id,acr,create_time,auth_time,client_id,nonce,redirect_uri,response_type,response_mode,state,subject,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", args0...)
+	err = d.execTx(tx, ctx, "INSERT INTO auth_request (id,acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", args0...)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -214,14 +214,14 @@ func (d *databaseDriver) selectAuthRequest(tx *sql.Tx, ctx context.Context, id s
 		Audience: []string{},
 		Scopes:   []string{},
 	}
-	row := d.queryRowTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_uri,response_type,response_mode,state,subject,done FROM auth_request WHERE id=$1", authRequest.ID)
+	row := d.queryRowTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done FROM auth_request WHERE id=$1", authRequest.ID)
 	args := []any{
 		&authRequest.ACR,
 		&authRequest.CreateTime,
 		&authRequest.AuthTime,
 		&authRequest.ClientID,
 		&authRequest.Nonce,
-		&authRequest.RedirectURI,
+		&authRequest.RedirectURL,
 		&authRequest.ResponseType,
 		&authRequest.ResponseMode,
 		&authRequest.State,
@@ -332,7 +332,7 @@ func (d *databaseDriver) SelectAuthRequestByCode(ctx context.Context, code strin
 		Audience: []string{},
 		Scopes:   []string{},
 	}
-	rows, err := d.queryTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_uri,response_type,response_mode,state,subject,done FROM auth_request WHERE id=$1", authRequest.ID)
+	rows, err := d.queryTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done FROM auth_request WHERE id=$1", authRequest.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -346,7 +346,7 @@ func (d *databaseDriver) SelectAuthRequestByCode(ctx context.Context, code strin
 		&authRequest.AuthTime,
 		&authRequest.ClientID,
 		&authRequest.Nonce,
-		&authRequest.RedirectURI,
+		&authRequest.RedirectURL,
 		&authRequest.ResponseType,
 		&authRequest.ResponseMode,
 		&authRequest.State,

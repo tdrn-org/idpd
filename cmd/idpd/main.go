@@ -30,7 +30,7 @@ func main() {
 	log.InitFromFlags(args, nil)
 	slog.Info(buildinfo.FullVersion())
 	slog.Debug("running idpd command", slog.Any("args", args))
-	err := idpd.RunArgs(args)
+	err := idpd.Run(args)
 	if err != nil {
 		slog.Error("idpd command failed", slog.Any("err", err))
 	}
