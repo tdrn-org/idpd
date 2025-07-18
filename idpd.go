@@ -18,7 +18,6 @@ package idpd
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -39,7 +38,6 @@ import (
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -64,7 +62,7 @@ func Run(args []string) error {
 }
 
 func Start(path string) (*Server, error) {
-	config, err := LoadConfig(path)
+	config, err := LoadConfig(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -72,11 +70,7 @@ func Start(path string) (*Server, error) {
 }
 
 func MustStart(path string) *Server {
-	config, err := LoadConfig(path)
-	if err != nil {
-		panic(err)
-	}
-	s, err := startConfig(config)
+	s, err := Start(path)
 	if err != nil {
 		panic(err)
 	}
@@ -97,10 +91,11 @@ func startConfig(config *Config) (*Server, error) {
 	return s, nil
 }
 
+const sessionCookiePath = "/session"
+
 type Server struct {
 	httpServer    *httpserver.Instance
-	cookieHandler *httphelper.CookieHandler
-	sessionCookie string
+	sessionCookie *server.CookieHandler
 	issuerURL     string
 	database      database.Driver
 	userStore     userstore.Backend
@@ -181,13 +176,10 @@ func (s *Server) initHttpServer(config *Config) error {
 	if err != nil {
 		return err
 	}
-	cookieHandler, err := newCookieHandler(config.OpenID.AllowInsecure)
-	if err != nil {
-		return err
-	}
+	secureCookies := config.Server.Protocol != "http"
+	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, config.Server.SessionCookieMaxAge)
 	s.httpServer = httpServer
-	s.cookieHandler = cookieHandler
-	s.sessionCookie = config.Server.SessionCookie
+	s.sessionCookie = sessionCookie
 	config.Server.Address = httpServer.ListenerAddr()
 	s.issuerURL = config.OpenIDIssuerURL()
 	return nil
@@ -341,8 +333,8 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, email st
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	sessionId, err := s.cookieHandler.CheckCookie(r, s.sessionCookie)
-	if err != nil {
+	sessionId, exists := s.sessionCookie.Get(r)
+	if !exists {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -407,7 +399,7 @@ func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
-	s.cookieHandler.DeleteCookie(w, s.sessionCookie)
+	s.sessionCookie.Delete(w)
 }
 
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty) {
@@ -417,24 +409,6 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.cookieHandler.SetCookie(w, s.sessionCookie, userSession.ID)
+	s.sessionCookie.Set(w, userSession.ID, userSession.Remember)
 	http.Redirect(w, r, s.issuerURL, http.StatusFound)
-}
-
-func newCookieHandler(unsecure bool) (*httphelper.CookieHandler, error) {
-	hashKey := make([]byte, 64)
-	_, err := rand.Read(hashKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
-	}
-	encryptKey := make([]byte, 32)
-	_, err = rand.Read(encryptKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
-	}
-	opts := make([]httphelper.CookieHandlerOpt, 0, 1)
-	if unsecure {
-		opts = append(opts, httphelper.WithUnsecure())
-	}
-	return httphelper.NewCookieHandler(hashKey, encryptKey, opts...), nil
 }

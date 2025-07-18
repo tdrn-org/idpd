@@ -2,57 +2,75 @@
 # idpd configuration
 #
 
-# Logging
 [logging]
 # debug|info|warn|error
-level = "info"
+#level = "info"
 # stdout|stderr|file
-target = "stdout"
+#target = "stdout"
 # -1:disable color output, 0:auto-detect color output, 1:force color output (only applicable for targets stdout|stderr)
-color = 1
+#color = 1
 # <log file name> (only applicable for target file)
-file_name = "/var/log/idpd/idpd.log"
+#file_name = "/var/log/idpd/idpd.log"
 # 0:disable log file rotation, >0:rotate log file at this size (only applicable for target file)
-file_size_limit = 0
+#file_size_limit = 0
 
-# Server setup
 [server]
-address = "localhost:9123"
+# listen address (host:port)
+#address = "localhost:9123"
 # http|https
-protocol = "http"
-cert_file = ""
-key_file = ""
-public_url = ""
+#protocol = "http"
+# certificate file to use for https
+#cert_file = ""
+# key file to use for https
+#key_file = ""
+# public url to use, if running behind a reverse proxy
+#public_url = ""
+# session cookie name
+#session_cookie = "idpd_session"
+# session cookie max age (in seconds)
+#session_cookie_max_age = 2592000
 
-# Database setup
 [database]
-type = "memory"
+# memory|sqlite|postgres
+#type = "memory"
 
 [database.memory]
 
 [database.sqlite]
-file = "/var/lib/idpd/idpd.db"
+# SQLite db file
+#file = "/var/lib/idpd/idpd.db"
 
 [database.postgres]
-address = "localhost:5432"
-db = "idpd"
-user = "idpd"
-password = "replace me"
+# Postgres server address (host:port)
+#address = "localhost:5432"
+# Postgres database name
+#db = "idpd"
+# Postgres database user
+#user = "idpd"
+# Postgres database password
+#password = ""
 
-# User store configuration
 [userstore]
-type = "static"
+# static|ldap
+#type = "static"
 
 [userstore.ldap]
-url = "ldap://localhost:1389"
-bind_dn = "cn=idpd,dc=example,dc=org"
-bind_password = "idpdpassword"
-user_base_dn = "ou=users,dc=example,dc=org"
-user_filter = "(&(objectClass=inetOrgPerson)(objectClass=posixAccount))"
-group_base_dn = "ou=groups,dc=example,dc=org"
-group_filter = "(objectClass=groupOfNames)"
+# LDAP server url
+#url = "ldaps://dc.domain.example.org"
+# LDAP bind dn
+#bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
+# LDAP bind password
+#bind_password = ""
+# LDAP user base DN
+#user_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
+# LDAP user object filter
+#user_filter = "(objectClass=user)"
+# LDAP group base DN
+#group_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
+# LDAP group object filter
+#group_filter = "(objectClass=group)"
 # active_directory | openldap | custom
-mapping = "active_directory"
+#mapping = "active_directory"
 
 [userstore.ldap.custom_mapping]
 user.profile.name = "displayName"
@@ -81,7 +99,6 @@ group.name = "cn"
 group.members = "member"
 
 #[[userstore.static.user]]
-#subject = "subject"
 #password = "password"
 #groups = [ "group" ]
 #[userstore.static.user.profile]
@@ -110,19 +127,13 @@ group.members = "member"
 #address = "address"
 
 [openid]
-allow_insecure = true
-default_logout_redirect_url = "http://localhost:9123"
-signing_key_algorithm = "RS256"
-signing_key_lifetime = 3600 # 1h
-signing_key_expiry = 86400 # 24h
+#allow_insecure = true
+#default_logout_redirect_url = ""
+#signing_key_algorithm = "RS256"
+#signing_key_lifetime = 3600 # 1h
+#signing_key_expiry = 86400 # 24h
 
-# OpenID clients
 #[[openid.client]]
 #id = "client 1"
 #secret = "verysecretphrase"
-#redirect_urls = ["http://localhost:9123/authorized"]
-
-#[[openid.client]]
-#id = "client 2"
-#secret = "veryverysecretphrase"
-#redirect_urls = ["http://localhost:9123/authorized"]
+#redirect_urls = ["http://localhost:9124/authorized"]

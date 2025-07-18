@@ -48,6 +48,6 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tdrn-org/go-conf v0.0.2
 	github.com/tdrn-org/go-log v0.3.6
-	github.com/zitadel/oidc/v3 v3.39.1
+	github.com/zitadel/oidc/v3 v3.41.0
 	golang.org/x/sys v0.34.0 // indirect
 )

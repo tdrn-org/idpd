@@ -12,6 +12,7 @@ cert_file = ""
 key_file = ""
 public_url = ""
 session_cookie = "idpd_session"
+session_cookie_max_age = 2592000
 
 [database]
 type = "memory"
@@ -23,13 +24,20 @@ file = "/var/lib/idpd/idpd.db"
 
 [database.postgres]
 address = "localhost:5432"
+db = "idpd"
+user = "idpd"
+password = ""
 
 [userstore]
 type = "static"
 
 [userstore.ldap]
-url = "ldap://localhost:389"
+url = "ldaps://dc.domain.example.org"
+bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
+bind_password = ""
+user_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
 user_filter = "(objectClass=user)"
+group_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
 group_filter = "(objectClass=group)"
 mapping = "active_directory"
 
@@ -60,7 +68,6 @@ group.name = "cn"
 group.members = "member"
 
 #[[userstore.static.user]]
-#subject = "subject"
 #password = "password"
 #groups = [ "group" ]
 #[userstore.static.user.profile]
@@ -90,7 +97,12 @@ group.members = "member"
 
 [openid]
 allow_insecure = true
-default_logout_redirect_url = "http://localhost:9123"
+default_logout_redirect_url = ""
 signing_key_algorithm = "RS256"
 signing_key_lifetime = 3600 # 1h
 signing_key_expiry = 86400 # 24h
+
+#[[openid.client]]
+#id = "client 1"
+#secret = "verysecretphrase"
+#redirect_urls = ["http://localhost:9124/authorized"]

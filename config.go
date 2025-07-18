@@ -41,12 +41,13 @@ type Config struct {
 		FileSizeLimit int64  `toml:"file_size_limit"`
 	} `toml:"logging"`
 	Server struct {
-		Address       string `toml:"address"`
-		Protocol      string `toml:"protocol"`
-		CertFile      string `toml:"cert_file"`
-		KeyFile       string `toml:"key_file"`
-		PublicURL     string `toml:"public_url"`
-		SessionCookie string `toml:"session_cookie"`
+		Address             string `toml:"address"`
+		Protocol            string `toml:"protocol"`
+		CertFile            string `toml:"cert_file"`
+		KeyFile             string `toml:"key_file"`
+		PublicURL           string `toml:"public_url"`
+		SessionCookie       string `toml:"session_cookie"`
+		SessionCookieMaxAge int    `toml:"session_cookie_max_age"`
 	} `toml:"server"`
 	Database struct {
 		Type   string `toml:"type"`
@@ -179,7 +180,7 @@ func (client *Client) openIDClient() *server.OpenIDClient {
 //go:embed config_defaults.toml
 var configDefaultsData string
 
-func LoadConfig(path string) (*Config, error) {
+func LoadConfig(path string, strict bool) (*Config, error) {
 	slog.Info("loading config", slog.String("path", path))
 	config := &Config{}
 	_, err := toml.Decode(configDefaultsData, config)
@@ -190,8 +191,13 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode config '%s' (cause: %w)", path, err)
 	}
+	strictViolation := false
 	for _, key := range meta.Undecoded() {
+		strictViolation = true
 		slog.Warn("unexpected configuration key", slog.String("path", path), slog.Any("key", key))
+	}
+	if strict && strictViolation {
+		return nil, fmt.Errorf("config contains unexpected keys")
 	}
 	return config, nil
 }

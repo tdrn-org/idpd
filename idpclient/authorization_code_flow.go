@@ -50,10 +50,7 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 	}
 	authURL := parsedBaseURL.JoinPath(config.AuthURLPath)
 	redirectURL := parsedBaseURL.JoinPath(config.RedirectURLPath)
-	cookieHandler, err := newCookieHandler(parsedBaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cookie handler (cause: %w)", err)
-	}
+	cookieHandler := newCookieHandler(parsedBaseURL)
 	logger := slog.With(slog.String("client", config.ClientId), slog.String("issuer", config.Issuer))
 	options := []rp.Option{
 		rp.WithHTTPClient(httpClient),

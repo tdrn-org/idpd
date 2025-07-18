@@ -1,54 +1,107 @@
 [logging]
-level = "info"
-target = "stdout"
-color = 1
-file_name = "idpd.log"
-file_size_limit = 0
+level = "debug"
+target = "file"
+color = 0
+file_name = "./idpd.log"
+file_size_limit = 1024
 
 [server]
-address = "localhost:9123"
-protocol = "http"
-cert_file = ""
-key_file = ""
-public_url = ""
+address = "localhost:8088"
+protocol = "https"
+cert_file = "idpd.crt"
+key_file = "idpd.key"
+public_url = "https://idpd.example.org"
+session_cookie = "idpd_session"
 
 [database]
-type = "memory"
+type = "file"
 
 [database.memory]
 
 [database.sqlite]
-file = "idpd.db"
+file = "./idpd.db"
 
 [database.postgres]
-address = "localhost:5432"
+address = "db.example.org:5432"
 db = "idpd"
 user = "idpd"
-password = "replace me"
+password = "dbpassword"
 
 [userstore]
-type = "file"
+type = "static"
 
 [userstore.ldap]
-url = "ldaps://localhost"
-bind_dn = "cn=admin,dc=example,dc=org"
-bind_password = "adminpassword"
-user_base_dn = "CN=Users,DC=mydomain,DC=net"
-user_filter = "(&(objectCategory=person)(objectClass=user))"
-mapping = "ldap.active_directory.toml"
+url = "ldaps://dc.domain.example.org"
+bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
+bind_password = ""
+user_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
+user_filter = "(objectClass=user)"
+group_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
+group_filter = "(objectClass=group)"
+mapping = "active_directory"
 
-[userstore.file]
+[userstore.ldap.custom_mapping]
+user.profile.name = "displayName"
+user.profile.given_name = "givenName"
+user.profile.family_name = "sn"
+user.profile.middle_name = ""
+user.profile.nickname = "initials"
+user.profile.profile = ""
+user.profile.picture = "jpegPhoto"
+user.profile.website = ""
+user.profile.birthdate = ""
+user.profile.zoneinfo = ""
+user.profile.locale = "preferredLanguage"
+user.profile.preferred_username = "uid"
+user.profile.update_at = "whenChanged"
+user.address.formatted = "homePostalAddress"
+user.address.street = "street"
+user.address.locality = "l"
+user.address.region = "st"
+user.address.postal_code = "postalCode"
+user.address.country = "c"
+user.phone.number = "telephoneNumber"
+user.email.address = "mail"
+user.groups = ""
+group.name = "cn"
+group.members = "member"
+
+[[userstore.static]]
+password = "password"
+groups = [ "group" ]
+[userstore.static.profile]
+name = "name"
+given_name = "given_name"
+family_name = "family_name"
+middle_name = "middle_name"
+nickname = "nickname"
+profile = "profile"
+picture = "picture"
+website = "website"
+birthdate = "birthdate"
+zoneinfo = "zoneinfo"
+locale = "locale"
+preferred_username = "preferred_username"
+[userstore.static.address]
+formatted = "formatted"
+street = "street"
+locality = "locality"
+region = "region"
+postal_code = "postal_code"
+country = "country"
+[userstore.static.phone]
+number = "number"
+[userstore.static.email]
+address = "address"
 
 [openid]
 allow_insecure = true
-default_logout_redirect_url = "http://localhost:9123/logout"
+default_logout_redirect_url = ""
+signing_key_algorithm = "RS256"
+signing_key_lifetime = 3600 # 1h
+signing_key_expiry = 86400 # 24h
 
 [[openid.client]]
 id = "client 1"
 secret = "verysecretphrase"
-redirect_urls = ["http://localhost:9123/authorized"]
-
-[[openid.client]]
-id = "client 2"
-secret = "veryverysecretphrase"
-redirect_urls = ["http://localhost:9123/authorized"]
+redirect_urls = ["https://localhost:9124/authorized"]

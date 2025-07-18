@@ -17,27 +17,18 @@
 package idpclient
 
 import (
-	"crypto/rand"
-	"fmt"
 	"net/url"
 
+	"github.com/gorilla/securecookie"
 	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 )
 
-func newCookieHandler(url *url.URL) (*httphelper.CookieHandler, error) {
-	hashKey := make([]byte, 64)
-	_, err := rand.Read(hashKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
-	}
-	encryptKey := make([]byte, 32)
-	_, err = rand.Read(encryptKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed read random bytes (cause: %w)", err)
-	}
+func newCookieHandler(url *url.URL) *httphelper.CookieHandler {
+	hashKey := securecookie.GenerateRandomKey(64)
+	encryptKey := securecookie.GenerateRandomKey(32)
 	opts := make([]httphelper.CookieHandlerOpt, 0, 1)
 	if url.Scheme == "http" {
 		opts = append(opts, httphelper.WithUnsecure())
 	}
-	return httphelper.NewCookieHandler(hashKey, encryptKey, opts...), nil
+	return httphelper.NewCookieHandler(hashKey, encryptKey, opts...)
 }

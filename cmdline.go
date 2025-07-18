@@ -61,7 +61,7 @@ func (cmd *runCmd) loadConfig() (*Config, error) {
 	if path == "" {
 		path = DefaultConfig
 	}
-	return LoadConfig(path)
+	return LoadConfig(path, false)
 }
 
 func (cmd *runCmd) applyGlobalArgs(config *Config, args *cmdLine) {
