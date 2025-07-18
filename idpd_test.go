@@ -17,6 +17,7 @@
 package idpd_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,8 +26,11 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	//	t.SkipNow()
-	err := idpd.Run([]string{"--debug", "--config=idpd-local.toml"})
+	_, err := os.Stat("idpd-local.toml")
+	if err != nil {
+		t.SkipNow()
+	}
+	err = idpd.Run([]string{"--debug", "--config=idpd-local.toml"})
 	require.NoError(t, err)
 }
 
