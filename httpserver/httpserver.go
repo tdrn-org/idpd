@@ -140,7 +140,7 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 	if s.mux == nil {
 		s.mux = http.NewServeMux()
 	}
-	baseURL, err := url.Parse("http://" + s.listenerAddr)
+	baseURL, err := url.Parse("https://" + s.listenerAddr)
 	if err != nil {
 		return fmt.Errorf("failed to parse base URL (cause: %w)", err)
 	}
