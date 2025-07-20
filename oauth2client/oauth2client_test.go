@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-package idpclient_test
+package oauth2client_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"testing"
@@ -26,7 +28,7 @@ import (
 	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd"
 	"github.com/tdrn-org/idpd/httpserver"
-	"github.com/tdrn-org/idpd/idpclient"
+	"github.com/tdrn-org/idpd/oauth2client"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
@@ -34,13 +36,13 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	idpdServer := idpd.MustStart(t.Context(), "testdata/idpd.toml")
 	callbackServer := (&httpserver.Instance{Addr: "localhost:"}).MustListen()
 	clientBaseURL := "http://" + callbackServer.ListenerAddr()
-	client := &idpd.Client{
+	client := &idpd.OAuth2Client{
 		ID:           "authorizationCodeFlowClient",
 		Secret:       "secret",
 		RedirectURLs: []string{clientBaseURL + "/authorized"},
 	}
 	idpdServer.AddClient(client)
-	config := &idpclient.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
+	config := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
 		Issuer:          idpdServer.Issuer(),
 		ClientId:        client.ID,
 		ClientSecret:    client.Secret,
@@ -52,10 +54,10 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	}
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-	httpClient := &http.Client{
+	flowClient := &http.Client{
 		Jar: jar,
 	}
-	flow, err := config.NewFlow(httpClient, context.Background(), func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
+	flow, err := config.NewFlow(flowClient, context.Background(), func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
 		http.Redirect(w, r, clientBaseURL, http.StatusFound)
 	})
 	require.NoError(t, err)
@@ -65,10 +67,22 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	})
 	err = callbackServer.Serve()
 	require.NoError(t, err)
-	rsp, err := httpClient.Get(clientBaseURL + "/login")
+	testFlow(t, flow)
+	httpClient, err := flow.Client(t.Context())
+	require.NoError(t, err)
+	rsp, err := httpClient.Get(flow.UserinfoEndpoint())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	var userInfo oauth2client.UserInfo
+	err = json.NewDecoder(rsp.Body).Decode(&userInfo)
+	require.NoError(t, err)
+	fmt.Println(userInfo)
 	callbackServer.Shutdown(context.Background())
+}
+
+func testFlow(t *testing.T, flow oauth2client.AuthorizationFlow) {
+	err := flow.Authenticate()
+	require.NoError(t, err)
 }
 
 func init() {

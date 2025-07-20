@@ -148,13 +148,13 @@ type Config struct {
 			Groups []string `toml:"groups"`
 		} `toml:"static"`
 	} `toml:"userstore"`
-	OpenID struct {
+	OAuth2 struct {
 		DefaultLogoutRedirectURL string              `toml:"default_logout_redirect_url"`
 		SigningKeyAlgorithm      SigningKeyAlgorithm `toml:"signing_key_algorithm"`
 		SigningKeyLifetime       DurationSpec        `toml:"signing_key_lifetime"`
 		SigningKeyExpiry         DurationSpec        `toml:"signing_key_expiry"`
-		Clients                  []Client            `toml:"client"`
-	} `toml:"openid"`
+		Clients                  []OAuth2Client      `toml:"client"`
+	} `toml:"oauth2"`
 	Mock struct {
 		Enabled  bool   `toml:"enabled"`
 		Email    string `toml:"email"`
@@ -163,14 +163,14 @@ type Config struct {
 	} `toml:"mock"`
 }
 
-type Client struct {
+type OAuth2Client struct {
 	ID           string   `toml:"id"`
 	Secret       string   `toml:"secret"`
 	RedirectURLs []string `toml:"redirect_urls"`
 }
 
-func (client *Client) openIDClient() *server.OpenIDClient {
-	return &server.OpenIDClient{
+func (client *OAuth2Client) oauth2Client() *server.OAuth2Client {
+	return &server.OAuth2Client{
 		ID:           client.ID,
 		Secret:       client.Secret,
 		RedirectURLs: client.RedirectURLs,
@@ -535,7 +535,7 @@ func (c *Config) staticUsers() []userstore.StaticUser {
 	return users
 }
 
-func (c *Config) OpenIDIssuerURL() string {
+func (c *Config) OAuth2IssuerURL() string {
 	issuerURL := c.Server.PublicURL.String()
 	if issuerURL == "" {
 		issuerURL = string(c.Server.Protocol) + "://" + c.Server.Address
@@ -543,25 +543,25 @@ func (c *Config) OpenIDIssuerURL() string {
 	return issuerURL
 }
 
-func (c *Config) openIDProviderConfig() *server.OpenIDProviderConfig {
-	issuerURL := c.OpenIDIssuerURL()
-	defaultLogoutRedirectURL := c.OpenID.DefaultLogoutRedirectURL
+func (c *Config) oauth2ProviderConfig() *server.OAuth2ProviderConfig {
+	issuerURL := c.OAuth2IssuerURL()
+	defaultLogoutRedirectURL := c.OAuth2.DefaultLogoutRedirectURL
 	if defaultLogoutRedirectURL == "" {
 		defaultLogoutRedirectURL = issuerURL
 	}
-	return &server.OpenIDProviderConfig{
+	return &server.OAuth2ProviderConfig{
 		Issuer:                   issuerURL,
 		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
-		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OpenID.SigningKeyAlgorithm),
-		SigningKeyLifetime:       c.OpenID.SigningKeyLifetime.Duration,
-		SigningKeyExpiry:         c.OpenID.SigningKeyExpiry.Duration,
+		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OAuth2.SigningKeyAlgorithm),
+		SigningKeyLifetime:       c.OAuth2.SigningKeyLifetime.Duration,
+		SigningKeyExpiry:         c.OAuth2.SigningKeyExpiry.Duration,
 	}
 }
 
-func (c *Config) openIDClients() []*server.OpenIDClient {
-	openIDClients := make([]*server.OpenIDClient, 0, len(c.OpenID.Clients))
-	for _, client := range c.OpenID.Clients {
-		openIDClients = append(openIDClients, client.openIDClient())
+func (c *Config) oauth2Clients() []*server.OAuth2Client {
+	oauth2Clients := make([]*server.OAuth2Client, 0, len(c.OAuth2.Clients))
+	for _, client := range c.OAuth2.Clients {
+		oauth2Clients = append(oauth2Clients, client.oauth2Client())
 	}
-	return openIDClients
+	return oauth2Clients
 }

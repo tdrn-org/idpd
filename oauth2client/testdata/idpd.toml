@@ -16,10 +16,10 @@ name = "user1"
 [userstore.static.email]
 address = "user1@example.org"
 
-[openid]
+[oauth2]
 allow_insecure = true
 
-[[openid.client]]
+[[oauth2.client]]
 id = "authorization_code_flow"
 secret = "secret"
 redirect_urls = ["http://localhost:9123/authorized"]

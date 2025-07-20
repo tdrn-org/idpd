@@ -48,7 +48,7 @@ var ErrInvalidClientSecret = errors.New("invalid client secret")
 
 var ErrNoSigningKey = errors.New("no signing key")
 
-type OpenIDClient struct {
+type OAuth2Client struct {
 	ID           string
 	Secret       string
 	RedirectURLs []string
@@ -139,7 +139,7 @@ func (c *opClient) ClockSkew() time.Duration {
 	return c.clockSkew
 }
 
-type OpenIDProviderConfig struct {
+type OAuth2ProviderConfig struct {
 	Issuer                   string
 	DefaultLogoutRedirectURL string
 	SigningKeyAlgorithm      jose.SignatureAlgorithm
@@ -147,9 +147,9 @@ type OpenIDProviderConfig struct {
 	SigningKeyExpiry         time.Duration
 }
 
-func (config *OpenIDProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OpenIDProvider, error) {
+func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
 	logger := slog.With(slog.String("issuer", config.Issuer))
-	provider := &OpenIDProvider{
+	provider := &OAuth2Provider{
 		issuerURL:           config.Issuer,
 		driver:              driver,
 		backend:             backend,
@@ -184,7 +184,7 @@ func (config *OpenIDProviderConfig) NewProvider(driver database.Driver, backend 
 	return provider, nil
 }
 
-type OpenIDProvider struct {
+type OAuth2Provider struct {
 	issuerURL           string
 	driver              database.Driver
 	backend             userstore.Backend
@@ -200,7 +200,7 @@ type OpenIDProvider struct {
 const defaultClockSkew = 10 * time.Second
 const defaultIDTokenLifetime = 1 * time.Hour
 
-func (p *OpenIDProvider) AddClient(client *OpenIDClient) error {
+func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
 	opClient := &opClient{
 		id:                             client.ID,
 		secret:                         client.Secret,
@@ -227,7 +227,7 @@ func (p *OpenIDProvider) AddClient(client *OpenIDClient) error {
 	return nil
 }
 
-func (p *OpenIDProvider) Mount(handler httpserver.Handler) *OpenIDProvider {
+func (p *OAuth2Provider) Mount(handler httpserver.Handler) *OAuth2Provider {
 	handler.HandleFunc("/healthz", p.opProvider.ServeHTTP)
 	handler.HandleFunc("/ready", p.opProvider.ServeHTTP)
 	handler.HandleFunc("/.well-known/openid-configuration", p.opProvider.ServeHTTP)
@@ -243,12 +243,12 @@ func (p *OpenIDProvider) Mount(handler httpserver.Handler) *OpenIDProvider {
 	return p
 }
 
-func (p *OpenIDProvider) Close() error {
+func (p *OAuth2Provider) Close() error {
 	// Nothing to do here (yet)
 	return nil
 }
 
-func (p *OpenIDProvider) Authenticate(ctx context.Context, id string, email string, password string, remember bool) (string, error) {
+func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, email string, password string, remember bool) (string, error) {
 	slog.Info("authenticating user", slog.String("id", id), slog.String("email", email))
 	err := p.backend.CheckPassword(email, password)
 	if err != nil {
@@ -262,7 +262,7 @@ func (p *OpenIDProvider) Authenticate(ctx context.Context, id string, email stri
 	return op.AuthCallbackURL(p.opProvider)(ctx, id), nil
 }
 
-func (p *OpenIDProvider) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
+func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
 	authRequest := database.NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest, userID)
 	err := p.driver.InsertAuthRequest(ctx, authRequest)
 	if err != nil {
@@ -271,7 +271,7 @@ func (p *OpenIDProvider) CreateAuthRequest(ctx context.Context, oidcAuthRequest 
 	return authRequest.OpAuthRequest(), nil
 }
 
-func (p *OpenIDProvider) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
+func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
 	authRequest, err := p.driver.SelectAuthRequest(ctx, id)
 	if err != nil {
 		return nil, err
@@ -279,7 +279,7 @@ func (p *OpenIDProvider) AuthRequestByID(ctx context.Context, id string) (op.Aut
 	return authRequest.OpAuthRequest(), nil
 }
 
-func (p *OpenIDProvider) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
+func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
 	authRequest, err := p.driver.SelectAuthRequestByCode(ctx, code)
 	if err != nil {
 		return nil, err
@@ -287,15 +287,15 @@ func (p *OpenIDProvider) AuthRequestByCode(ctx context.Context, code string) (op
 	return authRequest.OpAuthRequest(), nil
 }
 
-func (p *OpenIDProvider) SaveAuthCode(ctx context.Context, id string, code string) error {
+func (p *OAuth2Provider) SaveAuthCode(ctx context.Context, id string, code string) error {
 	return p.driver.InsertAuthCode(ctx, code, id)
 }
 
-func (p *OpenIDProvider) DeleteAuthRequest(ctx context.Context, id string) error {
+func (p *OAuth2Provider) DeleteAuthRequest(ctx context.Context, id string) error {
 	return p.driver.DeleteAuthRequest(ctx, id)
 }
 
-func (p *OpenIDProvider) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
+func (p *OAuth2Provider) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
 	switch tokenRequest := request.(type) {
 	case *database.OpAuthRequest:
 		return p.createAccessTokenFromOpAuthRequest(ctx, tokenRequest)
@@ -305,7 +305,7 @@ func (p *OpenIDProvider) CreateAccessToken(ctx context.Context, request op.Token
 	return "", time.Time{}, fmt.Errorf("unexpected token request type: %s", reflect.TypeOf(request))
 }
 
-func (p *OpenIDProvider) createAccessTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest) (string, time.Time, error) {
+func (p *OAuth2Provider) createAccessTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest) (string, time.Time, error) {
 	token := database.NewTokenFromAuthRequest(opAuthRequest, "")
 	err := p.driver.InsertToken(ctx, token)
 	if err != nil {
@@ -314,7 +314,7 @@ func (p *OpenIDProvider) createAccessTokenFromOpAuthRequest(ctx context.Context,
 	return token.ID, time.UnixMicro(token.Expiration), nil
 }
 
-func (p *OpenIDProvider) createAccessTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest) (string, time.Time, error) {
+func (p *OAuth2Provider) createAccessTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest) (string, time.Time, error) {
 	token := database.NewTokenFromTokenExchangeRequest(tokenExchangeRequest, "")
 	err := p.driver.InsertToken(ctx, token)
 	if err != nil {
@@ -323,7 +323,7 @@ func (p *OpenIDProvider) createAccessTokenFromTokenExchangeRequest(ctx context.C
 	return token.ID, time.UnixMicro(token.Expiration), nil
 }
 
-func (p *OpenIDProvider) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
+func (p *OAuth2Provider) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
 	switch refreshTokenRequest := request.(type) {
 	case *database.OpAuthRequest:
 		return p.createAccessAndRefreshTokenFromOpAuthRequest(ctx, refreshTokenRequest, currentRefreshToken)
@@ -335,7 +335,7 @@ func (p *OpenIDProvider) CreateAccessAndRefreshTokens(ctx context.Context, reque
 	return "", "", time.Time{}, fmt.Errorf("unexpected refresh token request type: %s", reflect.TypeOf(request))
 }
 
-func (p *OpenIDProvider) createAccessAndRefreshTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest, currentRefreshToken string) (string, string, time.Time, error) {
+func (p *OAuth2Provider) createAccessAndRefreshTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest, currentRefreshToken string) (string, string, time.Time, error) {
 	var accessToken *database.Token
 	var refreshToken *database.RefreshToken
 	refreshTokenID := database.NewRefreshTokenID()
@@ -356,22 +356,22 @@ func (p *OpenIDProvider) createAccessAndRefreshTokenFromOpAuthRequest(ctx contex
 	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
 }
 
-func (p *OpenIDProvider) TokenRequestByRefreshToken(ctx context.Context, refreshTokenID string) (op.RefreshTokenRequest, error) {
+func (p *OAuth2Provider) TokenRequestByRefreshToken(ctx context.Context, refreshTokenID string) (op.RefreshTokenRequest, error) {
 	p.logStubCall()
 	return nil, nil
 }
 
-func (p *OpenIDProvider) TerminateSession(ctx context.Context, userID string, clientID string) error {
+func (p *OAuth2Provider) TerminateSession(ctx context.Context, userID string, clientID string) error {
 	p.logStubCall()
 	return nil
 }
 
-func (p *OpenIDProvider) RevokeToken(ctx context.Context, tokenOrTokenID string, userID string, clientID string) *oidc.Error {
+func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string, userID string, clientID string) *oidc.Error {
 	p.logStubCall()
 	return nil
 }
 
-func (p *OpenIDProvider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (string, string, error) {
+func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (string, string, error) {
 	refreshToken, err := p.driver.SelectRefreshToken(ctx, token)
 	if errors.Is(err, database.ErrObjectNotFound) {
 		return "", "", op.ErrInvalidRefreshToken
@@ -383,7 +383,7 @@ func (p *OpenIDProvider) GetRefreshTokenInfo(ctx context.Context, clientID strin
 	return refreshToken.UserID, refreshToken.ID, nil
 }
 
-func (p *OpenIDProvider) SigningKey(ctx context.Context) (op.SigningKey, error) {
+func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
@@ -398,14 +398,14 @@ func (p *OpenIDProvider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 	return nil, ErrNoSigningKey
 }
 
-func (p *OpenIDProvider) generateSigningKey(algorithm string) (*database.SigningKey, error) {
+func (p *OAuth2Provider) generateSigningKey(algorithm string) (*database.SigningKey, error) {
 	now := time.Now()
 	passivation := now.Add(p.signingKeyLifetime).UnixMicro()
 	expiration := now.Add(p.signingKeyExpiry).UnixMicro()
 	return SigningKeyForAlgorithm(jose.SignatureAlgorithm(algorithm), passivation, expiration)
 }
 
-func (p *OpenIDProvider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
+func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
 	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
@@ -421,7 +421,7 @@ func (p *OpenIDProvider) SignatureAlgorithms(ctx context.Context) ([]jose.Signat
 	return slices.Collect(maps.Values(algorithms)), nil
 }
 
-func (p *OpenIDProvider) KeySet(ctx context.Context) ([]op.Key, error) {
+func (p *OAuth2Provider) KeySet(ctx context.Context) ([]op.Key, error) {
 	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
@@ -439,16 +439,16 @@ func (p *OpenIDProvider) KeySet(ctx context.Context) ([]op.Key, error) {
 	return keys, nil
 }
 
-func (p *OpenIDProvider) ClientCredentials(ctx context.Context, clientID string, clientSecret string) (op.Client, error) {
+func (p *OAuth2Provider) ClientCredentials(ctx context.Context, clientID string, clientSecret string) (op.Client, error) {
 	p.logStubCall()
 	return nil, nil
 }
-func (p *OpenIDProvider) ClientCredentialsTokenRequest(ctx context.Context, clientID string, scopes []string) (op.TokenRequest, error) {
+func (p *OAuth2Provider) ClientCredentialsTokenRequest(ctx context.Context, clientID string, scopes []string) (op.TokenRequest, error) {
 	p.logStubCall()
 	return nil, nil
 }
 
-func (p *OpenIDProvider) GetClientByClientID(ctx context.Context, clientID string) (op.Client, error) {
+func (p *OAuth2Provider) GetClientByClientID(ctx context.Context, clientID string) (op.Client, error) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	opClient, exists := p.opClients[clientID]
@@ -458,7 +458,7 @@ func (p *OpenIDProvider) GetClientByClientID(ctx context.Context, clientID strin
 	return &opClient, nil
 }
 
-func (p *OpenIDProvider) AuthorizeClientIDSecret(ctx context.Context, clientID string, clientSecret string) error {
+func (p *OAuth2Provider) AuthorizeClientIDSecret(ctx context.Context, clientID string, clientSecret string) error {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	opClient, exists := p.opClients[clientID]
@@ -471,16 +471,16 @@ func (p *OpenIDProvider) AuthorizeClientIDSecret(ctx context.Context, clientID s
 	return nil
 }
 
-func (p *OpenIDProvider) SetUserinfoFromScopes(ctx context.Context, userInfo *oidc.UserInfo, userID string, clientID string, scopes []string) error {
+func (p *OAuth2Provider) SetUserinfoFromScopes(ctx context.Context, userInfo *oidc.UserInfo, userID string, clientID string, scopes []string) error {
 	// Empty implementation; SetUserinfoFromRequest will be used instead
 	return nil
 }
 
-func (p *OpenIDProvider) SetUserinfoFromRequest(ctx context.Context, userInfo *oidc.UserInfo, token op.IDTokenRequest, scopes []string) error {
+func (p *OAuth2Provider) SetUserinfoFromRequest(ctx context.Context, userInfo *oidc.UserInfo, token op.IDTokenRequest, scopes []string) error {
 	return p.setUserInfoFromSubject(ctx, userInfo, token.GetSubject(), scopes)
 }
 
-func (p *OpenIDProvider) setUserInfoFromSubject(_ context.Context, userInfo *oidc.UserInfo, subject string, scopes []string) error {
+func (p *OAuth2Provider) setUserInfoFromSubject(_ context.Context, userInfo *oidc.UserInfo, subject string, scopes []string) error {
 	user, err := p.backend.LookupUserByEmail(subject)
 	if err != nil {
 		return err
@@ -489,7 +489,7 @@ func (p *OpenIDProvider) setUserInfoFromSubject(_ context.Context, userInfo *oid
 	return nil
 }
 
-func (p *OpenIDProvider) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserInfo, tokenID string, subject string, origin string) error {
+func (p *OAuth2Provider) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserInfo, tokenID string, subject string, origin string) error {
 	token, err := p.driver.SelectToken(ctx, tokenID)
 	if err != nil {
 		return err
@@ -497,32 +497,32 @@ func (p *OpenIDProvider) SetUserinfoFromToken(ctx context.Context, userInfo *oid
 	return p.setUserInfoFromSubject(ctx, userInfo, token.Subject, token.Scopes)
 }
 
-func (p *OpenIDProvider) SetIntrospectionFromToken(ctx context.Context, userinfo *oidc.IntrospectionResponse, tokenID string, subject string, clientID string) error {
+func (p *OAuth2Provider) SetIntrospectionFromToken(ctx context.Context, userinfo *oidc.IntrospectionResponse, tokenID string, subject string, clientID string) error {
 	p.logStubCall()
 	return nil
 }
 
-func (p *OpenIDProvider) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
+func (p *OAuth2Provider) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
 	p.logStubCall()
 	return nil, nil
 }
 
-func (p *OpenIDProvider) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID string) (*jose.JSONWebKey, error) {
+func (p *OAuth2Provider) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID string) (*jose.JSONWebKey, error) {
 	p.logStubCall()
 	return nil, nil
 }
 
-func (p *OpenIDProvider) ValidateJWTProfileScopes(ctx context.Context, userID string, scopes []string) ([]string, error) {
+func (p *OAuth2Provider) ValidateJWTProfileScopes(ctx context.Context, userID string, scopes []string) ([]string, error) {
 	p.logStubCall()
 	return nil, nil
 }
 
-func (p *OpenIDProvider) Health(context.Context) error {
+func (p *OAuth2Provider) Health(context.Context) error {
 	p.logStubCall()
 	return nil
 }
 
-func (p *OpenIDProvider) logStubCall() {
+func (p *OAuth2Provider) logStubCall() {
 	_, file, line, _ := runtime.Caller(1)
 	p.logger.Warn("stub call", slog.String("location", fmt.Sprintf("%s:%d", file, line)))
 }

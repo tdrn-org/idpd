@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package idpclient
+package oauth2client
 
 import (
 	"context"
@@ -66,7 +66,7 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 	providerFunc := sync.OnceValues(func() (rp.RelyingParty, error) {
 		provider, err := rp.NewRelyingPartyOIDC(ctx, config.Issuer, config.ClientId, config.ClientSecret, redirectURL.String(), config.Scopes, options...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create OpenID provider (cause: %w)", err)
+			return nil, fmt.Errorf("failed to create OIDC provider (cause: %w)", err)
 		}
 		return provider, nil
 	})
@@ -75,7 +75,7 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 		redirectURL:          redirectURL,
 		providerFunc:         providerFunc,
 		codeExchangeCallback: codeExchangeCallback,
-		logger:               slog.With(slog.Any("redirectURL", redirectURL), slog.String("client", config.ClientId)),
+		logger:               slog.With(slog.String("client", config.ClientId), slog.Any("redirectURL", redirectURL)),
 	}
 	return flow, nil
 }
@@ -85,7 +85,9 @@ type AuthorizationCodeFlow[C oidc.IDClaims] struct {
 	redirectURL          *url.URL
 	providerFunc         func() (rp.RelyingParty, error)
 	codeExchangeCallback CodeExchangeCallback[C]
+	client               *http.Client
 	logger               *slog.Logger
+	mutex                sync.RWMutex
 }
 
 func (flow *AuthorizationCodeFlow[C]) Mount(handler httpserver.Handler) *AuthorizationCodeFlow[C] {
@@ -114,50 +116,78 @@ func (flow *AuthorizationCodeFlow[C]) redirectHandler(w http.ResponseWriter, r *
 	rp.CodeExchangeHandler(flow.codeExchange, provider)(w, r)
 }
 
-func (flow *AuthorizationCodeFlow[C]) codeExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[C], state string, rp rp.RelyingParty) {
-	flow.codeExchangeCallback(w, r, tokens, state, flow)
+func (flow *AuthorizationCodeFlow[C]) codeExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[C], state string, _ rp.RelyingParty) {
+	flow.updateClient(r.Context(), tokens.Token)
+	if flow.codeExchangeCallback != nil {
+		flow.codeExchangeCallback(w, r, tokens, state, flow)
+	}
 }
 
-func (flow *AuthorizationCodeFlow[C]) AuthURL() *url.URL {
-	return flow.authURL
-}
-
-func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context, token *oauth2.Token) (*http.Client, error) {
+func (flow *AuthorizationCodeFlow[C]) updateClient(ctx context.Context, token *oauth2.Token) error {
 	provider, err := flow.providerFunc()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return provider.OAuthConfig().Client(ctx, token), nil
+	flow.mutex.Lock()
+	defer flow.mutex.Unlock()
+	flow.client = provider.OAuthConfig().Client(ctx, token)
+	return nil
 }
 
-func (flow *AuthorizationCodeFlow[C]) GetEndSessionEndpoint() (string, error) {
+func (flow *AuthorizationCodeFlow[C]) Authenticate() error {
 	provider, err := flow.providerFunc()
 	if err != nil {
-		return "", err
+		return err
 	}
-	return provider.GetEndSessionEndpoint(), nil
+	rsp, err := provider.HttpClient().Get(flow.authURL.String())
+	if err != nil {
+		return fmt.Errorf("failed to initiate authorization code flow (cause: %w)", err)
+	}
+	switch rsp.StatusCode {
+	case http.StatusOK:
+		return nil
+	default:
+		return fmt.Errorf("authentication code flow failed: %s", rsp.Status)
+	}
 }
 
-func (flow *AuthorizationCodeFlow[C]) GetRevokeEndpoint() (string, error) {
-	provider, err := flow.providerFunc()
-	if err != nil {
-		return "", err
+func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context) (*http.Client, error) {
+	flow.mutex.RLock()
+	defer flow.mutex.RUnlock()
+	if flow.client == nil {
+		return nil, ErrNotAuthenticated
 	}
-	return provider.GetRevokeEndpoint(), nil
+	return flow.client, nil
 }
 
-func (flow *AuthorizationCodeFlow[C]) UserinfoEndpoint() (string, error) {
+func (flow *AuthorizationCodeFlow[C]) GetEndSessionEndpoint() string {
 	provider, err := flow.providerFunc()
 	if err != nil {
-		return "", err
+		return ""
 	}
-	return provider.UserinfoEndpoint(), nil
+	return provider.GetEndSessionEndpoint()
 }
 
-func (flow *AuthorizationCodeFlow[C]) GetDeviceAuthorizationEndpoint() (string, error) {
+func (flow *AuthorizationCodeFlow[C]) GetRevokeEndpoint() string {
 	provider, err := flow.providerFunc()
 	if err != nil {
-		return "", err
+		return ""
 	}
-	return provider.GetDeviceAuthorizationEndpoint(), nil
+	return provider.GetRevokeEndpoint()
+}
+
+func (flow *AuthorizationCodeFlow[C]) UserinfoEndpoint() string {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return ""
+	}
+	return provider.UserinfoEndpoint()
+}
+
+func (flow *AuthorizationCodeFlow[C]) GetDeviceAuthorizationEndpoint() string {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return ""
+	}
+	return provider.GetDeviceAuthorizationEndpoint()
 }

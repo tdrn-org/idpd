@@ -55,7 +55,7 @@
 #type = "static"
 
 [userstore.ldap]
-# LDAP server url
+# LDAP server urls
 #urls = [ "ldaps://dc.domain.example.org" ]
 # LDAP bind dn
 #bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
@@ -126,13 +126,13 @@ group.members = "member"
 #[userstore.static.user.email]
 #address = "address"
 
-[openid]
+[oauth2]
 #default_logout_redirect_url = ""
 #signing_key_algorithm = "RS256"
 #signing_key_lifetime = "1h"
 #signing_key_expiry = "24h"
 
-#[[openid.client]]
+#[[oauth2.client]]
 #id = "client 1"
 #secret = "verysecretphrase"
 #redirect_urls = [ "http://localhost:9124/authorized" ]

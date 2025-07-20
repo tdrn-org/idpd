@@ -32,6 +32,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// TODO: Rename reflecting id provider type
 type Driver interface {
 	Name() string
 	UpdateSchema(ctx context.Context) (SchemaVersion, SchemaVersion, error)

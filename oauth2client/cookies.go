@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-package idpclient
+package oauth2client
 
 import (
 	"net/url"
 
 	"github.com/gorilla/securecookie"
-	httphelper "github.com/zitadel/oidc/v3/pkg/http"
+	"github.com/zitadel/oidc/v3/pkg/http"
 )
 
-func newCookieHandler(url *url.URL) *httphelper.CookieHandler {
+func newCookieHandler(url *url.URL) *http.CookieHandler {
 	hashKey := securecookie.GenerateRandomKey(64)
 	encryptKey := securecookie.GenerateRandomKey(32)
-	opts := make([]httphelper.CookieHandlerOpt, 0, 1)
+	opts := make([]http.CookieHandlerOpt, 0, 1)
 	if url.Scheme == "http" {
 		// TODO: Warn in case of insecure setup
-		opts = append(opts, httphelper.WithUnsecure())
+		opts = append(opts, http.WithUnsecure())
 	}
-	return httphelper.NewCookieHandler(hashKey, encryptKey, opts...)
+	return http.NewCookieHandler(hashKey, encryptKey, opts...)
 }

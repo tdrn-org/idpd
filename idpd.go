@@ -32,11 +32,11 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/google/uuid"
 	"github.com/tdrn-org/idpd/httpserver"
-	"github.com/tdrn-org/idpd/idpclient"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
+	"github.com/tdrn-org/idpd/oauth2client"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -93,23 +93,23 @@ func startConfig(ctx context.Context, config *Config) (*Server, error) {
 const sessionCookiePath = "/session"
 
 type Server struct {
-	httpServer    *httpserver.Instance
-	sessionCookie *server.CookieHandler
-	issuerURL     string
-	database      database.Driver
-	userStore     userstore.Backend
-	provider      *server.OpenIDProvider
-	authClient    *server.OpenIDClient
-	authFLow      *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]
-	stoppedWG     sync.WaitGroup
+	httpServer      *httpserver.Instance
+	sessionCookie   *server.CookieHandler
+	database        database.Driver
+	userStore       userstore.Backend
+	oauth2IssuerURL string
+	oauth2Provider  *server.OAuth2Provider
+	oauth2Client    *server.OAuth2Client
+	authFLow        *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
+	stoppedWG       sync.WaitGroup
 }
 
 func (s *Server) Issuer() string {
-	return s.issuerURL
+	return s.oauth2IssuerURL
 }
 
-func (s *Server) AddClient(client *Client) error {
-	return s.provider.AddClient(client.openIDClient())
+func (s *Server) AddClient(client *OAuth2Client) error {
+	return s.oauth2Provider.AddClient(client.oauth2Client())
 }
 
 func (s *Server) Shutdown(ctx context.Context) {
@@ -141,7 +141,7 @@ func (s *Server) shutdown(ctx context.Context) error {
 	slog.Info("initiating shutdown")
 	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancelShutdown()
-	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.provider.Close(), s.database.Close())
+	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close())
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (s *Server) initHttpServer(config *Config) error {
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	config.Server.Address = httpServer.ListenerAddr()
-	s.issuerURL = config.OpenIDIssuerURL()
+	s.oauth2IssuerURL = config.OAuth2IssuerURL()
 	return nil
 }
 
@@ -242,46 +242,46 @@ func (s *Server) initUserStore(config *Config) error {
 }
 
 func (s *Server) initProvider(config *Config) error {
-	logger := slog.With(slog.String("issuer", s.issuerURL))
+	logger := slog.With(slog.String("issuer", s.oauth2IssuerURL))
 	opOpts := make([]op.Option, 0, 2)
 	opOpts = append(opOpts, op.WithLogger(logger))
 	if config.Server.Protocol == ServerProtocolHttp {
 		opOpts = append(opOpts, op.WithAllowInsecure())
 	}
-	logger.Info("initializing OpenID provider")
-	providerConfig := config.openIDProviderConfig()
+	logger.Info("initializing OAuth2 provider")
+	providerConfig := config.oauth2ProviderConfig()
 	provider, err := providerConfig.NewProvider(s.database, s.userStore, opOpts...)
 	if err != nil {
 		return err
 	}
-	for _, client := range config.openIDClients() {
+	for _, client := range config.oauth2Clients() {
 		err = provider.AddClient(client)
 		if err != nil {
 			return err
 		}
 	}
-	authClient := &server.OpenIDClient{
+	oauth2Client := &server.OAuth2Client{
 		ID:           uuid.NewString(),
 		Secret:       uuid.NewString(),
 		RedirectURLs: []string{providerConfig.Issuer + "/authorized"},
 	}
-	err = provider.AddClient(authClient)
+	err = provider.AddClient(oauth2Client)
 	if err != nil {
 		return err
 	}
-	s.provider = provider
-	s.authClient = authClient
+	s.oauth2Provider = provider
+	s.oauth2Client = oauth2Client
 	return nil
 }
 
 func (s *Server) initAuthFlow(config *Config) error {
-	authFlowConfig := &idpclient.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		BaseURL:         s.issuerURL,
+	authFlowConfig := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
+		BaseURL:         s.oauth2IssuerURL,
 		AuthURLPath:     "/login",
 		RedirectURLPath: "/authorized",
-		Issuer:          s.issuerURL,
-		ClientId:        s.authClient.ID,
-		ClientSecret:    s.authClient.Secret,
+		Issuer:          s.oauth2IssuerURL,
+		ClientId:        s.oauth2Client.ID,
+		ClientSecret:    s.oauth2Client.Secret,
 		Scopes:          []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
 		EnablePKCE:      true,
 	}
@@ -294,7 +294,7 @@ func (s *Server) initAuthFlow(config *Config) error {
 }
 
 func (s *Server) startServer(config *Config) error {
-	s.provider.Mount(s.httpServer)
+	s.oauth2Provider.Mount(s.httpServer)
 	s.authFLow.Mount(s.httpServer)
 	if !config.Mock.Enabled {
 		web.Mount(s.httpServer)
@@ -321,7 +321,7 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, email st
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	redirectURL, err := s.provider.Authenticate(r.Context(), id, email, password, remember)
+	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, email, password, remember)
 	if errors.Is(err, userstore.ErrInvalidLogin) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -339,22 +339,18 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	userSession, err := s.database.SelectUserSession(ctx, sessionId)
+	// TODO: Handle persistent user session
+	_, err := s.database.SelectUserSession(ctx, sessionId)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	httpClient, err := s.authFLow.Client(ctx, userSession.OAuth2Token())
+	httpClient, err := s.authFLow.Client(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	userinfoEndpoint, err := s.authFLow.UserinfoEndpoint()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	userInfoResponse, err := httpClient.Get(userinfoEndpoint)
+	userInfoResponse, err := httpClient.Get(s.authFLow.UserinfoEndpoint())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -387,7 +383,7 @@ func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	remember, _ := strconv.ParseBool(r.PostFormValue("remember"))
-	redirectURL, err := s.provider.Authenticate(r.Context(), id, email, password, remember)
+	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, email, password, remember)
 	if errors.Is(err, userstore.ErrInvalidLogin) {
 		slog.Warn("login failure", slog.String("id", id), slog.String("email", email))
 		w.WriteHeader(http.StatusUnauthorized)
@@ -404,7 +400,7 @@ func (s *Server) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
 	s.sessionCookie.Delete(w)
 }
 
-func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
+func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
 	ctx := r.Context()
 	userSession, err := s.database.TransformAndDeleteUserSessionRequest(ctx, state, tokens.Token)
 	if err != nil {
@@ -412,5 +408,5 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 		return
 	}
 	s.sessionCookie.Set(w, userSession.ID, userSession.Remember)
-	http.Redirect(w, r, s.issuerURL, http.StatusFound)
+	http.Redirect(w, r, s.oauth2IssuerURL, http.StatusFound)
 }
