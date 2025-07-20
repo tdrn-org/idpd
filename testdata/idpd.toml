@@ -96,7 +96,6 @@ number = "number"
 address = "address"
 
 [openid]
-allow_insecure = true
 default_logout_redirect_url = ""
 signing_key_algorithm = "RS256"
 signing_key_lifetime = "1m"
