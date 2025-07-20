@@ -198,6 +198,7 @@ type OpenIDProvider struct {
 }
 
 const defaultClockSkew = 10 * time.Second
+const defaultIDTokenLifetime = 1 * time.Hour
 
 func (p *OpenIDProvider) AddClient(client *OpenIDClient) error {
 	opClient := &opClient{
@@ -211,7 +212,7 @@ func (p *OpenIDProvider) AddClient(client *OpenIDClient) error {
 		grantTypes:                     []oidc.GrantType{oidc.GrantTypeCode, oidc.GrantTypeRefreshToken},
 		loginURLPattern:                p.issuerURL + "/user?id=%s",
 		accessTokenType:                op.AccessTokenTypeBearer,
-		idTokenLifetime:                1 * time.Hour,
+		idTokenLifetime:                defaultIDTokenLifetime,
 		devMode:                        false,
 		idTokenUserinfoClaimsAssertion: false,
 		clockSkew:                      defaultClockSkew,

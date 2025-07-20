@@ -27,12 +27,11 @@ import (
 	"github.com/tdrn-org/idpd"
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/idpclient"
-	"github.com/zitadel/oidc/v3/pkg/client/rp"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 func TestAuthorizationCodeFlow(t *testing.T) {
-	idpdServer := idpd.MustStart("testdata/idpd.toml")
+	idpdServer := idpd.MustStart(t.Context(), "testdata/idpd.toml")
 	callbackServer := (&httpserver.Instance{Addr: "localhost:"}).MustListen()
 	clientBaseURL := "http://" + callbackServer.ListenerAddr()
 	client := &idpd.Client{
@@ -56,9 +55,9 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	httpClient := &http.Client{
 		Jar: jar,
 	}
-	flow, err := config.NewFlow(httpClient, context.Background(), rp.UserinfoCallback(func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty, info *oidc.UserInfo) {
+	flow, err := config.NewFlow(httpClient, context.Background(), func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
 		http.Redirect(w, r, clientBaseURL, http.StatusFound)
-	}))
+	})
 	require.NoError(t, err)
 	flow.Mount(callbackServer)
 	callbackServer.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

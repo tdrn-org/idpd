@@ -1,14 +1,5 @@
-[logging]
-level = "info"
-target = "stdout"
-color = 0
-
 [server]
 address = "localhost:"
-protocol = "http"
-cert_file = ""
-key_file = ""
-public_url = ""
 
 [database]
 type = "memory"

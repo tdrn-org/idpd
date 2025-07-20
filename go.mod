@@ -5,6 +5,7 @@ go 1.24
 require (
 	github.com/go-jose/go-jose/v4 v4.1.1
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/securecookie v1.1.2
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/text v0.27.0
 )
@@ -17,7 +18,6 @@ require (
 	github.com/go-chi/chi/v5 v5.2.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

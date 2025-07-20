@@ -7,8 +7,8 @@
 #level = "info"
 # stdout|stderr|file
 #target = "stdout"
-# -1:disable color output, 0:auto-detect color output, 1:force color output (only applicable for targets stdout|stderr)
-#color = 1
+# -1:auto-detect color output, 0:disable color output, 1:force color output (only applicable for targets stdout|stderr)
+#color = -1
 # <log file name> (only applicable for target file)
 #file_name = "/var/log/idpd/idpd.log"
 # 0:disable log file rotation, >0:rotate log file at this size (only applicable for target file)
@@ -28,7 +28,7 @@
 # session cookie name
 #session_cookie = "idpd_session"
 # session cookie max age (in seconds)
-#session_cookie_max_age = 2592000
+#session_cookie_max_age = "720h" # 30 days
 
 [database]
 # memory|sqlite|postgres
@@ -56,7 +56,7 @@
 
 [userstore.ldap]
 # LDAP server url
-#url = "ldaps://dc.domain.example.org"
+#urls = [ "ldaps://dc.domain.example.org" ]
 # LDAP bind dn
 #bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
 # LDAP bind password
@@ -127,13 +127,12 @@ group.members = "member"
 #address = "address"
 
 [openid]
-#allow_insecure = true
 #default_logout_redirect_url = ""
 #signing_key_algorithm = "RS256"
-#signing_key_lifetime = 3600 # 1h
-#signing_key_expiry = 86400 # 24h
+#signing_key_lifetime = "1h"
+#signing_key_expiry = "24h"
 
 #[[openid.client]]
 #id = "client 1"
 #secret = "verysecretphrase"
-#redirect_urls = ["http://localhost:9124/authorized"]
+#redirect_urls = [ "http://localhost:9124/authorized" ]

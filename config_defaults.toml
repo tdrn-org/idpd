@@ -1,7 +1,7 @@
 [logging]
 level = "info"
 target = "stdout"
-color = 1
+color = -1
 file_name = "/var/log/idpd/idpd.log"
 file_size_limit = 0
 
@@ -12,7 +12,7 @@ cert_file = ""
 key_file = ""
 public_url = ""
 session_cookie = "idpd_session"
-session_cookie_max_age = 2592000
+session_cookie_max_age = "720h"
 
 [database]
 type = "memory"
@@ -32,7 +32,7 @@ password = ""
 type = "static"
 
 [userstore.ldap]
-url = "ldaps://dc.domain.example.org"
+urls = [ "ldaps://dc.domain.example.org" ]
 bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
 bind_password = ""
 user_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
@@ -96,11 +96,10 @@ group.members = "member"
 #address = "address"
 
 [openid]
-allow_insecure = true
 default_logout_redirect_url = ""
 signing_key_algorithm = "RS256"
-signing_key_lifetime = 3600 # 1h
-signing_key_expiry = 86400 # 24h
+signing_key_lifetime = "1h"
+signing_key_expiry = "24h"
 
 #[[openid.client]]
 #id = "client 1"

@@ -39,7 +39,7 @@ type LDAPSearchConfig struct {
 }
 
 type LDAPConfig struct {
-	URL          string
+	URLs         []string
 	BindDN       string
 	BindPassword string
 	UserSearch   LDAPSearchConfig
@@ -436,7 +436,7 @@ func (backend *ldapBackend) CheckPassword(email string, password string) error {
 }
 
 func (backend *ldapBackend) connectAndBind() (*ldap.Conn, error) {
-	conn, err := ldap.DialURL(backend.URL)
+	conn, err := backend.connect()
 	if err != nil {
 		return nil, fmt.Errorf("LDAP connect failure (cause: %w)", err)
 	}
@@ -446,4 +446,19 @@ func (backend *ldapBackend) connectAndBind() (*ldap.Conn, error) {
 		return nil, fmt.Errorf("LDAP bind failure (cause: %w)", err)
 	}
 	return conn, nil
+}
+
+func (backend *ldapBackend) connect() (*ldap.Conn, error) {
+	dialErrors := make([]error, 0, len(backend.URLs))
+	for _, url := range backend.URLs {
+		conn, err := ldap.DialURL(url)
+		if err == nil {
+			return conn, nil
+		}
+		dialErrors = append(dialErrors, err)
+	}
+	if len(dialErrors) == 0 {
+		return nil, fmt.Errorf("no LDAP URLs")
+	}
+	return nil, errors.Join(dialErrors...)
 }

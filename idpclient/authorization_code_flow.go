@@ -43,7 +43,9 @@ type AuthorizationCodeFlowConfig[C oidc.IDClaims] struct {
 	EnablePKCE      bool
 }
 
-func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, ctx context.Context, codeExchangeCallback rp.CodeExchangeCallback[C]) (*AuthorizationCodeFlow[C], error) {
+type CodeExchangeCallback[C oidc.IDClaims] func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[C], state string, flow *AuthorizationCodeFlow[C])
+
+func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, ctx context.Context, codeExchangeCallback CodeExchangeCallback[C]) (*AuthorizationCodeFlow[C], error) {
 	parsedBaseURL, err := url.Parse(config.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL '%s' (cause: %w)", config.BaseURL, err)
@@ -52,13 +54,12 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 	redirectURL := parsedBaseURL.JoinPath(config.RedirectURLPath)
 	cookieHandler := newCookieHandler(parsedBaseURL)
 	logger := slog.With(slog.String("client", config.ClientId), slog.String("issuer", config.Issuer))
-	options := []rp.Option{
-		rp.WithHTTPClient(httpClient),
-		rp.WithCookieHandler(cookieHandler),
-		rp.WithLogger(logger),
-		rp.WithVerifierOpts(rp.WithIssuedAtOffset(5 * time.Second)),
-		rp.WithSigningAlgsFromDiscovery(),
-	}
+	options := make([]rp.Option, 5, 6)
+	options[0] = rp.WithHTTPClient(httpClient)
+	options[1] = rp.WithCookieHandler(cookieHandler)
+	options[2] = rp.WithLogger(logger)
+	options[3] = rp.WithVerifierOpts(rp.WithIssuedAtOffset(5 * time.Second))
+	options[4] = rp.WithSigningAlgsFromDiscovery()
 	if config.ClientSecret == "" || config.EnablePKCE {
 		options = append(options, rp.WithPKCE(cookieHandler))
 	}
@@ -83,7 +84,7 @@ type AuthorizationCodeFlow[C oidc.IDClaims] struct {
 	authURL              *url.URL
 	redirectURL          *url.URL
 	providerFunc         func() (rp.RelyingParty, error)
-	codeExchangeCallback rp.CodeExchangeCallback[C]
+	codeExchangeCallback CodeExchangeCallback[C]
 	logger               *slog.Logger
 }
 
@@ -110,7 +111,11 @@ func (flow *AuthorizationCodeFlow[C]) redirectHandler(w http.ResponseWriter, r *
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	rp.CodeExchangeHandler(flow.codeExchangeCallback, provider)(w, r)
+	rp.CodeExchangeHandler(flow.codeExchange, provider)(w, r)
+}
+
+func (flow *AuthorizationCodeFlow[C]) codeExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[C], state string, rp rp.RelyingParty) {
+	flow.codeExchangeCallback(w, r, tokens, state, flow)
 }
 
 func (flow *AuthorizationCodeFlow[C]) AuthURL() *url.URL {

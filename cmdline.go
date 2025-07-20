@@ -17,6 +17,7 @@
 package idpd
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 
@@ -35,6 +36,7 @@ type cmdLine struct {
 	Verbose bool   `short:"v" help:"Enable verbose output (log level info)"`
 	Debug   bool   `short:"d" help:"Enable debug output (log level debug)"`
 	RunCmd  runCmd `cmd:"" name:"run" default:"withargs" help:"run server"`
+	ctx     context.Context
 }
 
 type runCmd struct {
@@ -48,7 +50,7 @@ func (cmd *runCmd) Run(args *cmdLine) error {
 	}
 	cmd.applyGlobalArgs(config, args)
 	cmd.initLogging(config)
-	s, err := startConfig(config)
+	s, err := startConfig(args.ctx, config)
 	if err != nil {
 		return err
 	}

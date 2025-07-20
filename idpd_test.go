@@ -30,7 +30,7 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.SkipNow()
 	}
-	err = idpd.Run([]string{"--debug", "--config=idpd-local.toml"})
+	err = idpd.Run(t.Context(), []string{"--debug", "--config=idpd-local.toml"})
 	require.NoError(t, err)
 }
 

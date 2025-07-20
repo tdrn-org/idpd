@@ -26,7 +26,7 @@ import (
 )
 
 var testLDAPConfig = &userstore.LDAPConfig{
-	URL:          "ldap://localhost:1389",
+	URLs:         []string{"ldap://localhost:1389"},
 	BindDN:       "cn=idpd,dc=example,dc=org",
 	BindPassword: "ldappassword",
 	UserSearch: userstore.LDAPSearchConfig{

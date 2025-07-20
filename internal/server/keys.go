@@ -33,11 +33,11 @@ func SigningKeyForAlgorithm(algorithm jose.SignatureAlgorithm, passivation int64
 	var err error
 	switch algorithm {
 	case jose.RS256:
-		privateKey, publicKey, err = generateRSASigningKey(2048)
+		privateKey, publicKey, err = generateRSAKeys(2048)
 	case jose.ES256:
-		privateKey, publicKey, err = generateECDSASigningKey(elliptic.P256())
+		privateKey, publicKey, err = generateECDSAKeys(elliptic.P256())
 	case jose.PS256:
-		privateKey, publicKey, err = generateRSASigningKey(2048)
+		privateKey, publicKey, err = generateRSAKeys(2048)
 	default:
 		err = fmt.Errorf("unsupported signature key algorithm: %s", algorithm)
 	}
@@ -51,7 +51,7 @@ func SigningKeyForAlgorithm(algorithm jose.SignatureAlgorithm, passivation int64
 	return signingKey, nil
 }
 
-func generateRSASigningKey(bits int) (*rsa.PrivateKey, *rsa.PublicKey, error) {
+func generateRSAKeys(bits int) (*rsa.PrivateKey, *rsa.PublicKey, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate RSA key (cause: %w)", err)
@@ -59,7 +59,7 @@ func generateRSASigningKey(bits int) (*rsa.PrivateKey, *rsa.PublicKey, error) {
 	return privateKey, &privateKey.PublicKey, nil
 }
 
-func generateECDSASigningKey(c elliptic.Curve) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
+func generateECDSAKeys(c elliptic.Curve) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
 	privateKey, err := ecdsa.GenerateKey(c, rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate ECDSA key (cause: %w)", err)

@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -41,16 +42,16 @@ type Config struct {
 		FileSizeLimit int64  `toml:"file_size_limit"`
 	} `toml:"logging"`
 	Server struct {
-		Address             string `toml:"address"`
-		Protocol            string `toml:"protocol"`
-		CertFile            string `toml:"cert_file"`
-		KeyFile             string `toml:"key_file"`
-		PublicURL           string `toml:"public_url"`
-		SessionCookie       string `toml:"session_cookie"`
-		SessionCookieMaxAge int    `toml:"session_cookie_max_age"`
+		Address             string         `toml:"address"`
+		Protocol            ServerProtocol `toml:"protocol"`
+		CertFile            string         `toml:"cert_file"`
+		KeyFile             string         `toml:"key_file"`
+		PublicURL           URLSpec        `toml:"public_url"`
+		SessionCookie       string         `toml:"session_cookie"`
+		SessionCookieMaxAge DurationSpec   `toml:"session_cookie_max_age"`
 	} `toml:"server"`
 	Database struct {
-		Type   string `toml:"type"`
+		Type   DatabaseType `toml:"type"`
 		Memory struct {
 			// No options here
 		} `toml:"memory"`
@@ -65,16 +66,16 @@ type Config struct {
 		} `toml:"postgres"`
 	} `toml:"database"`
 	UserStore struct {
-		Type string `toml:"type"`
+		Type UserStoreType `toml:"type"`
 		LDAP struct {
-			URL           string `toml:"url"`
-			BindDN        string `toml:"bind_dn"`
-			BindPassword  string `toml:"bind_password"`
-			UserBaseDN    string `toml:"user_base_dn"`
-			UserFilter    string `toml:"user_filter"`
-			GroupBaseDN   string `toml:"group_base_dn"`
-			GroupFilter   string `toml:"group_filter"`
-			Mapping       string `toml:"mapping"`
+			URLs          []URLSpec   `toml:"urls"`
+			BindDN        string      `toml:"bind_dn"`
+			BindPassword  string      `toml:"bind_password"`
+			UserBaseDN    string      `toml:"user_base_dn"`
+			UserFilter    string      `toml:"user_filter"`
+			GroupBaseDN   string      `toml:"group_base_dn"`
+			GroupFilter   string      `toml:"group_filter"`
+			Mapping       LDAPMapping `toml:"mapping"`
 			CustomMapping struct {
 				User struct {
 					Profile struct {
@@ -148,12 +149,11 @@ type Config struct {
 		} `toml:"static"`
 	} `toml:"userstore"`
 	OpenID struct {
-		AllowInsecure            bool     `toml:"allow_insecure"`
-		DefaultLogoutRedirectURL string   `toml:"default_logout_redirect_url"`
-		SigningKeyAlgorithm      string   `toml:"signing_key_algorithm"`
-		SigningKeyLifetime       int64    `toml:"signing_key_lifetime"`
-		SigningKeyExpiry         int64    `toml:"signing_key_expiry"`
-		Clients                  []Client `toml:"client"`
+		DefaultLogoutRedirectURL string              `toml:"default_logout_redirect_url"`
+		SigningKeyAlgorithm      SigningKeyAlgorithm `toml:"signing_key_algorithm"`
+		SigningKeyLifetime       DurationSpec        `toml:"signing_key_lifetime"`
+		SigningKeyExpiry         DurationSpec        `toml:"signing_key_expiry"`
+		Clients                  []Client            `toml:"client"`
 	} `toml:"openid"`
 	Mock struct {
 		Enabled  bool   `toml:"enabled"`
@@ -175,6 +175,224 @@ func (client *Client) openIDClient() *server.OpenIDClient {
 		Secret:       client.Secret,
 		RedirectURLs: client.RedirectURLs,
 	}
+}
+
+func notAStringErr(value any) error {
+	return fmt.Errorf("value %v is not a string type", value)
+}
+
+type ServerProtocol string
+
+const (
+	ServerProtocolHttp  ServerProtocol = "http"
+	ServerProtocolHttps ServerProtocol = "https"
+)
+
+func (p *ServerProtocol) Value() string {
+	return string(*p)
+}
+
+func (p *ServerProtocol) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + p.Value() + `"`), nil
+}
+
+func (p *ServerProtocol) UnmarshalTOML(value any) error {
+	protocol, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	switch protocol {
+	case string(ServerProtocolHttp):
+		*p = ServerProtocolHttp
+	case string(ServerProtocolHttps):
+		*p = ServerProtocolHttps
+	default:
+		return fmt.Errorf("unknown server protocol: '%s'", protocol)
+	}
+	return nil
+}
+
+type DatabaseType string
+
+const (
+	DatabaseTypeMemory   DatabaseType = "memory"
+	DatabaseTypeSqlite   DatabaseType = "sqlite"
+	DatabaseTypePostgres DatabaseType = "postgres"
+)
+
+func (t *DatabaseType) Value() string {
+	return string(*t)
+}
+
+func (t *DatabaseType) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + t.Value() + `"`), nil
+}
+
+func (t *DatabaseType) UnmarshalTOML(value any) error {
+	databaseType, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	switch databaseType {
+	case string(DatabaseTypeMemory):
+		*t = DatabaseTypeMemory
+	case string(DatabaseTypeSqlite):
+		*t = DatabaseTypeSqlite
+	case string(DatabaseTypePostgres):
+		*t = DatabaseTypePostgres
+	default:
+		return fmt.Errorf("unknown database type: '%s'", databaseType)
+	}
+	return nil
+}
+
+type UserStoreType string
+
+const (
+	UserStoreTypeLDAP   UserStoreType = "ldap"
+	UserStoreTypeStatic UserStoreType = "static"
+)
+
+func (t *UserStoreType) Value() string {
+	return string(*t)
+}
+
+func (t *UserStoreType) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + t.Value() + `"`), nil
+}
+
+func (t *UserStoreType) UnmarshalTOML(value any) error {
+	userStoreType, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	switch userStoreType {
+	case string(UserStoreTypeLDAP):
+		*t = UserStoreTypeLDAP
+	case string(UserStoreTypeStatic):
+		*t = UserStoreTypeStatic
+	default:
+		return fmt.Errorf("unknown user store type: '%s'", userStoreType)
+	}
+	return nil
+}
+
+type LDAPMapping string
+
+const (
+	LDAPMappingActiveDirectory LDAPMapping = "active_directory"
+	LDAPMappingOpenLDAP        LDAPMapping = "openldap"
+	LDAPMappingCustom          LDAPMapping = "custom"
+)
+
+func (m *LDAPMapping) Value() string {
+	return string(*m)
+}
+
+func (m *LDAPMapping) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + m.Value() + `"`), nil
+}
+
+func (m *LDAPMapping) UnmarshalTOML(value any) error {
+	mapping, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	switch mapping {
+	case string(LDAPMappingActiveDirectory):
+		*m = LDAPMappingActiveDirectory
+	case string(LDAPMappingOpenLDAP):
+		*m = LDAPMappingOpenLDAP
+	case string(LDAPMappingCustom):
+		*m = LDAPMappingCustom
+	default:
+		return fmt.Errorf("unknown LDAP mapping: '%s'", mapping)
+	}
+	return nil
+}
+
+type SigningKeyAlgorithm string
+
+const (
+	SigningKeyAlgorithmRS256 SigningKeyAlgorithm = "RS256"
+	SigningKeyAlgorithmES256 SigningKeyAlgorithm = "ES256"
+	SigningKeyAlgorithmPS256 SigningKeyAlgorithm = "PS256"
+)
+
+func (a *SigningKeyAlgorithm) Value() string {
+	return string(*a)
+}
+
+func (a *SigningKeyAlgorithm) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + a.Value() + `"`), nil
+}
+
+func (a *SigningKeyAlgorithm) UnmarshalTOML(value any) error {
+	algorithm, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	switch algorithm {
+	case string(SigningKeyAlgorithmRS256):
+		*a = SigningKeyAlgorithmRS256
+	case string(SigningKeyAlgorithmES256):
+		*a = SigningKeyAlgorithmES256
+	case string(SigningKeyAlgorithmPS256):
+		*a = SigningKeyAlgorithmPS256
+	default:
+		return fmt.Errorf("unknown signing key algorithm: '%s'", algorithm)
+	}
+	return nil
+}
+
+type DurationSpec struct {
+	time.Duration
+}
+
+func (d *DurationSpec) Value() string {
+	return d.String()
+}
+
+func (d *DurationSpec) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + d.Value() + `"`), nil
+}
+
+func (d *DurationSpec) UnmarshalTOML(value any) error {
+	durationString, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	parsedDuration, err := time.ParseDuration(durationString)
+	if err != nil {
+		return fmt.Errorf("invalid duration: '%s' (cause: %w)", durationString, err)
+	}
+	d.Duration = parsedDuration
+	return nil
+}
+
+type URLSpec struct {
+	url.URL
+}
+
+func (url *URLSpec) Value() string {
+	return url.String()
+}
+
+func (url *URLSpec) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + url.Value() + `"`), nil
+}
+
+func (url *URLSpec) UnmarshalTOML(value any) error {
+	urlString, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	parsedURL, err := url.Parse(urlString)
+	if err != nil {
+		return fmt.Errorf("invalid URL: '%s' (cause: %w)", urlString, err)
+	}
+	url.URL = *parsedURL
+	return nil
 }
 
 //go:embed config_defaults.toml
@@ -253,8 +471,12 @@ func (c *Config) ldapUserstoreConfig() (*userstore.LDAPConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	ldapURLs := make([]string, 0, len(c.UserStore.LDAP.URLs))
+	for _, url := range c.UserStore.LDAP.URLs {
+		ldapURLs = append(ldapURLs, url.String())
+	}
 	ldapConfig := &userstore.LDAPConfig{
-		URL:          c.UserStore.LDAP.URL,
+		URLs:         ldapURLs,
 		BindDN:       c.UserStore.LDAP.BindDN,
 		BindPassword: c.UserStore.LDAP.BindPassword,
 		UserSearch: userstore.LDAPSearchConfig{
@@ -314,9 +536,9 @@ func (c *Config) staticUsers() []userstore.StaticUser {
 }
 
 func (c *Config) OpenIDIssuerURL() string {
-	issuerURL := c.Server.PublicURL
+	issuerURL := c.Server.PublicURL.String()
 	if issuerURL == "" {
-		issuerURL = c.Server.Protocol + "://" + c.Server.Address
+		issuerURL = string(c.Server.Protocol) + "://" + c.Server.Address
 	}
 	return issuerURL
 }
@@ -331,8 +553,8 @@ func (c *Config) openIDProviderConfig() *server.OpenIDProviderConfig {
 		Issuer:                   issuerURL,
 		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
 		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OpenID.SigningKeyAlgorithm),
-		SigningKeyLifetime:       time.Duration(c.OpenID.SigningKeyLifetime) * time.Second,
-		SigningKeyExpiry:         time.Duration(c.OpenID.SigningKeyExpiry) * time.Second,
+		SigningKeyLifetime:       c.OpenID.SigningKeyLifetime.Duration,
+		SigningKeyExpiry:         c.OpenID.SigningKeyExpiry.Duration,
 	}
 }
 

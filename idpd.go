@@ -37,47 +37,46 @@ import (
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
-	"github.com/zitadel/oidc/v3/pkg/client/rp"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
 const shutdownTimeout time.Duration = 5 * time.Second
 
-func Run(args []string) error {
-	cmd := &cmdLine{}
-	parser, err := kong.New(cmd, cmdLineVars)
+func Run(ctx context.Context, args []string) error {
+	cmdLine := &cmdLine{ctx: ctx}
+	cmdParser, err := kong.New(cmdLine, cmdLineVars)
 	if err != nil {
 		return err
 	}
-	ctx, err := parser.Parse(args)
+	cmd, err := cmdParser.Parse(args)
 	if err != nil {
 		return err
 	}
-	err = ctx.Run()
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func Start(path string) (*Server, error) {
+func Start(ctx context.Context, path string) (*Server, error) {
 	config, err := LoadConfig(path, false)
 	if err != nil {
 		return nil, err
 	}
-	return startConfig(config)
+	return startConfig(ctx, config)
 }
 
-func MustStart(path string) *Server {
-	s, err := Start(path)
+func MustStart(ctx context.Context, path string) *Server {
+	s, err := Start(ctx, path)
 	if err != nil {
 		panic(err)
 	}
 	return s
 }
 
-func startConfig(config *Config) (*Server, error) {
+func startConfig(ctx context.Context, config *Config) (*Server, error) {
 	s := &Server{}
 	err := s.initAndStart(config)
 	if err != nil {
@@ -86,7 +85,7 @@ func startConfig(config *Config) (*Server, error) {
 	s.stoppedWG.Add(1)
 	go func() {
 		defer s.stoppedWG.Done()
-		s.run()
+		s.run(ctx)
 	}()
 	return s, nil
 }
@@ -124,10 +123,10 @@ func (s *Server) WaitStopped() {
 	s.stoppedWG.Wait()
 }
 
-func (s *Server) run() {
+func (s *Server) run(ctx context.Context) {
 	sigint := make(chan os.Signal, 1)
 	signal.Notify(sigint, os.Interrupt)
-	sigintCtx, cancelListenAndServe := context.WithCancel(context.Background())
+	sigintCtx, cancelListenAndServe := context.WithCancel(ctx)
 	go func() {
 		<-sigint
 		slog.Info("signal SIGINT; stopping")
@@ -135,7 +134,7 @@ func (s *Server) run() {
 	}()
 	slog.Info("startup complete; running")
 	<-sigintCtx.Done()
-	s.shutdown(context.Background())
+	s.shutdown(ctx)
 }
 
 func (s *Server) shutdown(ctx context.Context) error {
@@ -176,8 +175,9 @@ func (s *Server) initHttpServer(config *Config) error {
 	if err != nil {
 		return err
 	}
-	secureCookies := config.Server.Protocol != "http"
-	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, config.Server.SessionCookieMaxAge)
+	// TODO: Warn in case of insecure setup
+	secureCookies := config.Server.Protocol != ServerProtocolHttp
+	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionCookieMaxAge.Seconds()))
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	config.Server.Address = httpServer.ListenerAddr()
@@ -186,16 +186,16 @@ func (s *Server) initHttpServer(config *Config) error {
 }
 
 func (s *Server) initDatabase(config *Config) error {
-	logger := slog.With(slog.String("driver", config.Database.Type))
+	logger := slog.With(slog.String("driver", string(config.Database.Type)))
 	logger.Info("initializing database")
 	var driver database.Driver
 	var err error
 	switch config.Database.Type {
-	case "memory":
+	case DatabaseTypeMemory:
 		driver, err = database.OpenMemoryDB(logger)
-	case "sqlite":
+	case DatabaseTypeSqlite:
 		driver, err = database.OpenSQLite3DB(config.Database.SQLite.File, logger)
-	case "postgres":
+	case DatabaseTypePostgres:
 		driver, err = database.OpenPostgresDB(fmt.Sprintf("postgres://%s:%s@%s/%s", config.Database.Postgres.User, config.Database.Postgres.Password, config.Database.Postgres.Address, config.Database.Postgres.DB), logger)
 	default:
 		err = fmt.Errorf("unrecognized database type: '%s'", config.Database.Type)
@@ -218,18 +218,18 @@ func (s *Server) initDatabase(config *Config) error {
 }
 
 func (s *Server) initUserStore(config *Config) error {
-	logger := slog.With(slog.String("store", config.UserStore.Type))
+	logger := slog.With(slog.String("store", string(config.UserStore.Type)))
 	logger.Info("initializing user store")
 	var backend userstore.Backend
 	var err error
 	switch config.UserStore.Type {
-	case "ldap":
+	case UserStoreTypeLDAP:
 		ldapConfig, err2 := config.ldapUserstoreConfig()
 		err = err2
 		if err == nil {
 			backend, err = userstore.NewLDAPBackend(ldapConfig, logger)
 		}
-	case "static":
+	case UserStoreTypeStatic:
 		backend, err = userstore.NewStaticBackend(config.staticUsers(), logger)
 	default:
 		err = fmt.Errorf("unrecognized user store type: '%s'", config.UserStore.Type)
@@ -245,7 +245,7 @@ func (s *Server) initProvider(config *Config) error {
 	logger := slog.With(slog.String("issuer", s.issuerURL))
 	opOpts := make([]op.Option, 0, 2)
 	opOpts = append(opOpts, op.WithLogger(logger))
-	if config.OpenID.AllowInsecure {
+	if config.Server.Protocol == ServerProtocolHttp {
 		opOpts = append(opOpts, op.WithAllowInsecure())
 	}
 	logger.Info("initializing OpenID provider")
@@ -307,9 +307,9 @@ func (s *Server) startServer(config *Config) error {
 	s.httpServer.HandleFunc("/session/login", s.handleSessionLogin)
 	s.httpServer.HandleFunc("/session/logoff", s.handleSessionLogoff)
 	switch config.Server.Protocol {
-	case "http":
+	case ServerProtocolHttp:
 		return s.httpServer.Serve()
-	case "https":
+	case ServerProtocolHttps:
 		return s.httpServer.ServeTLS(config.Server.CertFile, config.Server.KeyFile)
 	default:
 		return fmt.Errorf("unexpected server protocol: %s", config.Server.Protocol)
@@ -402,7 +402,7 @@ func (s *Server) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
 	s.sessionCookie.Delete(w)
 }
 
-func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, rp rp.RelyingParty) {
+func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *idpclient.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
 	ctx := r.Context()
 	userSession, err := s.database.TransformAndDeleteUserSessionRequest(ctx, state, tokens.Token)
 	if err != nil {

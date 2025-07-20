@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
@@ -30,7 +31,7 @@ func main() {
 	log.InitFromFlags(args, nil)
 	slog.Info(buildinfo.FullVersion())
 	slog.Debug("running idpd command", slog.Any("args", args))
-	err := idpd.Run(args)
+	err := idpd.Run(context.Background(), args)
 	if err != nil {
 		slog.Error("idpd command failed", slog.Any("err", err))
 	}

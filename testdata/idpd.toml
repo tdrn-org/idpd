@@ -7,14 +7,15 @@ file_size_limit = 1024
 
 [server]
 address = "localhost:8088"
-protocol = "https"
+protocol = "http"
 cert_file = "idpd.crt"
 key_file = "idpd.key"
 public_url = "https://idpd.example.org"
 session_cookie = "idpd_session"
+session_cookie_max_age = "1h"
 
 [database]
-type = "file"
+type = "sqlite"
 
 [database.memory]
 
@@ -31,7 +32,7 @@ password = "dbpassword"
 type = "static"
 
 [userstore.ldap]
-url = "ldaps://dc.domain.example.org"
+urls = [ "ldaps://dc.domain.example.org" ]
 bind_dn = "CN=idpd,CN=Users,DC=domain,DC=example,DC=org"
 bind_password = ""
 user_base_dn = "CN=Users,DC=domain,DC=example,DC=org"
@@ -98,8 +99,8 @@ address = "address"
 allow_insecure = true
 default_logout_redirect_url = ""
 signing_key_algorithm = "RS256"
-signing_key_lifetime = 3600 # 1h
-signing_key_expiry = 86400 # 24h
+signing_key_lifetime = "1m"
+signing_key_expiry = "30m"
 
 [[openid.client]]
 id = "client 1"
