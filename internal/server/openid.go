@@ -249,6 +249,7 @@ func (p *OpenIDProvider) Close() error {
 }
 
 func (p *OpenIDProvider) Authenticate(ctx context.Context, id string, email string, password string, remember bool) (string, error) {
+	slog.Info("authenticating user", slog.String("id", id), slog.String("email", email))
 	err := p.backend.CheckPassword(email, password)
 	if err != nil {
 		return "", err

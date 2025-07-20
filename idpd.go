@@ -368,6 +368,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		slog.Error("invalid login request")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -392,6 +393,7 @@ func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	} else if err != nil {
+		slog.Warn("login error", slog.String("id", id), slog.String("email", email), slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
