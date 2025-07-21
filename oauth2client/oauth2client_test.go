@@ -34,7 +34,7 @@ import (
 
 func TestAuthorizationCodeFlow(t *testing.T) {
 	idpdServer := idpd.MustStart(t.Context(), "testdata/idpd.toml")
-	callbackServer := (&httpserver.Instance{Addr: "localhost:"}).MustListen()
+	callbackServer := (&httpserver.Instance{Addr: "localhost:", AccessLog: true}).MustListen()
 	clientBaseURL := "http://" + callbackServer.ListenerAddr()
 	client := &idpd.OAuth2Client{
 		ID:           "authorizationCodeFlowClient",
@@ -43,14 +43,12 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	}
 	idpdServer.AddClient(client)
 	config := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		Issuer:          idpdServer.Issuer(),
-		ClientId:        client.ID,
-		ClientSecret:    client.Secret,
-		BaseURL:         clientBaseURL,
-		AuthURLPath:     "/login",
-		RedirectURLPath: "/authorized",
-		Scopes:          []string{"openid", "profile", "email", "groups"},
-		EnablePKCE:      true,
+		Issuer:       idpdServer.Issuer(),
+		ClientId:     client.ID,
+		ClientSecret: client.Secret,
+		BaseURL:      clientBaseURL,
+		Scopes:       []string{"openid", "profile", "email", "groups"},
+		EnablePKCE:   true,
 	}
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)

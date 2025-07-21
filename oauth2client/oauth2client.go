@@ -20,6 +20,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+
+	"github.com/gorilla/securecookie"
+	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 )
 
 var ErrNotAuthenticated = errors.New("not authenticated")
@@ -29,4 +33,15 @@ type UserInfo map[string]interface{}
 type AuthorizationFlow interface {
 	Authenticate() error
 	Client(ctx context.Context) (*http.Client, error)
+}
+
+func newCookieHandler(url *url.URL) *httphelper.CookieHandler {
+	hashKey := securecookie.GenerateRandomKey(64)
+	encryptKey := securecookie.GenerateRandomKey(32)
+	opts := make([]httphelper.CookieHandlerOpt, 0, 1)
+	if url.Scheme == "http" {
+		// TODO: Warn in case of insecure setup
+		opts = append(opts, httphelper.WithUnsecure())
+	}
+	return httphelper.NewCookieHandler(hashKey, encryptKey, opts...)
 }

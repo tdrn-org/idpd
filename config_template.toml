@@ -19,6 +19,8 @@
 #address = "localhost:9123"
 # http|https
 #protocol = "http"
+# enable access log generation
+#access_log = true
 # certificate file to use for https
 #cert_file = ""
 # key file to use for https

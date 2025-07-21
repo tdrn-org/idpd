@@ -16,7 +16,7 @@
 	});
 
 	function restartLogin() {
-		goto('/login');
+		goto('/authenticate');
 	}
 </script>
 

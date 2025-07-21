@@ -8,6 +8,7 @@ file_size_limit = 0
 [server]
 address = "localhost:9123"
 protocol = "http"
+access_log = true
 cert_file = ""
 key_file = ""
 public_url = ""

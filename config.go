@@ -44,6 +44,7 @@ type Config struct {
 	Server struct {
 		Address             string         `toml:"address"`
 		Protocol            ServerProtocol `toml:"protocol"`
+		AccessLog           bool           `toml:"access_log"`
 		CertFile            string         `toml:"cert_file"`
 		KeyFile             string         `toml:"key_file"`
 		PublicURL           URLSpec        `toml:"public_url"`

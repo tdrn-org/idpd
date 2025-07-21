@@ -50,8 +50,8 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL '%s' (cause: %w)", config.BaseURL, err)
 	}
-	authURL := parsedBaseURL.JoinPath(config.AuthURLPath)
-	redirectURL := parsedBaseURL.JoinPath(config.RedirectURLPath)
+	authURL := config.resolveAuthURL(parsedBaseURL)
+	redirectURL := config.resolveRedirectURL(parsedBaseURL)
 	cookieHandler := newCookieHandler(parsedBaseURL)
 	logger := slog.With(slog.String("client", config.ClientId), slog.String("issuer", config.Issuer))
 	options := make([]rp.Option, 5, 6)
@@ -78,6 +78,20 @@ func (config *AuthorizationCodeFlowConfig[C]) NewFlow(httpClient *http.Client, c
 		logger:               slog.With(slog.String("client", config.ClientId), slog.Any("redirectURL", redirectURL)),
 	}
 	return flow, nil
+}
+
+func (c *AuthorizationCodeFlowConfig[C]) resolveAuthURL(baseURL *url.URL) *url.URL {
+	if c.AuthURLPath != "" {
+		return baseURL.JoinPath(c.AuthURLPath)
+	}
+	return baseURL.JoinPath("/authenticate")
+}
+
+func (c *AuthorizationCodeFlowConfig[C]) resolveRedirectURL(baseURL *url.URL) *url.URL {
+	if c.RedirectURLPath != "" {
+		return baseURL.JoinPath(c.RedirectURLPath)
+	}
+	return baseURL.JoinPath("/authorized")
 }
 
 type AuthorizationCodeFlow[C oidc.IDClaims] struct {

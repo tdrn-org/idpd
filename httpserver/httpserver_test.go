@@ -30,7 +30,7 @@ const httpServerAddr string = "localhost:"
 const httpServerShutdownPath string = "/shutdown"
 
 func TestHttpServerServe(t *testing.T) {
-	server := &httpserver.Instance{Addr: httpServerAddr}
+	server := &httpserver.Instance{Addr: httpServerAddr, AccessLog: true}
 	server.HandleFunc(httpServerShutdownPath, func(w http.ResponseWriter, _ *http.Request) {
 		go func() {
 			err := server.Shutdown(context.Background())
@@ -48,7 +48,7 @@ func TestHttpServerServe(t *testing.T) {
 }
 
 func TestHttpServerServeTLS(t *testing.T) {
-	server := &httpserver.Instance{Addr: httpServerAddr}
+	server := &httpserver.Instance{Addr: httpServerAddr, AccessLog: true}
 	server.HandleFunc(httpServerShutdownPath, func(w http.ResponseWriter, _ *http.Request) {
 		go func() {
 			err := server.Shutdown(context.Background())

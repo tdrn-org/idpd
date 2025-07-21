@@ -32,6 +32,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -44,6 +46,7 @@ const serverFailureMessage = "http server failure"
 
 type Instance struct {
 	Addr         string
+	AccessLog    bool
 	listener     net.Listener
 	listenerAddr string
 	mux          *http.ServeMux
@@ -178,7 +181,18 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.logger.Debug("http server request", slog.String(r.Method, r.RequestURI))
-	s.mux.ServeHTTP(w, r)
+	if !s.AccessLog {
+		s.mux.ServeHTTP(w, r)
+	} else {
+		log := &logBuilder{}
+		log.appendHost(r.RemoteAddr)
+		log.appendTime()
+		log.appendRequest(r.Method, r.URL.EscapedPath(), r.Proto)
+		wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
+		s.mux.ServeHTTP(wrappedW, r)
+		log.appendStatus(wrappedW.statusCode, wrappedW.written)
+		s.logger.Info(log.String())
+	}
 }
 
 func (s *Instance) Shutdown(ctx context.Context) error {
@@ -191,6 +205,61 @@ func (s *Instance) Close() error {
 
 func (s *Instance) WaitStopped() {
 	s.stoppedWG.Wait()
+}
+
+type wrappedResponseWriter struct {
+	wrapped    http.ResponseWriter
+	written    int
+	statusCode int
+}
+
+func (w *wrappedResponseWriter) Header() http.Header {
+	return w.wrapped.Header()
+}
+
+func (w *wrappedResponseWriter) Write(b []byte) (int, error) {
+	written, err := w.wrapped.Write(b)
+	w.written += written
+	return written, err
+}
+
+func (w *wrappedResponseWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+	w.wrapped.WriteHeader(statusCode)
+}
+
+type logBuilder struct {
+	strings.Builder
+}
+
+func (b *logBuilder) appendHost(remoteAddr string) {
+	if remoteAddr != "" {
+		b.WriteString(remoteAddr)
+	} else {
+		b.WriteRune('-')
+	}
+	b.WriteString(" - -")
+}
+
+func (b *logBuilder) appendTime() {
+	b.WriteString(time.Now().Format(" [02/Jan/2006:15:04:05 -0700]"))
+}
+
+func (b *logBuilder) appendRequest(method string, path string, proto string) {
+	b.WriteString(" \"")
+	b.WriteString(method)
+	b.WriteRune(' ')
+	b.WriteString(path)
+	b.WriteRune(' ')
+	b.WriteString(proto)
+	b.WriteRune('"')
+}
+
+func (b *logBuilder) appendStatus(statusCode int, written int) {
+	b.WriteRune(' ')
+	b.WriteString(strconv.Itoa(statusCode))
+	b.WriteRune(' ')
+	b.WriteString(strconv.Itoa(written))
 }
 
 func httpEphemeralCertificateForAddress(address string) (*tls.Certificate, error) {

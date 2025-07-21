@@ -169,7 +169,8 @@ func (s *Server) initAndStart(config *Config) error {
 
 func (s *Server) initHttpServer(config *Config) error {
 	httpServer := &httpserver.Instance{
-		Addr: config.Server.Address,
+		Addr:      config.Server.Address,
+		AccessLog: config.Server.AccessLog,
 	}
 	err := httpServer.Listen()
 	if err != nil {
@@ -276,14 +277,12 @@ func (s *Server) initProvider(config *Config) error {
 
 func (s *Server) initAuthFlow(config *Config) error {
 	authFlowConfig := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		BaseURL:         s.oauth2IssuerURL,
-		AuthURLPath:     "/login",
-		RedirectURLPath: "/authorized",
-		Issuer:          s.oauth2IssuerURL,
-		ClientId:        s.oauth2Client.ID,
-		ClientSecret:    s.oauth2Client.Secret,
-		Scopes:          []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
-		EnablePKCE:      true,
+		BaseURL:      s.oauth2IssuerURL,
+		Issuer:       s.oauth2IssuerURL,
+		ClientId:     s.oauth2Client.ID,
+		ClientSecret: s.oauth2Client.Secret,
+		Scopes:       []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
+		EnablePKCE:   true,
 	}
 	authFlow, err := authFlowConfig.NewFlow(&http.Client{}, context.Background(), s.tokenExchange)
 	if err != nil {

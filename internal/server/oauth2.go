@@ -328,8 +328,10 @@ func (p *OAuth2Provider) CreateAccessAndRefreshTokens(ctx context.Context, reque
 	case *database.OpAuthRequest:
 		return p.createAccessAndRefreshTokenFromOpAuthRequest(ctx, refreshTokenRequest, currentRefreshToken)
 	case op.TokenExchangeRequest:
+		p.logStubCall()
 		return "", "", time.Time{}, nil
 	case op.RefreshTokenRequest:
+		p.logStubCall()
 		return "", "", time.Time{}, nil
 	}
 	return "", "", time.Time{}, fmt.Errorf("unexpected refresh token request type: %s", reflect.TypeOf(request))
