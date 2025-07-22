@@ -23,7 +23,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
-type Token struct {
+type OAuth2Token struct {
 	ID             string
 	ApplicationID  string
 	Subject        string
@@ -33,8 +33,16 @@ type Token struct {
 	Scopes         []string
 }
 
-func NewTokenFromAuthRequest(request op.AuthRequest, refreshTokenID string) *Token {
-	return &Token{
+func NewOAuth2Token(id string) *OAuth2Token {
+	return &OAuth2Token{
+		ID:       id,
+		Audience: []string{},
+		Scopes:   []string{},
+	}
+}
+
+func NewOAuth2TokenFromAuthRequest(request op.AuthRequest, refreshTokenID string) *OAuth2Token {
+	return &OAuth2Token{
 		ID:             uuid.NewString(),
 		ApplicationID:  request.GetClientID(),
 		Subject:        request.GetSubject(),
@@ -45,8 +53,8 @@ func NewTokenFromAuthRequest(request op.AuthRequest, refreshTokenID string) *Tok
 	}
 }
 
-func NewTokenFromTokenExchangeRequest(request op.TokenExchangeRequest, refreshTokenID string) *Token {
-	return &Token{
+func NewOAuth2TokenFromTokenExchangeRequest(request op.TokenExchangeRequest, refreshTokenID string) *OAuth2Token {
+	return &OAuth2Token{
 		ID:             uuid.NewString(),
 		ApplicationID:  request.GetClientID(),
 		Subject:        request.GetSubject(),
@@ -57,7 +65,7 @@ func NewTokenFromTokenExchangeRequest(request op.TokenExchangeRequest, refreshTo
 	}
 }
 
-type RefreshToken struct {
+type OAuth2RefreshToken struct {
 	ID            string
 	AuthTime      int64
 	AMR           []string
@@ -69,12 +77,21 @@ type RefreshToken struct {
 	AccessTokenID string
 }
 
-func NewRefreshTokenID() string {
+func NewOAuth2RefreshTokenID() string {
 	return uuid.NewString()
 }
 
-func NewRefreshTokenFromAuthRequest(id string, tokenID string, request op.AuthRequest) *RefreshToken {
-	return &RefreshToken{
+func NewOAuth2RefreshToken(id string) *OAuth2RefreshToken {
+	return &OAuth2RefreshToken{
+		ID:       id,
+		AMR:      []string{},
+		Audience: []string{},
+		Scopes:   []string{},
+	}
+}
+
+func NewOAuth2RefreshTokenFromAuthRequest(id string, tokenID string, request op.AuthRequest) *OAuth2RefreshToken {
+	return &OAuth2RefreshToken{
 		ID:            id,
 		AuthTime:      request.GetAuthTime().UnixMicro(),
 		AMR:           request.GetAMR(),
@@ -87,8 +104,8 @@ func NewRefreshTokenFromAuthRequest(id string, tokenID string, request op.AuthRe
 	}
 }
 
-func NewRefreshTokenFromRefreshToken(id string, tokenID string, refreshToken *RefreshToken) *RefreshToken {
-	return &RefreshToken{
+func NewOAuth2RefreshTokenFromRefreshToken(id string, tokenID string, refreshToken *OAuth2RefreshToken) *OAuth2RefreshToken {
+	return &OAuth2RefreshToken{
 		ID:            id,
 		AuthTime:      refreshToken.AuthTime,
 		AMR:           refreshToken.AMR,
@@ -99,4 +116,40 @@ func NewRefreshTokenFromRefreshToken(id string, tokenID string, refreshToken *Re
 		Scopes:        refreshToken.Scopes,
 		AccessTokenID: tokenID,
 	}
+}
+
+func (t *OAuth2RefreshToken) OpRefreshToken() op.RefreshTokenRequest {
+	return &OpRefreshTokenRequest{refreshToken: *t}
+}
+
+type OpRefreshTokenRequest struct {
+	refreshToken OAuth2RefreshToken
+}
+
+func (r *OpRefreshTokenRequest) GetAMR() []string {
+	return r.refreshToken.AMR
+}
+
+func (r *OpRefreshTokenRequest) GetAudience() []string {
+	return r.refreshToken.Audience
+}
+
+func (r *OpRefreshTokenRequest) GetAuthTime() time.Time {
+	return time.UnixMicro(r.refreshToken.AuthTime)
+}
+
+func (r *OpRefreshTokenRequest) GetClientID() string {
+	return r.refreshToken.ApplicationID
+}
+
+func (r *OpRefreshTokenRequest) GetScopes() []string {
+	return r.refreshToken.Scopes
+}
+
+func (r *OpRefreshTokenRequest) GetSubject() string {
+	return r.refreshToken.UserID
+}
+
+func (r *OpRefreshTokenRequest) SetCurrentScopes(scopes []string) {
+	r.refreshToken.Scopes = scopes
 }

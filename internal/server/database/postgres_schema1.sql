@@ -1,4 +1,4 @@
-CREATE TABLE auth_request(
+CREATE TABLE oauth2_auth_request(
     id TEXT PRIMARY KEY,
 	acr TEXT,
 	create_time BIGINT,
@@ -12,72 +12,72 @@ CREATE TABLE auth_request(
 	subject TEXT,
 	done BOOLEAN
 );
-CREATE TABLE auth_request_audience(
+CREATE TABLE oauth2_auth_request_audience(
     audience TEXT,
     auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES auth_request(id)
+    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
-CREATE TABLE auth_request_amr(
+CREATE TABLE oauth2_auth_request_amr(
     amr TEXT,
     auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES auth_request(id)
+    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
-CREATE TABLE auth_request_code_challenge(
+CREATE TABLE oauth2_auth_request_code_challenge(
     challenge TEXT,
     method TEXT,
     auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES auth_request(id)
+    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
-CREATE TABLE auth_request_scope(
+CREATE TABLE oauth2_auth_request_scope(
     scope TEXT,
     auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES auth_request(id)
+    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
-CREATE TABLE auth_code(
+CREATE TABLE oauth2_auth_code(
     code TEXT PRIMARY KEY,
     auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES auth_request(id)
+    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
-CREATE TABLE token(
+CREATE TABLE oauth2_token(
     id TEXT PRIMARY KEY,
     application_id TEXT,
     subject TEXT,
     refresh_token_id TEXT,
     expiration BIGINT
 );
-CREATE TABLE token_audience(
+CREATE TABLE oauth2_token_audience(
     audience TEXT,
     token_id TEXT,
-    FOREIGN KEY(token_id) REFERENCES token(id)
+    FOREIGN KEY(token_id) REFERENCES oauth2_token(id)
 );
-CREATE TABLE token_scope(
+CREATE TABLE oauth2_token_scope(
     scope TEXT,
     token_id TEXT,
-    FOREIGN KEY(token_id) REFERENCES token(id)
+    FOREIGN KEY(token_id) REFERENCES oauth2_token(id)
 );
-CREATE TABLE refresh_token(
+CREATE TABLE oauth2_refresh_token(
     id TEXT PRIMARY KEY,
     auth_time BIGINT,
     user_id TEXT,
     application_id TEXT,
     expiration BIGINT,
     access_token_id TEXT,
-    FOREIGN KEY(access_token_id) REFERENCES token(id)
+    FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)
 );
-CREATE TABLE refresh_token_amr(
+CREATE TABLE oauth2_refresh_token_amr(
     amr TEXT,
     refresh_token_id TEXT,
-    FOREIGN KEY(refresh_token_id) REFERENCES refresh_token(id)
+    FOREIGN KEY(refresh_token_id) REFERENCES oauth2_refresh_token(id)
 );
-CREATE TABLE refresh_token_audience(
+CREATE TABLE oauth2_refresh_token_audience(
     audience TEXT,
     refresh_token_id TEXT,
-    FOREIGN KEY(refresh_token_id) REFERENCES refresh_token(id)
+    FOREIGN KEY(refresh_token_id) REFERENCES oauth2_refresh_token(id)
 );
-CREATE TABLE refresh_token_scope(
+CREATE TABLE oauth2_refresh_token_scope(
     scope TEXT,
     refresh_token_id TEXT,
-    FOREIGN KEY(refresh_token_id) REFERENCES refresh_token(id)
+    FOREIGN KEY(refresh_token_id) REFERENCES oauth2_refresh_token(id)
 );
 CREATE TABLE signing_key(
     id TEXT PRIMARY KEY,

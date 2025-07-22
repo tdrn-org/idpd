@@ -8,6 +8,7 @@ file_size_limit = 1024
 [server]
 address = "localhost:8088"
 protocol = "http"
+access_log = false
 cert_file = "idpd.crt"
 key_file = "idpd.key"
 public_url = "https://idpd.example.org"

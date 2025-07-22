@@ -24,7 +24,7 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
-type AuthRequest struct {
+type OAuth2AuthRequest struct {
 	ID            string
 	ACR           string
 	AMR           []string
@@ -43,7 +43,16 @@ type AuthRequest struct {
 	Done          bool
 }
 
-func NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, userID string) *AuthRequest {
+func NewOAuth2AuthRequest(id string) *OAuth2AuthRequest {
+	return &OAuth2AuthRequest{
+		ID:       id,
+		AMR:      []string{},
+		Audience: []string{},
+		Scopes:   []string{},
+	}
+}
+
+func NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, userID string) *OAuth2AuthRequest {
 	var codeChallenge *oidc.CodeChallenge
 	if oidcAuthRequest.CodeChallenge != "" {
 		codeChallenge = &oidc.CodeChallenge{
@@ -51,7 +60,7 @@ func NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, userID
 			Method:    oidcAuthRequest.CodeChallengeMethod,
 		}
 	}
-	return &AuthRequest{
+	return &OAuth2AuthRequest{
 		ID:            uuid.NewString(),
 		ACR:           "",
 		AMR:           []string{"pwd"},
@@ -70,12 +79,12 @@ func NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, userID
 	}
 }
 
-func (r *AuthRequest) OpAuthRequest() op.AuthRequest {
+func (r *OAuth2AuthRequest) OpAuthRequest() op.AuthRequest {
 	return &OpAuthRequest{authRequest: *r}
 }
 
 type OpAuthRequest struct {
-	authRequest AuthRequest
+	authRequest OAuth2AuthRequest
 }
 
 func (r *OpAuthRequest) GetID() string {

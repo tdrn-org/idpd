@@ -303,8 +303,9 @@ func (s *Server) startServer(config *Config) error {
 		})
 	}
 	s.httpServer.HandleFunc("/session", s.handleSession)
-	s.httpServer.HandleFunc("/session/login", s.handleSessionLogin)
-	s.httpServer.HandleFunc("/session/logoff", s.handleSessionLogoff)
+	s.httpServer.HandleFunc("/session/authenticate", s.handleSessionAuthenticate)
+	s.httpServer.HandleFunc("/session/verify", s.handleSessionVerify)
+	s.httpServer.HandleFunc("/session/terminate", s.handleSessionTerminate)
 	switch config.Server.Protocol {
 	case ServerProtocolHttp:
 		return s.httpServer.Serve()
@@ -361,41 +362,46 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, userInfoResponse.Body)
 }
 
-func (s *Server) handleSessionLogin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		slog.Error("invalid login request")
+		slog.Error("invalid authenticate session request")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	err := r.ParseForm()
 	if err != nil {
-		slog.Error("failed to parse login request", slog.Any("err", err))
+		slog.Error("failed to parse authenticate session request", slog.Any("err", err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	id := r.PostFormValue("id")
 	email := r.PostFormValue("email")
+	verification := r.PostFormValue("verification")
 	password := r.PostFormValue("password")
-	if id == "" || email == "" || password == "" {
-		slog.Error("incomplete login request", slog.String("id", id), slog.String("email", email))
+	if id == "" || email == "" || password == "" || verification == "" {
+		slog.Error("incomplete authenticate session request", slog.String("id", id), slog.String("email", email), slog.String("verification", verification))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	remember, _ := strconv.ParseBool(r.PostFormValue("remember"))
 	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, email, password, remember)
 	if errors.Is(err, userstore.ErrInvalidLogin) {
-		slog.Warn("login failure", slog.String("id", id), slog.String("email", email))
+		slog.Warn("authenticate session failure", slog.String("id", id), slog.String("email", email))
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	} else if err != nil {
-		slog.Warn("login error", slog.String("id", id), slog.String("email", email), slog.Any("err", err))
+		slog.Warn("authenticate session error", slog.String("id", id), slog.String("email", email), slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
-func (s *Server) handleSessionLogoff(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
 	s.sessionCookie.Delete(w)
 }
 

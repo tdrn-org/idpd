@@ -36,17 +36,20 @@ import (
 type Driver interface {
 	Name() string
 	UpdateSchema(ctx context.Context) (SchemaVersion, SchemaVersion, error)
-	InsertAuthRequest(ctx context.Context, authRequest *AuthRequest) error
-	SelectAuthRequest(ctx context.Context, id string) (*AuthRequest, error)
-	SelectAuthRequestByCode(ctx context.Context, code string) (*AuthRequest, error)
-	AuthenticateAndTransformAuthRequestToUserSessionRequest(ctx context.Context, id string, email string, remember bool) (*UserSessionRequest, error)
-	DeleteAuthRequest(ctx context.Context, id string) error
-	InsertAuthCode(ctx context.Context, code string, id string) error
-	InsertToken(ctx context.Context, token *Token) error
-	SelectToken(ctx context.Context, id string) (*Token, error)
-	InsertRefreshToken(ctx context.Context, refreshToken *RefreshToken, token *Token) error
-	RenewRefreshToken(ctx context.Context, id string, newToken *Token) (*RefreshToken, error)
-	SelectRefreshToken(ctx context.Context, id string) (*RefreshToken, error)
+	InsertOAuth2AuthRequest(ctx context.Context, authRequest *OAuth2AuthRequest) error
+	SelectOAuth2AuthRequest(ctx context.Context, id string) (*OAuth2AuthRequest, error)
+	SelectOAuth2AuthRequestByCode(ctx context.Context, code string) (*OAuth2AuthRequest, error)
+	AuthenticateAndTransformOAuth2AuthRequestToUserSessionRequest(ctx context.Context, id string, email string, remember bool) (*UserSessionRequest, error)
+	DeleteOAuth2AuthRequest(ctx context.Context, id string) error
+	InsertOAuth2AuthCode(ctx context.Context, code string, id string) error
+	InsertOAuth2Token(ctx context.Context, token *OAuth2Token) error
+	SelectOAuth2Token(ctx context.Context, id string) (*OAuth2Token, error)
+	DeleteOAuth2Token(ctx context.Context, id string) error
+	InsertOAuth2RefreshToken(ctx context.Context, refreshToken *OAuth2RefreshToken, token *OAuth2Token) error
+	RenewOAuth2RefreshToken(ctx context.Context, id string, newToken *OAuth2Token) (*OAuth2RefreshToken, error)
+	SelectOAuth2RefreshToken(ctx context.Context, id string) (*OAuth2RefreshToken, error)
+	DeleteOAuth2TokensBySubject(ctx context.Context, applicationID string, subject string) error
+	DeleteOAuth2RefreshToken(ctx context.Context, id string) error
 	RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey func(string) (*SigningKey, error)) (SigningKeys, error)
 	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, error)
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
@@ -128,8 +131,8 @@ func (d *databaseDriver) querySchemaVersion(ctx context.Context) (SchemaVersion,
 	return schema, d.commitTx(tx)
 }
 
-func (d *databaseDriver) InsertAuthRequest(ctx context.Context, authRequest *AuthRequest) error {
-	d.logger.Debug("inserting auth request", slog.String("id", authRequest.ID))
+func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authRequest *OAuth2AuthRequest) error {
+	d.logger.Debug("inserting OAuth2 auth request", slog.String("id", authRequest.ID))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return err
@@ -148,30 +151,30 @@ func (d *databaseDriver) InsertAuthRequest(ctx context.Context, authRequest *Aut
 		authRequest.Subject,
 		authRequest.Done,
 	}
-	err = d.execTx(tx, ctx, "INSERT INTO auth_request (id,acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", args0...)
+	err = d.execTx(tx, ctx, "INSERT INTO oauth2_auth_request (id,acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)", args0...)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
 	for _, amr := range authRequest.AMR {
-		err = d.execTx(tx, ctx, "INSERT INTO auth_request_amr (amr,auth_request_id) VALUES($1,$2)", amr, authRequest.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_auth_request_amr (amr,auth_request_id) VALUES($1,$2)", amr, authRequest.ID)
 		if err != nil {
 			return d.rollbackTx(tx, err)
 		}
 	}
 	for _, audience := range authRequest.Audience {
-		err = d.execTx(tx, ctx, "INSERT INTO auth_request_audience (audience,auth_request_id) VALUES($1,$2)", audience, authRequest.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_auth_request_audience (audience,auth_request_id) VALUES($1,$2)", audience, authRequest.ID)
 		if err != nil {
 			return d.rollbackTx(tx, err)
 		}
 	}
 	if authRequest.CodeChallenge != nil {
-		err = d.execTx(tx, ctx, "INSERT INTO auth_request_code_challenge (challenge,method,auth_request_id) VALUES($1,$2,$3)", authRequest.CodeChallenge.Challenge, authRequest.CodeChallenge.Method, authRequest.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_auth_request_code_challenge (challenge,method,auth_request_id) VALUES($1,$2,$3)", authRequest.CodeChallenge.Challenge, authRequest.CodeChallenge.Method, authRequest.ID)
 		if err != nil {
 			return d.rollbackTx(tx, err)
 		}
 	}
 	for _, scope := range authRequest.Scopes {
-		err = d.execTx(tx, ctx, "INSERT INTO auth_request_scope (scope,auth_request_id) VALUES($1,$2)", scope, authRequest.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_auth_request_scope (scope,auth_request_id) VALUES($1,$2)", scope, authRequest.ID)
 		if err != nil {
 			return d.rollbackTx(tx, err)
 		}
@@ -179,43 +182,38 @@ func (d *databaseDriver) InsertAuthRequest(ctx context.Context, authRequest *Aut
 	return d.commitTx(tx)
 }
 
-func (d *databaseDriver) SelectAuthRequest(ctx context.Context, id string) (*AuthRequest, error) {
-	d.logger.Debug("selecting auth request", slog.String("id", id))
+func (d *databaseDriver) SelectOAuth2AuthRequest(ctx context.Context, id string) (*OAuth2AuthRequest, error) {
+	d.logger.Debug("selecting OAuth2 auth request", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	authRequest, err := d.selectAuthRequest(tx, ctx, id)
+	authRequest, err := d.selectOAuth2AuthRequest(tx, ctx, id)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestAMRs(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestAMRs(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestAudiences(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestAudiences(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestCodeChallenge(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestCodeChallenge(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestScopes(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestScopes(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	return authRequest, d.commitTx(tx)
 }
 
-func (d *databaseDriver) selectAuthRequest(tx *sql.Tx, ctx context.Context, id string) (*AuthRequest, error) {
-	authRequest := &AuthRequest{
-		ID:       id,
-		AMR:      []string{},
-		Audience: []string{},
-		Scopes:   []string{},
-	}
-	row := d.queryRowTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done FROM auth_request WHERE id=$1", authRequest.ID)
+func (d *databaseDriver) selectOAuth2AuthRequest(tx *sql.Tx, ctx context.Context, id string) (*OAuth2AuthRequest, error) {
+	authRequest := NewOAuth2AuthRequest(id)
+	row := d.queryRowTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done FROM oauth2_auth_request WHERE id=$1", authRequest.ID)
 	args := []any{
 		&authRequest.ACR,
 		&authRequest.CreateTime,
@@ -231,15 +229,15 @@ func (d *databaseDriver) selectAuthRequest(tx *sql.Tx, ctx context.Context, id s
 	}
 	err := row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w (unknown auth request: %s)", ErrObjectNotFound, authRequest.ID)
+		return nil, fmt.Errorf("%w (unknown OAuth2 auth request: %s)", ErrObjectNotFound, authRequest.ID)
 	} else if err != nil {
-		return nil, fmt.Errorf("select auth request failure (cause: %w)", err)
+		return nil, fmt.Errorf("select OAuth2 auth request failure (cause: %w)", err)
 	}
 	return authRequest, nil
 }
 
-func (d *databaseDriver) selectAuthRequestAMRs(tx *sql.Tx, ctx context.Context, authRequest *AuthRequest) error {
-	rows, err := d.queryTx(tx, ctx, "SELECT amr FROM auth_request_amr WHERE auth_request_id=$1", authRequest.ID)
+func (d *databaseDriver) selectOAuth2AuthRequestAMRs(tx *sql.Tx, ctx context.Context, authRequest *OAuth2AuthRequest) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT amr FROM oauth2_auth_request_amr WHERE auth_request_id=$1", authRequest.ID)
 	if err != nil {
 		return err
 	}
@@ -248,15 +246,15 @@ func (d *databaseDriver) selectAuthRequestAMRs(tx *sql.Tx, ctx context.Context, 
 		var amr string
 		err = rows.Scan(&amr)
 		if err != nil {
-			return fmt.Errorf("select auth request amr failure (cause: %w)", err)
+			return fmt.Errorf("select OAuth2 auth request amr failure (cause: %w)", err)
 		}
 		authRequest.AMR = append(authRequest.AMR, amr)
 	}
 	return nil
 }
 
-func (d *databaseDriver) selectAuthRequestAudiences(tx *sql.Tx, ctx context.Context, authRequest *AuthRequest) error {
-	rows, err := d.queryTx(tx, ctx, "SELECT audience FROM auth_request_audience WHERE auth_request_id=$1", authRequest.ID)
+func (d *databaseDriver) selectOAuth2AuthRequestAudiences(tx *sql.Tx, ctx context.Context, authRequest *OAuth2AuthRequest) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT audience FROM oauth2_auth_request_audience WHERE auth_request_id=$1", authRequest.ID)
 	if err != nil {
 		return err
 	}
@@ -265,22 +263,22 @@ func (d *databaseDriver) selectAuthRequestAudiences(tx *sql.Tx, ctx context.Cont
 		var audience string
 		err = rows.Scan(&audience)
 		if err != nil {
-			return fmt.Errorf("select auth request audience failure (cause: %w)", err)
+			return fmt.Errorf("select OAuth2 auth request audience failure (cause: %w)", err)
 		}
 		authRequest.Audience = append(authRequest.Audience, audience)
 	}
 	return nil
 }
 
-func (d *databaseDriver) selectAuthRequestCodeChallenge(tx *sql.Tx, ctx context.Context, authRequest *AuthRequest) error {
-	row := d.queryRowTx(tx, ctx, "SELECT challenge,method FROM auth_request_code_challenge WHERE auth_request_id=$1", authRequest.ID)
+func (d *databaseDriver) selectOAuth2AuthRequestCodeChallenge(tx *sql.Tx, ctx context.Context, authRequest *OAuth2AuthRequest) error {
+	row := d.queryRowTx(tx, ctx, "SELECT challenge,method FROM oauth2_auth_request_code_challenge WHERE auth_request_id=$1", authRequest.ID)
 	var challenge string
 	var method oidc.CodeChallengeMethod
 	err := row.Scan(&challenge, &method)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	} else if err != nil {
-		return fmt.Errorf("select auth request code challenge failure (cause: %w)", err)
+		return fmt.Errorf("select OAuth2 auth request code challenge failure (cause: %w)", err)
 	}
 	authRequest.CodeChallenge = &oidc.CodeChallenge{
 		Challenge: challenge,
@@ -289,8 +287,8 @@ func (d *databaseDriver) selectAuthRequestCodeChallenge(tx *sql.Tx, ctx context.
 	return nil
 }
 
-func (d *databaseDriver) selectAuthRequestScopes(tx *sql.Tx, ctx context.Context, authRequest *AuthRequest) error {
-	rows, err := d.queryTx(tx, ctx, "SELECT scope FROM auth_request_scope WHERE auth_request_id=$1", authRequest.ID)
+func (d *databaseDriver) selectOAuth2AuthRequestScopes(tx *sql.Tx, ctx context.Context, authRequest *OAuth2AuthRequest) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT scope FROM oauth2_auth_request_scope WHERE auth_request_id=$1", authRequest.ID)
 	if err != nil {
 		return err
 	}
@@ -299,47 +297,42 @@ func (d *databaseDriver) selectAuthRequestScopes(tx *sql.Tx, ctx context.Context
 		var scope string
 		err = rows.Scan(&scope)
 		if err != nil {
-			return fmt.Errorf("select auth request scope failure (cause: %w)", err)
+			return fmt.Errorf("select OAuth2 auth request scope failure (cause: %w)", err)
 		}
 		authRequest.Scopes = append(authRequest.Scopes, scope)
 	}
 	return nil
 }
 
-func (d *databaseDriver) SelectAuthRequestByCode(ctx context.Context, code string) (*AuthRequest, error) {
-	d.logger.Debug("selecting auth request id by auth code", slog.String("code", code))
+func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code string) (*OAuth2AuthRequest, error) {
+	d.logger.Debug("selecting OAuth2 auth request id by auth code", slog.String("code", code))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	// TODO: Optimize via join
-	rows0, err := d.queryTx(tx, ctx, "SELECT auth_request_id FROM auth_code WHERE code=$1", code)
+	rows0, err := d.queryTx(tx, ctx, "SELECT auth_request_id FROM oauth2_auth_code WHERE code=$1", code)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	defer rows0.Close()
 	var id string
 	if !rows0.Next() {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown auth code: %s)", ErrObjectNotFound, code))
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 auth code: %s)", ErrObjectNotFound, code))
 	}
 	err = rows0.Scan(&id)
 	if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select auth code failure (cause: %w)", err))
+		return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 auth code failure (cause: %w)", err))
 	}
 	rows0.Close()
-	authRequest := &AuthRequest{
-		ID:       id,
-		AMR:      []string{},
-		Audience: []string{},
-		Scopes:   []string{},
-	}
-	rows, err := d.queryTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done FROM auth_request WHERE id=$1", authRequest.ID)
+	authRequest := NewOAuth2AuthRequest(id)
+	rows, err := d.queryTx(tx, ctx, "SELECT acr,create_time,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,done FROM oauth2_auth_request WHERE id=$1", authRequest.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	defer rows.Close()
 	if !rows.Next() {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown auth request: %s)", ErrObjectNotFound, id))
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 auth request: %s)", ErrObjectNotFound, id))
 	}
 	args := []any{
 		&authRequest.ACR,
@@ -356,35 +349,35 @@ func (d *databaseDriver) SelectAuthRequestByCode(ctx context.Context, code strin
 	}
 	err = rows.Scan(args...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select auth request failure (cause: %w)", err))
+		return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 auth request failure (cause: %w)", err))
 	}
 	rows.Close()
-	err = d.selectAuthRequestAMRs(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestAMRs(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestAudiences(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestAudiences(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestCodeChallenge(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestCodeChallenge(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.selectAuthRequestScopes(tx, ctx, authRequest)
+	err = d.selectOAuth2AuthRequestScopes(tx, ctx, authRequest)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	return authRequest, d.commitTx(tx)
 }
 
-func (d *databaseDriver) AuthenticateAndTransformAuthRequestToUserSessionRequest(ctx context.Context, id string, email string, remember bool) (*UserSessionRequest, error) {
-	d.logger.Debug("authenticating and transforming auth request to user session request", slog.String("id", id))
+func (d *databaseDriver) AuthenticateAndTransformOAuth2AuthRequestToUserSessionRequest(ctx context.Context, id string, email string, remember bool) (*UserSessionRequest, error) {
+	d.logger.Debug("authenticating and transforming OAuth2 auth request to user session request", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	authRequest, err := d.selectAuthRequest(tx, ctx, id)
+	authRequest, err := d.selectOAuth2AuthRequest(tx, ctx, id)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -397,7 +390,7 @@ func (d *databaseDriver) AuthenticateAndTransformAuthRequestToUserSessionRequest
 		authRequest.Done,
 		authRequest.ID,
 	}
-	err = d.execTx(tx, ctx, "UPDATE auth_request SET auth_time=$1,subject=$2,done=$3 WHERE id=$4", args0...)
+	err = d.execTx(tx, ctx, "UPDATE oauth2_auth_request SET auth_time=$1,subject=$2,done=$3 WHERE id=$4", args0...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -415,41 +408,41 @@ func (d *databaseDriver) AuthenticateAndTransformAuthRequestToUserSessionRequest
 	return userSessionRequest, d.commitTx(tx)
 }
 
-func (d *databaseDriver) DeleteAuthRequest(ctx context.Context, id string) error {
-	d.logger.Debug("deleting auth request", slog.String("id", id))
+func (d *databaseDriver) DeleteOAuth2AuthRequest(ctx context.Context, id string) error {
+	d.logger.Debug("deleting OAuth2 auth request", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return err
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM auth_code WHERE auth_request_id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_auth_code WHERE auth_request_id=$1", id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM auth_request_scope WHERE auth_request_id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_auth_request_scope WHERE auth_request_id=$1", id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM auth_request_code_challenge WHERE auth_request_id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_auth_request_code_challenge WHERE auth_request_id=$1", id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM auth_request_audience WHERE auth_request_id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_auth_request_audience WHERE auth_request_id=$1", id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM auth_request_amr WHERE auth_request_id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_auth_request_amr WHERE auth_request_id=$1", id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM auth_request WHERE id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_auth_request WHERE id=$1", id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
 	return d.commitTx(tx)
 }
 
-func (d *databaseDriver) InsertAuthCode(ctx context.Context, code string, id string) error {
-	d.logger.Debug("inserting auth code", slog.String("code", code))
+func (d *databaseDriver) InsertOAuth2AuthCode(ctx context.Context, code string, id string) error {
+	d.logger.Debug("inserting OAuth2 auth code", slog.String("code", code))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return err
@@ -458,27 +451,27 @@ func (d *databaseDriver) InsertAuthCode(ctx context.Context, code string, id str
 		code,
 		id,
 	}
-	err = d.execTx(tx, ctx, "INSERT INTO auth_code (code,auth_request_id) VALUES($1,$2)", args...)
+	err = d.execTx(tx, ctx, "INSERT INTO oauth2_auth_code (code,auth_request_id) VALUES($1,$2)", args...)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
 	return d.commitTx(tx)
 }
 
-func (d *databaseDriver) InsertToken(ctx context.Context, token *Token) error {
-	d.logger.Debug("inserting token", slog.String("id", token.ID))
+func (d *databaseDriver) InsertOAuth2Token(ctx context.Context, token *OAuth2Token) error {
+	d.logger.Debug("inserting OAuth2 token", slog.String("id", token.ID))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return err
 	}
-	err = d.insertToken(tx, ctx, token)
+	err = d.insertOAuth2Token(tx, ctx, token)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
 	return d.commitTx(tx)
 }
 
-func (d *databaseDriver) insertToken(tx *sql.Tx, ctx context.Context, token *Token) error {
+func (d *databaseDriver) insertOAuth2Token(tx *sql.Tx, ctx context.Context, token *OAuth2Token) error {
 	args0 := []any{
 		token.ID,
 		token.ApplicationID,
@@ -486,18 +479,18 @@ func (d *databaseDriver) insertToken(tx *sql.Tx, ctx context.Context, token *Tok
 		token.RefreshTokenID,
 		token.Expiration,
 	}
-	err := d.execTx(tx, ctx, "INSERT INTO token (id,application_id,subject,refresh_token_id,expiration) VALUES($1,$2,$3,$4,$5)", args0...)
+	err := d.execTx(tx, ctx, "INSERT INTO oauth2_token (id,application_id,subject,refresh_token_id,expiration) VALUES($1,$2,$3,$4,$5)", args0...)
 	if err != nil {
 		return err
 	}
 	for _, audience := range token.Audience {
-		err = d.execTx(tx, ctx, "INSERT INTO token_audience (audience,token_id) VALUES($1,$2)", audience, token.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_token_audience (audience,token_id) VALUES($1,$2)", audience, token.ID)
 		if err != nil {
 			return err
 		}
 	}
 	for _, scope := range token.Scopes {
-		err = d.execTx(tx, ctx, "INSERT INTO token_scope (scope,token_id) VALUES($1,$2)", scope, token.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_token_scope (scope,token_id) VALUES($1,$2)", scope, token.ID)
 		if err != nil {
 			return err
 		}
@@ -505,18 +498,14 @@ func (d *databaseDriver) insertToken(tx *sql.Tx, ctx context.Context, token *Tok
 	return nil
 }
 
-func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, error) {
-	d.logger.Debug("selecting token", slog.String("id", id))
+func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAuth2Token, error) {
+	d.logger.Debug("selecting OAuth2 token", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	token := &Token{
-		ID:       id,
-		Audience: []string{},
-		Scopes:   []string{},
-	}
-	row := d.queryRowTx(tx, ctx, "SELECT application_id,subject,refresh_token_id,expiration FROM token WHERE id=$1", token.ID)
+	token := NewOAuth2Token(id)
+	row := d.queryRowTx(tx, ctx, "SELECT application_id,subject,refresh_token_id,expiration FROM oauth2_token WHERE id=$1", token.ID)
 	args0 := []any{
 		&token.ApplicationID,
 		&token.Subject,
@@ -525,11 +514,11 @@ func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, er
 	}
 	err = row.Scan(args0...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown token: %s)", ErrObjectNotFound, token.ID))
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 token: %s)", ErrObjectNotFound, token.ID))
 	} else if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select token failure (cause: %w)", err))
+		return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token failure (cause: %w)", err))
 	}
-	rows1, err := d.queryTx(tx, ctx, "SELECT audience FROM token_audience WHERE token_id=$1", token.ID)
+	rows1, err := d.queryTx(tx, ctx, "SELECT audience FROM oauth2_token_audience WHERE token_id=$1", token.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -538,12 +527,12 @@ func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, er
 		var audience string
 		err = rows1.Scan(&audience)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("select token audience failure (cause: %w)", err))
+			return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token audience failure (cause: %w)", err))
 		}
 		token.Audience = append(token.Audience, audience)
 	}
 	rows1.Close()
-	rows2, err := d.queryTx(tx, ctx, "SELECT scope FROM token_scope WHERE token_id=$1", token.ID)
+	rows2, err := d.queryTx(tx, ctx, "SELECT scope FROM oauth2_token_scope WHERE token_id=$1", token.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -552,7 +541,7 @@ func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, er
 		var scope string
 		err = rows2.Scan(&scope)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("select token scope failure (cause: %w)", err))
+			return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token scope failure (cause: %w)", err))
 		}
 		token.Scopes = append(token.Scopes, scope)
 	}
@@ -560,40 +549,73 @@ func (d *databaseDriver) SelectToken(ctx context.Context, id string) (*Token, er
 	return token, d.commitTx(tx)
 }
 
-func (d *databaseDriver) deleteToken(tx *sql.Tx, ctx context.Context, id string) error {
-	err := d.execTx(tx, ctx, "DELETE FROM token_scope WHERE token_id=$1", id)
-	if err != nil {
-		return err
-	}
-	err = d.execTx(tx, ctx, "DELETE FROM token_audience WHERE token_id=$1", id)
-	if err != nil {
-		return err
-	}
-	err = d.execTx(tx, ctx, "DELETE FROM token WHERE id=$1", id)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (d *databaseDriver) InsertRefreshToken(ctx context.Context, refreshToken *RefreshToken, token *Token) error {
-	d.logger.Debug("inserting refresh token", slog.String("id", refreshToken.ID))
+func (d *databaseDriver) DeleteOAuth2Token(ctx context.Context, id string) error {
+	d.logger.Debug("deleting OAuth2 token", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return err
 	}
-	err = d.insertToken(tx, ctx, token)
+	err = d.deleteOAuth2RefreshTokensByTokenID(tx, ctx, id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.insertRefreshToken(tx, ctx, refreshToken)
+	err = d.deleteOAuth2Token(tx, ctx, id)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
 	return d.commitTx(tx)
 }
 
-func (d *databaseDriver) insertRefreshToken(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
+func (d *databaseDriver) deleteOAuth2Token(tx *sql.Tx, ctx context.Context, id string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM oauth2_token_scope WHERE token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_token_audience WHERE token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_token WHERE id=$1", id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) deleteOAuth2TokenByRefreshTokenID(tx *sql.Tx, ctx context.Context, refreshTokenID string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM oauth2_token_scope WHERE token_id IN (SELECT id FROM oauth2_token WHERE refresh_token_id=$1)", refreshTokenID)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_token_audience WHERE token_id IN (SELECT id FROM oauth2_token WHERE refresh_token_id=$1)", refreshTokenID)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_token WHERE refresh_token_id=$1", refreshTokenID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) InsertOAuth2RefreshToken(ctx context.Context, refreshToken *OAuth2RefreshToken, token *OAuth2Token) error {
+	d.logger.Debug("inserting OAuth2 refresh token", slog.String("id", refreshToken.ID))
+	tx, err := d.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	err = d.insertOAuth2Token(tx, ctx, token)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	err = d.insertOAuth2RefreshToken(tx, ctx, refreshToken)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	return d.commitTx(tx)
+}
+
+func (d *databaseDriver) insertOAuth2RefreshToken(tx *sql.Tx, ctx context.Context, refreshToken *OAuth2RefreshToken) error {
 	args0 := []any{
 		refreshToken.ID,
 		refreshToken.AuthTime,
@@ -602,24 +624,24 @@ func (d *databaseDriver) insertRefreshToken(tx *sql.Tx, ctx context.Context, ref
 		refreshToken.Expiration,
 		refreshToken.AccessTokenID,
 	}
-	err := d.execTx(tx, ctx, "INSERT INTO refresh_token (id,auth_time,user_id,application_id,expiration,access_token_id) VALUES($1,$2,$3,$4,$5,$6)", args0...)
+	err := d.execTx(tx, ctx, "INSERT INTO oauth2_refresh_token (id,auth_time,user_id,application_id,expiration,access_token_id) VALUES($1,$2,$3,$4,$5,$6)", args0...)
 	if err != nil {
 		return err
 	}
 	for _, amr := range refreshToken.AMR {
-		err = d.execTx(tx, ctx, "INSERT INTO refresh_token_amr (amr,refresh_token_id) VALUES($1,$2)", amr, refreshToken.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_refresh_token_amr (amr,refresh_token_id) VALUES($1,$2)", amr, refreshToken.ID)
 		if err != nil {
 			return err
 		}
 	}
 	for _, audience := range refreshToken.Audience {
-		err = d.execTx(tx, ctx, "INSERT INTO refresh_token_audience (audience,refresh_token_id) VALUES($1,$2)", audience, refreshToken.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_refresh_token_audience (audience,refresh_token_id) VALUES($1,$2)", audience, refreshToken.ID)
 		if err != nil {
 			return err
 		}
 	}
 	for _, scope := range refreshToken.Scopes {
-		err = d.execTx(tx, ctx, "INSERT INTO refresh_token_scope (scope,refresh_token_id) VALUES($1,$2)", scope, refreshToken.ID)
+		err = d.execTx(tx, ctx, "INSERT INTO oauth2_refresh_token_scope (scope,refresh_token_id) VALUES($1,$2)", scope, refreshToken.ID)
 		if err != nil {
 			return err
 		}
@@ -627,57 +649,72 @@ func (d *databaseDriver) insertRefreshToken(tx *sql.Tx, ctx context.Context, ref
 	return nil
 }
 
-func (d *databaseDriver) RenewRefreshToken(ctx context.Context, id string, newToken *Token) (*RefreshToken, error) {
-	d.logger.Debug("renewing refresh token", slog.String("id", id))
+func (d *databaseDriver) RenewOAuth2RefreshToken(ctx context.Context, id string, newToken *OAuth2Token) (*OAuth2RefreshToken, error) {
+	d.logger.Debug("renewing OAuth2 refresh token", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	oldRefreshToken, err := d.selectRefreshToken(tx, ctx, id)
+	oldRefreshToken, err := d.selectOAuth2RefreshToken(tx, ctx, id)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	newRefreshToken := NewRefreshTokenFromRefreshToken(newToken.RefreshTokenID, newToken.ID, oldRefreshToken)
-	err = d.deleteRefreshToken(tx, ctx, oldRefreshToken.ID)
+	newRefreshToken := NewOAuth2RefreshTokenFromRefreshToken(newToken.RefreshTokenID, newToken.ID, oldRefreshToken)
+	err = d.deleteOAuth2RefreshToken(tx, ctx, oldRefreshToken.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.deleteToken(tx, ctx, oldRefreshToken.AccessTokenID)
+	err = d.deleteOAuth2Token(tx, ctx, oldRefreshToken.AccessTokenID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.insertToken(tx, ctx, newToken)
+	err = d.insertOAuth2Token(tx, ctx, newToken)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	err = d.insertRefreshToken(tx, ctx, newRefreshToken)
+	err = d.insertOAuth2RefreshToken(tx, ctx, newRefreshToken)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	return newRefreshToken, d.commitTx(tx)
 }
 
-func (d *databaseDriver) SelectRefreshToken(ctx context.Context, id string) (*RefreshToken, error) {
-	d.logger.Debug("selecting refresh token", slog.String("id", id))
+func (d *databaseDriver) deleteOAuth2RefreshToken(tx *sql.Tx, ctx context.Context, id string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_scope WHERE refresh_token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_audience WHERE refresh_token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_amr WHERE refresh_token_id=$1", id)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token WHERE id=$1", id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) SelectOAuth2RefreshToken(ctx context.Context, id string) (*OAuth2RefreshToken, error) {
+	d.logger.Debug("selecting OAuth2 refresh token", slog.String("id", id))
 	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	refreshToken, err := d.selectRefreshToken(tx, ctx, id)
+	refreshToken, err := d.selectOAuth2RefreshToken(tx, ctx, id)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	return refreshToken, d.commitTx(tx)
 }
 
-func (d *databaseDriver) selectRefreshToken(tx *sql.Tx, ctx context.Context, id string) (*RefreshToken, error) {
-	refreshToken := &RefreshToken{
-		ID:       id,
-		AMR:      []string{},
-		Audience: []string{},
-		Scopes:   []string{},
-	}
-	row := d.queryRowTx(tx, ctx, "SELECT auth_time,user_id,application_id,expiration,access_token_id FROM refresh_token WHERE id=$1", refreshToken.ID)
+func (d *databaseDriver) selectOAuth2RefreshToken(tx *sql.Tx, ctx context.Context, id string) (*OAuth2RefreshToken, error) {
+	refreshToken := NewOAuth2RefreshToken(id)
+	row := d.queryRowTx(tx, ctx, "SELECT auth_time,user_id,application_id,expiration,access_token_id FROM oauth2_refresh_token WHERE id=$1", refreshToken.ID)
 	args := []any{
 		&refreshToken.AuthTime,
 		&refreshToken.UserID,
@@ -687,27 +724,27 @@ func (d *databaseDriver) selectRefreshToken(tx *sql.Tx, ctx context.Context, id 
 	}
 	err := row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w (unknown refresh token: %s)", ErrObjectNotFound, refreshToken.ID)
+		return nil, fmt.Errorf("%w (unknown OAuth2 refresh token: %s)", ErrObjectNotFound, refreshToken.ID)
 	} else if err != nil {
-		return nil, fmt.Errorf("select refresh token failure (cause: %w)", err)
+		return nil, fmt.Errorf("select OAuth2 refresh token failure (cause: %w)", err)
 	}
-	err = d.selectRefreshTokenAMRs(tx, ctx, refreshToken)
+	err = d.selectOAuth2RefreshTokenAMRs(tx, ctx, refreshToken)
 	if err != nil {
 		return nil, err
 	}
-	err = d.selectRefreshTokenAudiences(tx, ctx, refreshToken)
+	err = d.selectOAuth2RefreshTokenAudiences(tx, ctx, refreshToken)
 	if err != nil {
 		return nil, err
 	}
-	err = d.selectRefreshTokenScopes(tx, ctx, refreshToken)
+	err = d.selectOAuth2RefreshTokenScopes(tx, ctx, refreshToken)
 	if err != nil {
 		return nil, err
 	}
 	return refreshToken, nil
 }
 
-func (d *databaseDriver) selectRefreshTokenAMRs(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
-	rows, err := d.queryTx(tx, ctx, "SELECT amr FROM refresh_token_amr WHERE refresh_token_id=$1", refreshToken.ID)
+func (d *databaseDriver) selectOAuth2RefreshTokenAMRs(tx *sql.Tx, ctx context.Context, refreshToken *OAuth2RefreshToken) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT amr FROM oauth2_refresh_token_amr WHERE refresh_token_id=$1", refreshToken.ID)
 	if err != nil {
 		return err
 	}
@@ -716,15 +753,15 @@ func (d *databaseDriver) selectRefreshTokenAMRs(tx *sql.Tx, ctx context.Context,
 		var amr string
 		err = rows.Scan(&amr)
 		if err != nil {
-			return fmt.Errorf("select refresh token amr failure (cause: %w)", err)
+			return fmt.Errorf("select OAuth2 refresh token amr failure (cause: %w)", err)
 		}
 		refreshToken.AMR = append(refreshToken.AMR, amr)
 	}
 	return nil
 }
 
-func (d *databaseDriver) selectRefreshTokenAudiences(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
-	rows, err := d.queryTx(tx, ctx, "SELECT audience FROM refresh_token_audience WHERE refresh_token_id=$1", refreshToken.ID)
+func (d *databaseDriver) selectOAuth2RefreshTokenAudiences(tx *sql.Tx, ctx context.Context, refreshToken *OAuth2RefreshToken) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT audience FROM oauth2_refresh_token_audience WHERE refresh_token_id=$1", refreshToken.ID)
 	if err != nil {
 		return err
 	}
@@ -733,15 +770,15 @@ func (d *databaseDriver) selectRefreshTokenAudiences(tx *sql.Tx, ctx context.Con
 		var audience string
 		err = rows.Scan(&audience)
 		if err != nil {
-			return fmt.Errorf("select refresh token audience failure (cause: %w)", err)
+			return fmt.Errorf("select OAuth2 refresh token audience failure (cause: %w)", err)
 		}
 		refreshToken.Audience = append(refreshToken.Audience, audience)
 	}
 	return nil
 }
 
-func (d *databaseDriver) selectRefreshTokenScopes(tx *sql.Tx, ctx context.Context, refreshToken *RefreshToken) error {
-	rows, err := d.queryTx(tx, ctx, "SELECT scope FROM refresh_token_scope WHERE refresh_token_id=$1", refreshToken.ID)
+func (d *databaseDriver) selectOAuth2RefreshTokenScopes(tx *sql.Tx, ctx context.Context, refreshToken *OAuth2RefreshToken) error {
+	rows, err := d.queryTx(tx, ctx, "SELECT scope FROM oauth2_refresh_token_scope WHERE refresh_token_id=$1", refreshToken.ID)
 	if err != nil {
 		return err
 	}
@@ -750,27 +787,97 @@ func (d *databaseDriver) selectRefreshTokenScopes(tx *sql.Tx, ctx context.Contex
 		var scope string
 		err = rows.Scan(&scope)
 		if err != nil {
-			return fmt.Errorf("select refresh token scope failure (cause: %w)", err)
+			return fmt.Errorf("select OAuth2 refresh token scope failure (cause: %w)", err)
 		}
 		refreshToken.Scopes = append(refreshToken.Scopes, scope)
 	}
 	return nil
 }
 
-func (d *databaseDriver) deleteRefreshToken(tx *sql.Tx, ctx context.Context, id string) error {
-	err := d.execTx(tx, ctx, "DELETE FROM refresh_token_scope WHERE refresh_token_id=$1", id)
+func (d *databaseDriver) DeleteOAuth2TokensBySubject(ctx context.Context, applicationID string, subject string) error {
+	d.logger.Debug("deleting OAuth2 tokens by subject", slog.String("applicationID", applicationID), slog.String("subject", subject))
+	tx, err := d.beginTx(ctx)
 	if err != nil {
 		return err
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM refresh_token_audience WHERE refresh_token_id=$1", id)
+	err = d.deleteOAuth2RefreshTokensByTokenSubject(tx, ctx, applicationID, subject)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	err = d.deleteOAuth2TokensBySubject(tx, ctx, applicationID, subject)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	return d.commitTx(tx)
+}
+
+func (d *databaseDriver) deleteOAuth2RefreshTokensByTokenSubject(tx *sql.Tx, ctx context.Context, applicationID string, subject string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_scope WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE application_id=$1 AND subject=$2))", applicationID, subject)
 	if err != nil {
 		return err
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM refresh_token_amr WHERE refresh_token_id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_audience WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE application_id=$1 AND subject=$2))", applicationID, subject)
 	if err != nil {
 		return err
 	}
-	err = d.execTx(tx, ctx, "DELETE FROM refresh_token WHERE id=$1", id)
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_amr WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE application_id=$1 AND subject=$2))", applicationID, subject)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE application_id=$1 AND subject=$2)", applicationID, subject)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) deleteOAuth2TokensBySubject(tx *sql.Tx, ctx context.Context, applicationID string, subject string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM oauth2_token_scope WHERE token_id IN (SELECT id FROM oauth2_token WHERE application_id=$1 AND subject=$2)", applicationID, subject)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_token_audience WHERE token_id IN (SELECT id FROM oauth2_token WHERE application_id=$1 AND subject=$2)", applicationID, subject)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_token WHERE application_id=$1 AND subject=$2", applicationID, subject)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) DeleteOAuth2RefreshToken(ctx context.Context, id string) error {
+	d.logger.Debug("deleting OAuth2 refresh token", slog.String("id", id))
+	tx, err := d.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	err = d.deleteOAuth2RefreshToken(tx, ctx, id)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	err = d.deleteOAuth2TokenByRefreshTokenID(tx, ctx, id)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	return d.commitTx(tx)
+}
+
+func (d *databaseDriver) deleteOAuth2RefreshTokensByTokenID(tx *sql.Tx, ctx context.Context, tokenID string) error {
+	err := d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_scope WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE id=$1))", tokenID)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_audience WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE id=$1))", tokenID)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token_amr WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE id=$1))", tokenID)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, ctx, "DELETE FROM oauth2_refresh_token WHERE access_token_id IN (SELECT id FROM oauth2_token WHERE id=$1)", tokenID)
 	if err != nil {
 		return err
 	}
@@ -960,9 +1067,13 @@ func (d *databaseDriver) commitTx(tx *sql.Tx) error {
 
 func (d *databaseDriver) execTx(tx *sql.Tx, ctx context.Context, query string, args ...any) error {
 	d.logger.Debug("sql exec", slog.String("query", query))
-	_, err := tx.ExecContext(ctx, query, args...)
+	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("exec failure (cause: %w)", err)
+		return fmt.Errorf("sql exec failure (cause: %w)", err)
+	}
+	rows, err := result.RowsAffected()
+	if err == nil {
+		d.logger.Debug("sql exec complete", slog.Int64("rows", rows))
 	}
 	return nil
 }
@@ -976,7 +1087,7 @@ func (d *databaseDriver) queryTx(tx *sql.Tx, ctx context.Context, query string, 
 	d.logger.Debug("sql query", slog.String("query", query))
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query failure (cause: %w)", err)
+		return nil, fmt.Errorf("sql query failure (cause: %w)", err)
 	}
 	return rows, nil
 }
@@ -994,9 +1105,13 @@ func (d *databaseDriver) runScriptTx(tx *sql.Tx, ctx context.Context, script []b
 			return err
 		}
 		d.logger.Debug("script exec", slog.String("statement", statement))
-		_, err = tx.ExecContext(ctx, statement)
+		result, err := tx.ExecContext(ctx, statement)
 		if err != nil {
-			return fmt.Errorf("script exec error at %d (cause: %w)", reader.LineNo(), err)
+			return fmt.Errorf("script exec failure at %d (cause: %w)", reader.LineNo(), err)
+		}
+		rows, err := result.RowsAffected()
+		if err == nil {
+			d.logger.Debug("script exec complete", slog.Int64("rows", rows))
 		}
 	}
 }

@@ -201,6 +201,7 @@ const defaultClockSkew = 10 * time.Second
 const defaultIDTokenLifetime = 1 * time.Hour
 
 func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
+	p.logger.Debug("adding OAuth2 client", slog.String("id", client.ID))
 	opClient := &opClient{
 		id:                             client.ID,
 		secret:                         client.Secret,
@@ -244,27 +245,28 @@ func (p *OAuth2Provider) Mount(handler httpserver.Handler) *OAuth2Provider {
 }
 
 func (p *OAuth2Provider) Close() error {
+	p.logger.Info("closing OAuth2 provider")
 	// Nothing to do here (yet)
 	return nil
 }
 
 func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, email string, password string, remember bool) (string, error) {
-	slog.Info("authenticating user", slog.String("id", id), slog.String("email", email))
+	slog.Info("authenticating user via OAuth2", slog.String("id", id), slog.String("email", email))
 	err := p.backend.CheckPassword(email, password)
 	if err != nil {
 		return "", err
 	}
-	_, err = p.driver.AuthenticateAndTransformAuthRequestToUserSessionRequest(ctx, id, email, remember)
+	_, err = p.driver.AuthenticateAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, id, email, remember)
 	if err != nil {
 		return "", fmt.Errorf("invalid auth request id: %s", id)
 	}
-	slog.Info("user authenticated", slog.String("id", id), slog.String("email", email))
+	slog.Info("user authenticated via OAuth2", slog.String("id", id), slog.String("email", email))
 	return op.AuthCallbackURL(p.opProvider)(ctx, id), nil
 }
 
 func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
-	authRequest := database.NewAuthRequestFromOIDCAuthRequest(oidcAuthRequest, userID)
-	err := p.driver.InsertAuthRequest(ctx, authRequest)
+	authRequest := database.NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest, userID)
+	err := p.driver.InsertOAuth2AuthRequest(ctx, authRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +274,7 @@ func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest 
 }
 
 func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
-	authRequest, err := p.driver.SelectAuthRequest(ctx, id)
+	authRequest, err := p.driver.SelectOAuth2AuthRequest(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +282,7 @@ func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.Aut
 }
 
 func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
-	authRequest, err := p.driver.SelectAuthRequestByCode(ctx, code)
+	authRequest, err := p.driver.SelectOAuth2AuthRequestByCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -288,11 +290,11 @@ func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op
 }
 
 func (p *OAuth2Provider) SaveAuthCode(ctx context.Context, id string, code string) error {
-	return p.driver.InsertAuthCode(ctx, code, id)
+	return p.driver.InsertOAuth2AuthCode(ctx, code, id)
 }
 
 func (p *OAuth2Provider) DeleteAuthRequest(ctx context.Context, id string) error {
-	return p.driver.DeleteAuthRequest(ctx, id)
+	return p.driver.DeleteOAuth2AuthRequest(ctx, id)
 }
 
 func (p *OAuth2Provider) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
@@ -306,8 +308,8 @@ func (p *OAuth2Provider) CreateAccessToken(ctx context.Context, request op.Token
 }
 
 func (p *OAuth2Provider) createAccessTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest) (string, time.Time, error) {
-	token := database.NewTokenFromAuthRequest(opAuthRequest, "")
-	err := p.driver.InsertToken(ctx, token)
+	token := database.NewOAuth2TokenFromAuthRequest(opAuthRequest, "")
+	err := p.driver.InsertOAuth2Token(ctx, token)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -315,8 +317,8 @@ func (p *OAuth2Provider) createAccessTokenFromOpAuthRequest(ctx context.Context,
 }
 
 func (p *OAuth2Provider) createAccessTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest) (string, time.Time, error) {
-	token := database.NewTokenFromTokenExchangeRequest(tokenExchangeRequest, "")
-	err := p.driver.InsertToken(ctx, token)
+	token := database.NewOAuth2TokenFromTokenExchangeRequest(tokenExchangeRequest, "")
+	err := p.driver.InsertOAuth2Token(ctx, token)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -338,18 +340,18 @@ func (p *OAuth2Provider) CreateAccessAndRefreshTokens(ctx context.Context, reque
 }
 
 func (p *OAuth2Provider) createAccessAndRefreshTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest, currentRefreshToken string) (string, string, time.Time, error) {
-	var accessToken *database.Token
-	var refreshToken *database.RefreshToken
-	refreshTokenID := database.NewRefreshTokenID()
-	accessToken = database.NewTokenFromAuthRequest(opAuthRequest, refreshTokenID)
+	var accessToken *database.OAuth2Token
+	var refreshToken *database.OAuth2RefreshToken
+	refreshTokenID := database.NewOAuth2RefreshTokenID()
+	accessToken = database.NewOAuth2TokenFromAuthRequest(opAuthRequest, refreshTokenID)
 	if currentRefreshToken == "" {
-		refreshToken = database.NewRefreshTokenFromAuthRequest(refreshTokenID, accessToken.ID, opAuthRequest)
-		err := p.driver.InsertRefreshToken(ctx, refreshToken, accessToken)
+		refreshToken = database.NewOAuth2RefreshTokenFromAuthRequest(refreshTokenID, accessToken.ID, opAuthRequest)
+		err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
 	} else {
-		newRefreshToken, err := p.driver.RenewRefreshToken(ctx, refreshTokenID, accessToken)
+		newRefreshToken, err := p.driver.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
@@ -359,22 +361,51 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromOpAuthRequest(ctx contex
 }
 
 func (p *OAuth2Provider) TokenRequestByRefreshToken(ctx context.Context, refreshTokenID string) (op.RefreshTokenRequest, error) {
-	p.logStubCall()
-	return nil, nil
+	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, refreshTokenID)
+	if err != nil {
+		return nil, err
+	}
+	return refreshToken.OpRefreshToken(), nil
 }
 
 func (p *OAuth2Provider) TerminateSession(ctx context.Context, userID string, clientID string) error {
-	p.logStubCall()
-	return nil
+	return p.driver.DeleteOAuth2TokensBySubject(ctx, clientID, userID)
 }
 
 func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string, userID string, clientID string) *oidc.Error {
-	p.logStubCall()
+	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, tokenOrTokenID)
+	if err == nil {
+		if refreshToken.ApplicationID != clientID {
+			return oidc.ErrInvalidClient().WithDescription("refresh token was not issued for this client")
+		}
+		err = p.driver.DeleteOAuth2RefreshToken(ctx, tokenOrTokenID)
+		if err != nil {
+			p.logger.Error("delete OAuth2 refresh token failure", slog.Any("err", err))
+			return oidc.ErrServerError()
+		}
+	} else if !errors.Is(err, database.ErrObjectNotFound) {
+		p.logger.Error("revoke OAuth2 refresh token failure", slog.Any("err", err))
+		return oidc.ErrServerError()
+	}
+	token, err := p.driver.SelectOAuth2Token(ctx, tokenOrTokenID)
+	if err == nil {
+		if token.ApplicationID != clientID {
+			return oidc.ErrInvalidClient().WithDescription("token was not issued for this client")
+		}
+		err = p.driver.DeleteOAuth2Token(ctx, tokenOrTokenID)
+		if err != nil {
+			p.logger.Error("delete OAuth2 token failure", slog.Any("err", err))
+			return oidc.ErrServerError()
+		}
+	} else if !errors.Is(err, database.ErrObjectNotFound) {
+		p.logger.Error("revoke OAuth2 token failure", slog.Any("err", err))
+		return oidc.ErrServerError()
+	}
 	return nil
 }
 
 func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (string, string, error) {
-	refreshToken, err := p.driver.SelectRefreshToken(ctx, token)
+	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, token)
 	if errors.Is(err, database.ErrObjectNotFound) {
 		return "", "", op.ErrInvalidRefreshToken
 	} else if err != nil {
@@ -492,7 +523,7 @@ func (p *OAuth2Provider) setUserInfoFromSubject(_ context.Context, userInfo *oid
 }
 
 func (p *OAuth2Provider) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserInfo, tokenID string, subject string, origin string) error {
-	token, err := p.driver.SelectToken(ctx, tokenID)
+	token, err := p.driver.SelectOAuth2Token(ctx, tokenID)
 	if err != nil {
 		return err
 	}

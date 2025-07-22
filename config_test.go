@@ -24,7 +24,7 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	config, err := idpd.LoadConfig("testdata/idpd.toml", true)
+	config, err := idpd.LoadConfig("testdata/config_test.toml", true)
 	require.NoError(t, err)
 	require.NotNil(t, config)
 }
