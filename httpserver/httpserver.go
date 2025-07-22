@@ -185,7 +185,7 @@ func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.mux.ServeHTTP(w, r)
 	} else {
 		log := &logBuilder{}
-		log.appendHost(r.Header.Get("X-Forwarded-Host"), r.RemoteAddr)
+		log.appendHost(r.Header.Get("X-Forwarded-For"), r.RemoteAddr)
 		log.appendTime()
 		log.appendRequest(r.Method, r.URL.EscapedPath(), r.Proto)
 		wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
@@ -232,9 +232,9 @@ type logBuilder struct {
 	strings.Builder
 }
 
-func (b *logBuilder) appendHost(forwardedHost string, remoteAddr string) {
-	if forwardedHost != "" {
-		b.WriteString(forwardedHost)
+func (b *logBuilder) appendHost(forwardedFor string, remoteAddr string) {
+	if forwardedFor != "" {
+		b.WriteString(forwardedFor)
 	} else if remoteAddr != "" {
 		b.WriteString(remoteAddr)
 	} else {
