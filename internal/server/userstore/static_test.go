@@ -57,7 +57,7 @@ func TestStaticBackend(t *testing.T) {
 	err = backend.CheckPassword(user0.Subject, users[0].Password)
 	require.NoError(t, err)
 
-	err = backend.CheckPassword(user0.Subject, users[0].Password)
+	err = backend.CheckPassword(user0.Subject, users[1].Password)
 	require.ErrorIs(t, err, userstore.ErrIncorrectPassword)
 	require.ErrorIs(t, err, userstore.ErrInvalidLogin)
 
