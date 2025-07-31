@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 
 	let id: string | null = '';
-	let email: string = '';
+	let subject: string = '';
 	let password: string = '';
 	let verification: string = '';
 	let remember: boolean = false;
@@ -39,16 +39,16 @@
 				<form class="space-y-4 md:space-y-6" action="/session/authenticate" method="post">
 					<input type="hidden" name="id" value={id} />
 					<div>
-						<label for="email" class="mb-2 block text-sm font-medium text-gray-900 dark:text-white"
-							>Your email</label
+						<label for="subject" class="mb-2 block text-sm font-medium text-gray-900 dark:text-white"
+							>Your login</label
 						>
 						<input
-							type="email"
-							name="email"
-							id="email"
+							type="input"
+							name="subject"
+							id="subject"
 							class="focus:ring-primary-600 focus:border-primary-600 block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
-							placeholder="name@yourdomain.net"
-							bind:value={email}
+							placeholder="Enter your login name"
+							bind:value={subject}
 							required
 						/>
 					</div>

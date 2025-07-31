@@ -57,13 +57,13 @@ type OAuth2Client struct {
 type opClient struct {
 	id                             string
 	secret                         string
+	issuerURL                      *url.URL
 	redirectURLs                   []string
 	postLogoutRedirectURLs         []string
 	applicationType                op.ApplicationType
 	authMethod                     oidc.AuthMethod
 	responseTypes                  []oidc.ResponseType
 	grantTypes                     []oidc.GrantType
-	loginURLPattern                string
 	accessTokenType                op.AccessTokenType
 	idTokenLifetime                time.Duration
 	devMode                        bool
@@ -103,8 +103,8 @@ func (c *opClient) GrantTypes() []oidc.GrantType {
 	return c.grantTypes
 }
 
-func (c *opClient) LoginURL(user string) string {
-	return fmt.Sprintf(c.loginURLPattern, url.QueryEscape(user))
+func (c *opClient) LoginURL(id string) string {
+	return oauth2LoginURL(c.issuerURL, id)
 }
 
 func (c *opClient) AccessTokenType() op.AccessTokenType {
@@ -148,9 +148,13 @@ type OAuth2ProviderConfig struct {
 }
 
 func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
-	logger := slog.With(slog.String("issuer", config.Issuer))
+	issuerURL, err := url.Parse(config.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse issuer '%s' (cause: %w)", config.Issuer, err)
+	}
+	logger := slog.With(slog.String("issuer", issuerURL.String()))
 	provider := &OAuth2Provider{
-		issuerURL:           config.Issuer,
+		issuerURL:           issuerURL,
 		driver:              driver,
 		backend:             backend,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
@@ -178,14 +182,14 @@ func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend 
 	}
 	opProvider, err := op.NewProvider(opConfig, provider, op.StaticIssuer(config.Issuer), opOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OpenID provider (cause: %w)", err)
+		return nil, fmt.Errorf("failed to create OAuth2 provider (cause: %w)", err)
 	}
 	provider.opProvider = opProvider
 	return provider, nil
 }
 
 type OAuth2Provider struct {
-	issuerURL           string
+	issuerURL           *url.URL
 	driver              database.Driver
 	backend             userstore.Backend
 	signingKeyAlgorithm jose.SignatureAlgorithm
@@ -197,6 +201,24 @@ type OAuth2Provider struct {
 	mutex               sync.RWMutex
 }
 
+func oauth2LoginURL(issuerURL *url.URL, id string) string {
+	url := issuerURL.JoinPath("/user")
+	query := url.Query()
+	query.Add("id", id)
+	url.RawQuery = query.Encode()
+	return url.String()
+}
+
+func oauth2VerifyURL(issuerURL *url.URL, id string, subject string, verification string) string {
+	url := issuerURL.JoinPath("/user/verify")
+	query := url.Query()
+	query.Add("id", id)
+	query.Add("subject", subject)
+	query.Add("verification", verification)
+	url.RawQuery = query.Encode()
+	return url.String()
+}
+
 const defaultClockSkew = 10 * time.Second
 const defaultIDTokenLifetime = 1 * time.Hour
 
@@ -205,13 +227,13 @@ func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
 	opClient := &opClient{
 		id:                             client.ID,
 		secret:                         client.Secret,
+		issuerURL:                      p.issuerURL,
 		redirectURLs:                   client.RedirectURLs,
 		postLogoutRedirectURLs:         []string{},
 		applicationType:                op.ApplicationTypeNative,
 		authMethod:                     oidc.AuthMethodNone,
 		responseTypes:                  []oidc.ResponseType{oidc.ResponseTypeCode},
 		grantTypes:                     []oidc.GrantType{oidc.GrantTypeCode, oidc.GrantTypeRefreshToken},
-		loginURLPattern:                p.issuerURL + "/user?id=%s",
 		accessTokenType:                op.AccessTokenTypeBearer,
 		idTokenLifetime:                defaultIDTokenLifetime,
 		devMode:                        false,
@@ -250,17 +272,35 @@ func (p *OAuth2Provider) Close() error {
 	return nil
 }
 
-func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, email string, password string, remember bool) (string, error) {
-	slog.Info("authenticating user via OAuth2", slog.String("id", id), slog.String("email", email))
-	err := p.backend.CheckPassword(email, password)
+func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject string, password string, verifyHandler VerifyHandler, remember bool) (string, error) {
+	slog.Info("authenticating OAuth2 user", slog.String("id", id), slog.String("subject", subject), slog.String("verification", string(verifyHandler.Method())))
+	err := p.backend.CheckPassword(subject, password)
 	if err != nil {
-		return "", err
+		if !errors.Is(err, userstore.ErrInvalidLogin) {
+			return "", err
+		}
+		slog.Info("invalid OAuth2 user login", slog.String("subject", subject))
+		verifyHandler.Tainted()
 	}
-	_, err = p.driver.AuthenticateAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, id, email, remember)
+	err = p.driver.AuthenticateOAuth2AuthRequest(ctx, id, subject, verifyHandler.InitiateChallenge, remember)
 	if err != nil {
-		return "", fmt.Errorf("invalid auth request id: %s", id)
+		return "", fmt.Errorf("invalid OAuth2 auth request id: %s (cause: %w)", id, err)
 	}
-	slog.Info("user authenticated via OAuth2", slog.String("id", id), slog.String("email", email))
+	if !verifyHandler.Tainted() {
+		slog.Info("OAuth2 user authenticated", slog.String("id", id), slog.String("subject", subject))
+	}
+	return oauth2VerifyURL(p.issuerURL, id, subject, string(verifyHandler.Method())), nil
+}
+
+func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, verifyHandler VerifyHandler, response string) (string, error) {
+	slog.Info("verifying OAuth2 user", slog.String("id", id), slog.String("subject", subject), slog.String("verification", string(verifyHandler.Method())))
+
+	// TODO: Integrate VerifyHandler
+	_, err := p.driver.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, id, subject, verifyHandler.VerifyRepsonse, response)
+	if err != nil {
+		return "", fmt.Errorf("OAuth2 verification failure: %s (cause: %w)", id, err)
+	}
+	slog.Info("OAuth2 user verified", slog.String("id", id), slog.String("subject", subject))
 	return op.AuthCallbackURL(p.opProvider)(ctx, id), nil
 }
 
@@ -375,7 +415,7 @@ func (p *OAuth2Provider) TerminateSession(ctx context.Context, userID string, cl
 func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string, userID string, clientID string) *oidc.Error {
 	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, tokenOrTokenID)
 	if err == nil {
-		if refreshToken.ApplicationID != clientID {
+		if refreshToken.ClientID != clientID {
 			return oidc.ErrInvalidClient().WithDescription("refresh token was not issued for this client")
 		}
 		err = p.driver.DeleteOAuth2RefreshToken(ctx, tokenOrTokenID)
@@ -389,7 +429,7 @@ func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 	}
 	token, err := p.driver.SelectOAuth2Token(ctx, tokenOrTokenID)
 	if err == nil {
-		if token.ApplicationID != clientID {
+		if token.ClientID != clientID {
 			return oidc.ErrInvalidClient().WithDescription("token was not issued for this client")
 		}
 		err = p.driver.DeleteOAuth2Token(ctx, tokenOrTokenID)
@@ -410,10 +450,10 @@ func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID strin
 		return "", "", op.ErrInvalidRefreshToken
 	} else if err != nil {
 		return "", "", op.ErrInvalidRefreshToken
-	} else if refreshToken.ApplicationID != clientID {
+	} else if refreshToken.ClientID != clientID {
 		return "", "", op.ErrInvalidRefreshToken
 	}
-	return refreshToken.UserID, refreshToken.ID, nil
+	return refreshToken.Subject, refreshToken.ID, nil
 }
 
 func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) {
@@ -514,7 +554,7 @@ func (p *OAuth2Provider) SetUserinfoFromRequest(ctx context.Context, userInfo *o
 }
 
 func (p *OAuth2Provider) setUserInfoFromSubject(_ context.Context, userInfo *oidc.UserInfo, subject string, scopes []string) error {
-	user, err := p.backend.LookupUserByEmail(subject)
+	user, err := p.backend.LookupUser(subject)
 	if err != nil {
 		return err
 	}

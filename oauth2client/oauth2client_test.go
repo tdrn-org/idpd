@@ -41,9 +41,9 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 		Secret:       "secret",
 		RedirectURLs: []string{clientBaseURL + "/authorized"},
 	}
-	idpdServer.AddClient(client)
+	idpdServer.AddOAuth2Client(client)
 	config := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		Issuer:       idpdServer.Issuer(),
+		Issuer:       idpdServer.OAuth2IssuerURL(),
 		ClientId:     client.ID,
 		ClientSecret: client.Secret,
 		BaseURL:      clientBaseURL,

@@ -25,7 +25,7 @@ import (
 
 type OAuth2Token struct {
 	ID             string
-	ApplicationID  string
+	ClientID       string
 	Subject        string
 	RefreshTokenID string
 	Audience       []string
@@ -44,7 +44,7 @@ func NewOAuth2Token(id string) *OAuth2Token {
 func NewOAuth2TokenFromAuthRequest(request op.AuthRequest, refreshTokenID string) *OAuth2Token {
 	return &OAuth2Token{
 		ID:             uuid.NewString(),
-		ApplicationID:  request.GetClientID(),
+		ClientID:       request.GetClientID(),
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
@@ -56,7 +56,7 @@ func NewOAuth2TokenFromAuthRequest(request op.AuthRequest, refreshTokenID string
 func NewOAuth2TokenFromTokenExchangeRequest(request op.TokenExchangeRequest, refreshTokenID string) *OAuth2Token {
 	return &OAuth2Token{
 		ID:             uuid.NewString(),
-		ApplicationID:  request.GetClientID(),
+		ClientID:       request.GetClientID(),
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
@@ -70,8 +70,8 @@ type OAuth2RefreshToken struct {
 	AuthTime      int64
 	AMR           []string
 	Audience      []string
-	UserID        string
-	ApplicationID string
+	Subject       string
+	ClientID      string
 	Expiration    int64
 	Scopes        []string
 	AccessTokenID string
@@ -96,8 +96,8 @@ func NewOAuth2RefreshTokenFromAuthRequest(id string, tokenID string, request op.
 		AuthTime:      request.GetAuthTime().UnixMicro(),
 		AMR:           request.GetAMR(),
 		Audience:      request.GetAudience(),
-		UserID:        request.GetSubject(),
-		ApplicationID: request.GetClientID(),
+		Subject:       request.GetSubject(),
+		ClientID:      request.GetClientID(),
 		Expiration:    time.Now().Add(5 * time.Minute).UnixMicro(),
 		Scopes:        request.GetScopes(),
 		AccessTokenID: tokenID,
@@ -110,8 +110,8 @@ func NewOAuth2RefreshTokenFromRefreshToken(id string, tokenID string, refreshTok
 		AuthTime:      refreshToken.AuthTime,
 		AMR:           refreshToken.AMR,
 		Audience:      refreshToken.Audience,
-		UserID:        refreshToken.UserID,
-		ApplicationID: refreshToken.ApplicationID,
+		Subject:       refreshToken.Subject,
+		ClientID:      refreshToken.ClientID,
 		Expiration:    time.Now().Add(5 * time.Minute).UnixMicro(),
 		Scopes:        refreshToken.Scopes,
 		AccessTokenID: tokenID,
@@ -139,7 +139,7 @@ func (r *OpRefreshTokenRequest) GetAuthTime() time.Time {
 }
 
 func (r *OpRefreshTokenRequest) GetClientID() string {
-	return r.refreshToken.ApplicationID
+	return r.refreshToken.ClientID
 }
 
 func (r *OpRefreshTokenRequest) GetScopes() []string {
@@ -147,7 +147,7 @@ func (r *OpRefreshTokenRequest) GetScopes() []string {
 }
 
 func (r *OpRefreshTokenRequest) GetSubject() string {
-	return r.refreshToken.UserID
+	return r.refreshToken.Subject
 }
 
 func (r *OpRefreshTokenRequest) SetCurrentScopes(scopes []string) {

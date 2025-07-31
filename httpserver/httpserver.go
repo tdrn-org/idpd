@@ -18,17 +18,10 @@ package httpserver
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,6 +29,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tdrn-org/go-tlsconf/tlsserver"
 )
 
 type Handler interface {
@@ -152,7 +147,7 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 	var certificates []tls.Certificate
 	if certFile == "" && keyFile == "" {
 		s.logger.Info("using ephemeral certificate")
-		certificate, err := httpEphemeralCertificateForAddress(s.listenerAddr)
+		certificate, err := tlsserver.GenerateEphemeralCertificate(s.listenerAddr, tlsserver.CertificateAlgorithmDefault)
 		if err != nil {
 			return err
 		}
@@ -181,11 +176,12 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.logger.Debug("http server request", slog.String(r.Method, r.RequestURI))
+	remoteIP := s.remoteIP(r)
 	if !s.AccessLog {
 		s.mux.ServeHTTP(w, r)
 	} else {
 		log := &logBuilder{}
-		log.appendHost(r.Header.Get("X-Forwarded-For"), r.RemoteAddr)
+		log.appendHost(remoteIP)
 		log.appendTime()
 		log.appendRequest(r.Method, r.URL.EscapedPath(), r.Proto)
 		wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
@@ -205,6 +201,32 @@ func (s *Instance) Close() error {
 
 func (s *Instance) WaitStopped() {
 	s.stoppedWG.Wait()
+}
+
+func (s *Instance) remoteIP(r *http.Request) string {
+	remoteIPHeaders := []string{
+		"True-Client-IP",
+		"X-Real-IP",
+		"X-Forwarded-For",
+	}
+	for _, remoteIPHeader := range remoteIPHeaders {
+		remoteIP := r.Header.Get(remoteIPHeader)
+		if remoteIP != "" {
+			i := strings.Index(remoteIP, ",")
+			if i >= 0 {
+				remoteIP = remoteIP[:i]
+			}
+			if remoteIP != "" {
+				return remoteIP
+			}
+		}
+	}
+	remoteAddr := r.RemoteAddr
+	remoteIP, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		remoteIP = remoteAddr
+	}
+	return remoteIP
 }
 
 type wrappedResponseWriter struct {
@@ -232,11 +254,9 @@ type logBuilder struct {
 	strings.Builder
 }
 
-func (b *logBuilder) appendHost(forwardedFor string, remoteAddr string) {
-	if forwardedFor != "" {
-		b.WriteString(forwardedFor)
-	} else if remoteAddr != "" {
-		b.WriteString(remoteAddr)
+func (b *logBuilder) appendHost(remoteIP string) {
+	if remoteIP != "" {
+		b.WriteString(remoteIP)
 	} else {
 		b.WriteRune('-')
 	}
@@ -262,61 +282,4 @@ func (b *logBuilder) appendStatus(statusCode int, written int) {
 	b.WriteString(strconv.Itoa(statusCode))
 	b.WriteRune(' ')
 	b.WriteString(strconv.Itoa(written))
-}
-
-func httpEphemeralCertificateForAddress(address string) (*tls.Certificate, error) {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, fmt.Errorf("invalid address %q (cause: %w)", address, err)
-	}
-	publicKey, privateKey, keyBlock, err := httpEphemeralCertificateKey()
-	if err != nil {
-		return nil, err
-	}
-	x509Block, err := httpEphemeralCertificateX509(host, publicKey, privateKey)
-	if err != nil {
-		return nil, err
-	}
-	certificate, err := tls.X509KeyPair(pem.EncodeToMemory(x509Block), pem.EncodeToMemory(keyBlock))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse certificate (cause: %w)", err)
-	}
-	return &certificate, nil
-}
-
-func httpEphemeralCertificateKey() (crypto.PublicKey, crypto.PrivateKey, *pem.Block, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to generate key (cause: %w)", err)
-	}
-	encodedKey, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to encode key (cause: %w)", err)
-	}
-	keyBlock := &pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: encodedKey,
-	}
-	return &key.PublicKey, key, keyBlock, nil
-}
-
-func httpEphemeralCertificateX509(host string, publicKey crypto.PublicKey, privateKey crypto.PrivateKey) (*pem.Block, error) {
-	now := time.Now()
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: host},
-		NotBefore:    now,
-		NotAfter:     now.AddDate(0, 0, 1),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		IsCA:         true,
-	}
-	x509Bytes, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create certificate (cause: %w)", err)
-	}
-	x509Block := &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: x509Bytes,
-	}
-	return x509Block, nil
 }

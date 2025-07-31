@@ -10,6 +10,8 @@ CREATE TABLE oauth2_auth_request(
 	response_mode TEXT,
 	state TEXT,
 	subject TEXT,
+    challenge TEXT,
+	remember INTEGER,
 	done INTEGER
 );
 CREATE TABLE oauth2_auth_request_audience(
@@ -40,7 +42,7 @@ CREATE TABLE oauth2_auth_code(
 );
 CREATE TABLE oauth2_token(
     id TEXT PRIMARY KEY,
-    application_id TEXT,
+    client_id TEXT,
     subject TEXT,
     refresh_token_id TEXT,
     expiration INTEGER
@@ -58,8 +60,8 @@ CREATE TABLE oauth2_token_scope(
 CREATE TABLE oauth2_refresh_token(
     id TEXT PRIMARY KEY,
     auth_time INTEGER,
-    user_id TEXT,
-    application_id TEXT,
+    subject TEXT,
+    client_id TEXT,
     expiration INTEGER,
     access_token_id TEXT,
     FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)

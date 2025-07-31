@@ -51,6 +51,7 @@ var ErrInvalidLDAPAttributeMapping = errors.New("invalid LDAP attribute mapping"
 
 type LDAPAttributeMapping struct {
 	User struct {
+		Subject string `toml:"subject"`
 		Profile struct {
 			Name              string `toml:"name"`
 			GivenName         string `toml:"given_name"`
@@ -115,6 +116,10 @@ func (mapping *LDAPAttributeMapping) mustLoad(path string) {
 }
 
 func (mapping *LDAPAttributeMapping) Validate() error {
+	var userSubjectErr error
+	if mapping.User.Subject == "" {
+		userSubjectErr = fmt.Errorf("%w (user subject attribute missing)", ErrInvalidLDAPAttributeMapping)
+	}
 	var userEmailAddressErr error
 	if mapping.User.Email.Address == "" {
 		userEmailAddressErr = fmt.Errorf("%w (user email address attribute missing)", ErrInvalidLDAPAttributeMapping)
@@ -123,7 +128,7 @@ func (mapping *LDAPAttributeMapping) Validate() error {
 	if mapping.Group.Name == "" {
 		groupNameErr = fmt.Errorf("%w (group name attribute missing)", ErrInvalidLDAPAttributeMapping)
 	}
-	err := errors.Join(userEmailAddressErr, groupNameErr)
+	err := errors.Join(userSubjectErr, userEmailAddressErr, groupNameErr)
 	if err != nil {
 		return err
 	}
@@ -142,12 +147,15 @@ type ldapGroup struct {
 
 func (mapping *LDAPAttributeMapping) mapper() *ldapAttributeMapper {
 	mapper := &ldapAttributeMapper{
-		Mapping:            mapping,
-		UserEmailAttribute: mapping.User.Email.Address,
-		GroupNameAttribute: mapping.Group.Name,
-		userMappingTable:   make(map[string]func(*ldapUser, *ldap.EntryAttribute)),
-		groupMappingTable:  make(map[string]func(*ldapGroup, *ldap.EntryAttribute)),
+		Mapping:              mapping,
+		UserSubjectAttribute: mapping.User.Subject,
+		GroupNameAttribute:   mapping.Group.Name,
+		userMappingTable:     make(map[string]func(*ldapUser, *ldap.EntryAttribute)),
+		groupMappingTable:    make(map[string]func(*ldapGroup, *ldap.EntryAttribute)),
 	}
+	mapper.addUserMapping(mapping.User.Subject, func(user *ldapUser, attribute *ldap.EntryAttribute) {
+		user.Subject = mapping.mapStringValue(attribute)
+	})
 	mapper.addUserMapping(mapping.User.Profile.Name, func(user *ldapUser, attribute *ldap.EntryAttribute) {
 		user.Profile.Name = mapping.mapStringValue(attribute)
 	})
@@ -251,30 +259,38 @@ func (mapping *LDAPAttributeMapping) mapLanguageTagValue(attribute *ldap.EntryAt
 }
 
 type ldapAttributeMapper struct {
-	Mapping            *LDAPAttributeMapping
-	UserEmailAttribute string
-	GroupNameAttribute string
-	userMappingTable   map[string]func(*ldapUser, *ldap.EntryAttribute)
-	groupMappingTable  map[string]func(*ldapGroup, *ldap.EntryAttribute)
+	Mapping              *LDAPAttributeMapping
+	UserSubjectAttribute string
+	GroupNameAttribute   string
+	userMappingTable     map[string]func(*ldapUser, *ldap.EntryAttribute)
+	groupMappingTable    map[string]func(*ldapGroup, *ldap.EntryAttribute)
 }
 
 func (mapper *ldapAttributeMapper) addUserMapping(attribute string, mapping func(*ldapUser, *ldap.EntryAttribute)) {
 	if attribute != "" {
-		_, exists := mapper.userMappingTable[attribute]
-		if exists {
-			slog.Warn("ambiguous LDAP user attribute mapping", slog.String("attribute", attribute))
+		nextMapping := mapper.userMappingTable[attribute]
+		if nextMapping == nil {
+			mapper.userMappingTable[attribute] = mapping
+		} else {
+			mapper.userMappingTable[attribute] = func(user *ldapUser, attribute *ldap.EntryAttribute) {
+				mapping(user, attribute)
+				nextMapping(user, attribute)
+			}
 		}
-		mapper.userMappingTable[attribute] = mapping
 	}
 }
 
 func (mapper *ldapAttributeMapper) addGroupMapping(attribute string, mapping func(*ldapGroup, *ldap.EntryAttribute)) {
 	if attribute != "" {
-		_, exists := mapper.groupMappingTable[attribute]
-		if exists {
-			slog.Warn("ambiguous LDAP group attribute mapping", slog.String("attribute", attribute))
+		nextMapping := mapper.groupMappingTable[attribute]
+		if nextMapping == nil {
+			mapper.groupMappingTable[attribute] = mapping
+		} else {
+			mapper.groupMappingTable[attribute] = func(group *ldapGroup, attribute *ldap.EntryAttribute) {
+				mapping(group, attribute)
+				nextMapping(group, attribute)
+			}
 		}
-		mapper.groupMappingTable[attribute] = mapping
 	}
 }
 
@@ -333,14 +349,14 @@ type ldapBackend struct {
 	logger *slog.Logger
 }
 
-func (backend *ldapBackend) LookupUserByEmail(email string) (*User, error) {
-	backend.logger.Debug("looking up user by email address", slog.String("email", email))
+func (backend *ldapBackend) LookupUser(subject string) (*User, error) {
+	backend.logger.Debug("looking up user", slog.String("subject", subject))
 	conn, err := backend.connectAndBind()
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
-	user, err := backend.lookupUser(conn, email)
+	user, err := backend.lookupUser(conn, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -360,8 +376,8 @@ func (backend *ldapBackend) LookupUserByEmail(email string) (*User, error) {
 	return &user.User, nil
 }
 
-func (backend *ldapBackend) lookupUser(conn *ldap.Conn, email string) (*ldapUser, error) {
-	userSearchFilter := fmt.Sprintf("(&(%s=%s)%s)", ldap.EscapeFilter(backend.mapper.UserEmailAttribute), ldap.EscapeFilter(email), backend.UserSearch.Filter)
+func (backend *ldapBackend) lookupUser(conn *ldap.Conn, subject string) (*ldapUser, error) {
+	userSearchFilter := fmt.Sprintf("(&(%s=%s)%s)", ldap.EscapeFilter(backend.mapper.UserSubjectAttribute), ldap.EscapeFilter(subject), backend.UserSearch.Filter)
 	userSearchRequest := ldap.NewSearchRequest(backend.UserSearch.BaseDN, backend.UserSearch.Scope, backend.UserSearch.DerefAliases, 0, 0, false, userSearchFilter, backend.mapper.userAttributes(), nil)
 	userSearchResult, err := conn.Search(userSearchRequest)
 	if err != nil {
@@ -369,7 +385,7 @@ func (backend *ldapBackend) lookupUser(conn *ldap.Conn, email string) (*ldapUser
 	}
 	switch len(userSearchResult.Entries) {
 	case 0:
-		return nil, fmt.Errorf("%w (email: %s)", ErrUserNotFound, email)
+		return nil, fmt.Errorf("%w (subject: %s)", ErrUserNotFound, subject)
 	case 1:
 		return backend.mapper.mapUser(userSearchResult.Entries[0]), nil
 	}
@@ -417,20 +433,20 @@ func (backend *ldapBackend) lookupGroupsByUser(conn *ldap.Conn, user *ldapUser) 
 	return groups, nil
 }
 
-func (backend *ldapBackend) CheckPassword(email string, password string) error {
-	backend.logger.Debug("checking user password", slog.String("email", email))
+func (backend *ldapBackend) CheckPassword(subject string, password string) error {
+	backend.logger.Debug("checking user password", slog.String("subject", subject))
 	conn, err := backend.connectAndBind()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	user, err := backend.lookupUser(conn, email)
+	user, err := backend.lookupUser(conn, subject)
 	if err != nil {
 		return err
 	}
 	err = conn.Bind(user.DN, password)
 	if err != nil {
-		return errors.Join(fmt.Errorf("%w (email: %s)", ErrIncorrectPassword, email), err)
+		return errors.Join(fmt.Errorf("%w (subject: %s)", ErrIncorrectPassword, subject), err)
 	}
 	return nil
 }

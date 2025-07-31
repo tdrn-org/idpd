@@ -1,3 +1,4 @@
+user.subject = "uid"                         #inetOrgPerson
 user.profile.name = "displayName"            #inetOrgPerson
 user.profile.given_name = "givenName"        #inetOrgPerson
 user.profile.family_name = "sn"              #inetOrgPerson

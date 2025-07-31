@@ -1,3 +1,4 @@
+user.subject = "sAMAccountName"
 user.profile.name = "displayName"
 user.profile.given_name = "givenName"
 user.profile.family_name = "sn"

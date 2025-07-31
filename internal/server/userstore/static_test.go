@@ -24,15 +24,19 @@ import (
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 )
 
-func TestFileBackend(t *testing.T) {
+func TestStaticBackend(t *testing.T) {
+	const user0Subject = "user0"
+	const user1Subject = "user1"
 	users := []userstore.StaticUser{
 		{
+			Subject:  user0Subject,
 			Password: "user0secret",
 			Groups:   []string{"group1", "group2"},
 			Email: userstore.StaticUserEmail{
 				Address: "user0@example.org",
 			},
 		}, {
+			Subject:  user1Subject,
 			Password: "user1secret",
 			Groups:   []string{"group2", "group3"},
 			Email: userstore.StaticUserEmail{
@@ -44,16 +48,16 @@ func TestFileBackend(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, backend)
 
-	user0, err := backend.LookupUserByEmail(users[0].Email.Address)
+	user0, err := backend.LookupUser(user0Subject)
 	require.NoError(t, err)
 	require.NotNil(t, user0)
 	require.Equal(t, users[0].Email.Address, user0.Email.Address)
 	require.Equal(t, users[0].Groups, user0.Groups)
 
-	err = backend.CheckPassword(user0.Email.Address, users[0].Password)
+	err = backend.CheckPassword(user0.Subject, users[0].Password)
 	require.NoError(t, err)
 
-	err = backend.CheckPassword(user0.Email.Address, users[1].Password)
+	err = backend.CheckPassword(user0.Subject, users[0].Password)
 	require.ErrorIs(t, err, userstore.ErrIncorrectPassword)
 	require.ErrorIs(t, err, userstore.ErrInvalidLogin)
 

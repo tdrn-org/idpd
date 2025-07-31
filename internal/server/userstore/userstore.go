@@ -31,6 +31,7 @@ var ErrUserNotFound = fmt.Errorf("%w (user not found)", ErrInvalidLogin)
 var ErrIncorrectPassword = fmt.Errorf("%w (incorrect password)", ErrInvalidLogin)
 
 type User struct {
+	Subject string
 	Profile UserProfile
 	Address UserAddress
 	Phone   UserPhone
@@ -42,7 +43,7 @@ func (user *User) SetUserInfo(userInfo *oidc.UserInfo, scopes []string) {
 	for _, scope := range scopes {
 		switch scope {
 		case oidc.ScopeOpenID:
-			userInfo.Subject = strings.TrimSpace(user.Email.Address)
+			userInfo.Subject = strings.TrimSpace(user.Subject)
 		case oidc.ScopeProfile:
 			userInfo.Name = strings.TrimSpace(user.Profile.Name)
 			userInfo.GivenName = strings.TrimSpace(user.Profile.GivenName)
@@ -133,6 +134,6 @@ type UserEmail struct {
 }
 
 type Backend interface {
-	LookupUserByEmail(email string) (*User, error)
+	LookupUser(subject string) (*User, error)
 	CheckPassword(email string, password string) error
 }

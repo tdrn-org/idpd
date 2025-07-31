@@ -23,7 +23,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/tdrn-org/go-conf"
-	"github.com/tdrn-org/go-conf/service"
+	"github.com/tdrn-org/go-conf/service/loglevel"
 )
 
 var cmdLineVars = kong.Vars{
@@ -79,7 +79,7 @@ func (cmd *runCmd) applyGlobalArgs(config *Config, args *cmdLine) {
 }
 
 func (cmd *runCmd) initLogging(config *Config) {
-	logLevel, _ := conf.LookupService[service.LogLevelService]()
-	logger, _ := config.logConfig().GetLogger(logLevel.LevelVar())
+	logLevel, _ := conf.LookupService[loglevel.LogLevelService]()
+	logger, _ := config.toLogConfig().GetLogger(logLevel.LevelVar())
 	slog.SetDefault(logger)
 }

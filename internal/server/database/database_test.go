@@ -17,6 +17,7 @@
 package database_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"log/slog"
@@ -119,7 +120,12 @@ func oauth2AuthRequest(t *testing.T, d database.Driver) {
 	require.NoError(t, err)
 	require.Equal(t, authRequest0, authRequest1)
 
-	userSessionRequest, err := d.AuthenticateAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, authRequest1.ID, "subject", true)
+	generateChallenge := func(_ context.Context, _ string) (string, error) { return "challenge", nil }
+	err = d.AuthenticateOAuth2AuthRequest(ctx, authRequest1.ID, "subject", generateChallenge, true)
+	require.NoError(t, err)
+
+	verifyChallengeResponse := func(_ context.Context, _ string, _ string, _ string) error { return nil }
+	userSessionRequest, err := d.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, authRequest1.ID, "subject", verifyChallengeResponse, "")
 	require.NoError(t, err)
 	require.Equal(t, authRequest1.State, userSessionRequest.State)
 	require.True(t, userSessionRequest.Remember)
@@ -127,6 +133,8 @@ func oauth2AuthRequest(t *testing.T, d database.Driver) {
 	require.NoError(t, err)
 	authRequest1.AuthTime = authRequest2.AuthTime
 	authRequest1.Subject = "subject"
+	authRequest1.Challenge = "challenge"
+	authRequest1.Remember = true
 	authRequest1.Done = true
 	require.Equal(t, authRequest1, authRequest2)
 
@@ -156,8 +164,8 @@ func oauth2AuthCode(t *testing.T, d database.Driver) {
 func generateAndInsertOAuth2Token(t *testing.T, d database.Driver) *database.OAuth2Token {
 	token := &database.OAuth2Token{
 		ID:             uuid.NewString(),
-		ApplicationID:  "applicationID",
-		Subject:        "userID",
+		ClientID:       "clientID",
+		Subject:        "subject",
 		RefreshTokenID: "refreshTokenId",
 		Audience:       []string{"audience0", "audience1"},
 		Expiration:     time.Now().UnixMicro(),
@@ -186,8 +194,8 @@ func generateAndInsertOAuth2RefreshToken(t *testing.T, d database.Driver) *datab
 	refreshTokenID := database.NewOAuth2RefreshTokenID()
 	token := &database.OAuth2Token{
 		ID:             uuid.NewString(),
-		ApplicationID:  "applicationID",
-		Subject:        "userID",
+		ClientID:       "clientID",
+		Subject:        "subject",
 		RefreshTokenID: refreshTokenID,
 		Audience:       []string{"audience0", "audience1"},
 		Expiration:     time.Now().UnixMicro(),
@@ -198,8 +206,8 @@ func generateAndInsertOAuth2RefreshToken(t *testing.T, d database.Driver) *datab
 		AuthTime:      time.Now().UnixMicro(),
 		AMR:           []string{"amr0", "amr1"},
 		Audience:      []string{"audience0", "audience1"},
-		UserID:        "userID",
-		ApplicationID: "applicationID",
+		Subject:       "subject",
+		ClientID:      "clientID",
 		Expiration:    time.Now().UnixMicro(),
 		Scopes:        []string{"scope0", "scope1"},
 		AccessTokenID: token.ID,
@@ -216,8 +224,8 @@ func oauth2RefreshToken(t *testing.T, d database.Driver) {
 	token0, err := d.SelectOAuth2Token(ctx, refreshToken0.AccessTokenID)
 	require.NoError(t, err)
 	require.Equal(t, refreshToken0.ID, token0.RefreshTokenID)
-	require.Equal(t, refreshToken0.ApplicationID, token0.ApplicationID)
-	require.Equal(t, refreshToken0.UserID, token0.Subject)
+	require.Equal(t, refreshToken0.ClientID, token0.ClientID)
+	require.Equal(t, refreshToken0.Subject, token0.Subject)
 
 	refreshToken1, err := d.SelectOAuth2RefreshToken(ctx, refreshToken0.ID)
 	require.NoError(t, err)
@@ -226,8 +234,8 @@ func oauth2RefreshToken(t *testing.T, d database.Driver) {
 	newRefreshTokenID := uuid.NewString()
 	newToken := &database.OAuth2Token{
 		ID:             uuid.NewString(),
-		ApplicationID:  "applicationID",
-		Subject:        "userID",
+		ClientID:       "clientID",
+		Subject:        "subject",
 		RefreshTokenID: newRefreshTokenID,
 		Audience:       []string{"audience0", "audience1"},
 		Expiration:     time.Now().UnixMicro(),
@@ -238,11 +246,11 @@ func oauth2RefreshToken(t *testing.T, d database.Driver) {
 	require.Equal(t, newRefreshTokenID, newRefreshToken0.ID)
 	require.Equal(t, refreshToken1.AMR, newRefreshToken0.AMR)
 	require.Equal(t, refreshToken1.Audience, newRefreshToken0.Audience)
-	require.Equal(t, refreshToken1.UserID, newRefreshToken0.UserID)
-	require.Equal(t, refreshToken1.ApplicationID, newRefreshToken0.ApplicationID)
+	require.Equal(t, refreshToken1.Subject, newRefreshToken0.Subject)
+	require.Equal(t, refreshToken1.ClientID, newRefreshToken0.ClientID)
 	require.Equal(t, refreshToken1.Scopes, newRefreshToken0.Scopes)
 
-	err = d.DeleteOAuth2TokensBySubject(ctx, refreshToken0.ApplicationID, refreshToken0.UserID)
+	err = d.DeleteOAuth2TokensBySubject(ctx, refreshToken0.ClientID, refreshToken0.Subject)
 	require.NoError(t, err)
 	_, err = d.SelectOAuth2RefreshToken(ctx, newRefreshTokenID)
 	require.ErrorIs(t, err, database.ErrObjectNotFound)
@@ -271,7 +279,12 @@ func userSession(t *testing.T, d database.Driver) {
 	ctx := t.Context()
 	authRequest0 := generateAndInsertOAuth2AuthRequest(t, d)
 
-	userSessionRequest0, err := d.AuthenticateAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, authRequest0.ID, "subject", true)
+	generateChallenge := func(_ context.Context, _ string) (string, error) { return "challenge", nil }
+	err := d.AuthenticateOAuth2AuthRequest(ctx, authRequest0.ID, "subject", generateChallenge, true)
+	require.NoError(t, err)
+
+	verifyChallengeResponse := func(_ context.Context, _ string, _ string, _ string) error { return nil }
+	userSessionRequest0, err := d.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, authRequest0.ID, "subject", verifyChallengeResponse, "")
 	require.NoError(t, err)
 
 	oauth2Token := &oauth2.Token{

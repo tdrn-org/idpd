@@ -5,7 +5,7 @@
 [logging]
 # debug|info|warn|error
 #level = "info"
-# stdout|stderr|file
+# stdout|stderr|file|syslog
 #target = "stdout"
 # -1:auto-detect color output, 0:disable color output, 1:force color output (only applicable for targets stdout|stderr)
 #color = -1
@@ -13,6 +13,14 @@
 #file_name = "/var/log/idpd/idpd.log"
 # 0:disable log file rotation, >0:rotate log file at this size (only applicable for target file)
 #file_size_limit = 0
+# tcp|udp
+#syslog_network = "tcp"
+# <syslog server address> (only applicable for target syslog)
+#syslog_address = "localhost:601"
+# rfc3164|rfc3164+framing|rfc5424|rfc5424+framing
+#syslog_encoding = "rfc5424+framing"
+# 0-23 (see https://datatracker.ietf.org/doc/html/rfc5424#section-6.2.1)
+#syslog_facility = 4
 
 [server]
 # listen address (host:port)
@@ -31,6 +39,13 @@
 #session_cookie = "idpd_session"
 # session cookie max age (in seconds)
 #session_cookie_max_age = "720h" # 30 days
+
+[mail]
+#address = "localhost:587"
+#user = "idpd"
+#password = ""
+#from_address = "idpd@example.org"
+#from_name = "IdPD"
 
 [database]
 # memory|sqlite|postgres
@@ -100,10 +115,11 @@ user.groups = ""
 group.name = "cn"
 group.members = "member"
 
-#[[userstore.static.user]]
+#[[userstore.static]]
+#subject = "subject"
 #password = "password"
 #groups = [ "group" ]
-#[userstore.static.user.profile]
+#[userstore.static.profile]
 #name = "name"
 #given_name = "given_name"
 #family_name = "family_name"
@@ -116,16 +132,16 @@ group.members = "member"
 #zoneinfo = "zoneinfo"
 #locale = "locale"
 #preferred_username = "preferred_username"
-#[userstore.static.user.address]
+#[userstore.static.address]
 #formatted = "formatted"
 #street = "street"
 #locality = "locality"
 #region = "region"
 #postal_code = "postal_code"
 #country = "country"
-#[userstore.static.user.phone]
+#[userstore.static.phone]
 #number = "number"
-#[userstore.static.user.email]
+#[userstore.static.email]
 #address = "address"
 
 [oauth2]

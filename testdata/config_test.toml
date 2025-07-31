@@ -15,6 +15,13 @@ public_url = "https://idpd.example.org"
 session_cookie = "idpd_session"
 session_cookie_max_age = "1h"
 
+[mail]
+address = "smtp.example.org:25"
+user = "mailuser"
+password = "mailpassword"
+from_address = "no-reply@example.org"
+from_name = "example.org"
+
 [database]
 type = "sqlite"
 
@@ -69,6 +76,7 @@ group.name = "cn"
 group.members = "member"
 
 [[userstore.static]]
+subject = "subject"
 password = "password"
 groups = [ "group" ]
 [userstore.static.profile]

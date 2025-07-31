@@ -40,6 +40,8 @@ type OAuth2AuthRequest struct {
 	Scopes        []string
 	State         string
 	Subject       string
+	Challenge     string
+	Remember      bool
 	Done          bool
 }
 

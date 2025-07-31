@@ -1,0 +1,70 @@
+/*
+ * Copyright 2025 Holger de Carne
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package server
+
+import (
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/pquerna/otp/totp"
+	"github.com/tdrn-org/idpd/internal/server/database"
+)
+
+type TOTPProvider struct {
+	database database.Driver
+	issuer   string
+	period   time.Duration
+	logger   *slog.Logger
+}
+
+func New(database database.Driver, issuer string, period time.Duration) *TOTPProvider {
+	logger := slog.With(slog.String("issuer", issuer))
+	return &TOTPProvider{
+		database: database,
+		issuer:   issuer,
+		period:   period,
+		logger:   logger,
+	}
+}
+
+func (p *TOTPProvider) RequestUserKey(subject string) error {
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      p.issuer,
+		AccountName: subject,
+		Period:      uint(p.period.Seconds()),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to generate TOTP key (cause: %w)", err)
+	}
+	// TOOD: Save secret with user
+	key.Secret()
+	return nil
+}
+
+func (p TOTPProvider) ValidateUserKey(subject string, code string) error {
+	return nil
+}
+
+func (p *TOTPProvider) ValidateCode(subject string, code string) error {
+	// TODO: Load user secret
+	secret := ""
+	if !totp.Validate(code, secret) {
+
+	}
+	return nil
+}

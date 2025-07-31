@@ -11,7 +11,7 @@ const config = {
 			strict: true
 	}),
 	prerender: {
-		entries: [ '/', '/user' ]
+		entries: [ '/', '/user', '/user/verify' ]
 	} }
 };
 

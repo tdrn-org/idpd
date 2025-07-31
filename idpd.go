@@ -34,6 +34,7 @@ import (
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/database"
+	"github.com/tdrn-org/idpd/internal/server/mail"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
 	"github.com/tdrn-org/idpd/oauth2client"
@@ -95,6 +96,7 @@ const sessionCookiePath = "/session"
 type Server struct {
 	httpServer      *httpserver.Instance
 	sessionCookie   *server.CookieHandler
+	mailer          *mail.Mailer
 	database        database.Driver
 	userStore       userstore.Backend
 	oauth2IssuerURL string
@@ -104,12 +106,16 @@ type Server struct {
 	stoppedWG       sync.WaitGroup
 }
 
-func (s *Server) Issuer() string {
+func (s *Server) OAuth2IssuerURL() string {
 	return s.oauth2IssuerURL
 }
 
-func (s *Server) AddClient(client *OAuth2Client) error {
-	return s.oauth2Provider.AddClient(client.oauth2Client())
+func (s *Server) AddOAuth2Client(client *OAuth2Client) error {
+	return s.oauth2Provider.AddClient(&server.OAuth2Client{
+		ID:           client.ID,
+		Secret:       client.Secret,
+		RedirectURLs: client.RedirectURLs,
+	})
 }
 
 func (s *Server) Shutdown(ctx context.Context) {
@@ -152,10 +158,11 @@ func (s *Server) shutdown(ctx context.Context) error {
 func (s *Server) initAndStart(config *Config) error {
 	inits := []func(*Config) error{
 		s.initHttpServer,
+		s.initMailer,
 		s.initDatabase,
 		s.initUserStore,
-		s.initProvider,
-		s.initAuthFlow,
+		s.initOAuth2Provider,
+		s.initOAuth2AuthFlow,
 		s.startServer,
 	}
 	for _, init := range inits {
@@ -182,7 +189,16 @@ func (s *Server) initHttpServer(config *Config) error {
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	config.Server.Address = httpServer.ListenerAddr()
-	s.oauth2IssuerURL = config.OAuth2IssuerURL()
+	s.oauth2IssuerURL = config.oauth2IssuerURL()
+	return nil
+}
+
+func (s *Server) initMailer(config *Config) error {
+	mailer, err := config.toMailConfig().NewMailer()
+	if err != nil {
+		return err
+	}
+	s.mailer = mailer
 	return nil
 }
 
@@ -225,13 +241,13 @@ func (s *Server) initUserStore(config *Config) error {
 	var err error
 	switch config.UserStore.Type {
 	case UserStoreTypeLDAP:
-		ldapConfig, err2 := config.ldapUserstoreConfig()
+		ldapConfig, err2 := config.toLDAPUserstoreConfig()
 		err = err2
 		if err == nil {
 			backend, err = userstore.NewLDAPBackend(ldapConfig, logger)
 		}
 	case UserStoreTypeStatic:
-		backend, err = userstore.NewStaticBackend(config.staticUsers(), logger)
+		backend, err = userstore.NewStaticBackend(config.toStaticUsers(), logger)
 	default:
 		err = fmt.Errorf("unrecognized user store type: '%s'", config.UserStore.Type)
 	}
@@ -242,7 +258,7 @@ func (s *Server) initUserStore(config *Config) error {
 	return nil
 }
 
-func (s *Server) initProvider(config *Config) error {
+func (s *Server) initOAuth2Provider(config *Config) error {
 	logger := slog.With(slog.String("issuer", s.oauth2IssuerURL))
 	opOpts := make([]op.Option, 0, 2)
 	opOpts = append(opOpts, op.WithLogger(logger))
@@ -250,13 +266,13 @@ func (s *Server) initProvider(config *Config) error {
 		opOpts = append(opOpts, op.WithAllowInsecure())
 	}
 	logger.Info("initializing OAuth2 provider")
-	providerConfig := config.oauth2ProviderConfig()
+	providerConfig := config.toOAuth2ProviderConfig()
 	provider, err := providerConfig.NewProvider(s.database, s.userStore, opOpts...)
 	if err != nil {
 		return err
 	}
-	for _, client := range config.oauth2Clients() {
-		err = provider.AddClient(client)
+	for _, client := range config.OAuth2.Clients {
+		err = provider.AddClient(client.toServerOAuth2Client())
 		if err != nil {
 			return err
 		}
@@ -275,7 +291,7 @@ func (s *Server) initProvider(config *Config) error {
 	return nil
 }
 
-func (s *Server) initAuthFlow(config *Config) error {
+func (s *Server) initOAuth2AuthFlow(config *Config) error {
 	authFlowConfig := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
 		BaseURL:      s.oauth2IssuerURL,
 		Issuer:       s.oauth2IssuerURL,
@@ -299,7 +315,7 @@ func (s *Server) startServer(config *Config) error {
 		web.Mount(s.httpServer)
 	} else {
 		s.httpServer.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
-			s.handleUserMock(w, r, config.Mock.Email, config.Mock.Password, config.Mock.Rembemer)
+			s.handleUserMock(w, r, config.Mock.Subject, config.Mock.Password, config.Mock.Rembemer)
 		})
 	}
 	s.httpServer.HandleFunc("/session", s.handleSession)
@@ -316,16 +332,20 @@ func (s *Server) startServer(config *Config) error {
 	}
 }
 
-func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, email string, password string, remember bool) {
+func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, subject string, password string, remember bool) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-	}
-	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, email, password, remember)
-	if errors.Is(err, userstore.ErrInvalidLogin) {
-		w.WriteHeader(http.StatusUnauthorized)
 		return
-	} else if err != nil {
+	}
+	verifyHandler := server.MockVerifyHandler()
+	_, err := s.oauth2Provider.Authenticate(r.Context(), id, subject, password, verifyHandler, remember)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	redirectURL, err := s.oauth2Provider.Verify(r.Context(), id, subject, verifyHandler, "")
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -363,42 +383,89 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		slog.Error("invalid authenticate session request")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	err := r.ParseForm()
+	id, subject, password, verification, remember, err := s.parseAuthenticateForm(r)
 	if err != nil {
-		slog.Error("failed to parse authenticate session request", slog.Any("err", err))
+		slog.Error("failed to process authenticate session request", slog.Any("err", err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	id := r.PostFormValue("id")
-	email := r.PostFormValue("email")
-	verification := r.PostFormValue("verification")
-	password := r.PostFormValue("password")
-	if id == "" || email == "" || password == "" || verification == "" {
-		slog.Error("incomplete authenticate session request", slog.String("id", id), slog.String("email", email), slog.String("verification", verification))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	remember, _ := strconv.ParseBool(r.PostFormValue("remember"))
-	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, email, password, remember)
-	if errors.Is(err, userstore.ErrInvalidLogin) {
-		slog.Warn("authenticate session failure", slog.String("id", id), slog.String("email", email))
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	} else if err != nil {
-		slog.Warn("authenticate session error", slog.String("id", id), slog.String("email", email), slog.Any("err", err))
+	verifyHandler := s.getVerifyHandler(verification)
+	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, subject, password, verifyHandler, remember)
+	if err != nil {
+		slog.Warn("authenticate session error", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
-func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
+	switch server.VerifyMethod(verification) {
+	case server.VerifyMethodEmail:
+		return server.EmailVerifyHandler(s.mailer, s.userStore)
+	case server.VerifyMethodTOTP:
+		return server.NoneVerifyHandler()
+	case server.VerifyMethodPasskey:
+		return server.NoneVerifyHandler()
+	case server.VerifyMethodWebAuthn:
+		return server.NoneVerifyHandler()
+	default:
+		return server.NoneVerifyHandler()
+	}
+}
 
+func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string, string, bool, error) {
+	if r.Method != http.MethodPost {
+		return "", "", "", "", false, fmt.Errorf("invalid authenticate session request")
+	}
+	err := r.ParseForm()
+	if err != nil {
+		return "", "", "", "", false, fmt.Errorf("failed to parse authenticate session request")
+	}
+	id := r.PostFormValue("id")
+	subject := r.PostFormValue("subject")
+	password := r.PostFormValue("password")
+	verification := r.PostFormValue("verification")
+	if id == "" || subject == "" || password == "" || verification == "" {
+		return "", "", "", "", false, fmt.Errorf("incomplete authenticate session request (id='%s', subject='%s', verification='%s')", id, subject, verification)
+	}
+	remember, _ := strconv.ParseBool(r.PostFormValue("remember"))
+	return id, subject, password, verification, remember, nil
+}
+
+func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
+	id, subject, verification, response, err := s.parseVerifyForm(r)
+	if err != nil {
+		slog.Error("failed to process verify session request", slog.Any("err", err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	verifyHandler := s.getVerifyHandler(verification)
+	redirectURL, err := s.oauth2Provider.Verify(r.Context(), id, subject, verifyHandler, response)
+	if err != nil {
+		slog.Warn("verify session failure", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, redirectURL, http.StatusFound)
+}
+
+func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, string, error) {
+	if r.Method != http.MethodPost {
+		return "", "", "", "", fmt.Errorf("invalid verify session request")
+	}
+	err := r.ParseForm()
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("failed to parse verify session request")
+	}
+	id := r.PostFormValue("id")
+	subject := r.PostFormValue("subject")
+	verification := r.PostFormValue("verification")
+	response := r.PostFormValue("response")
+	if id == "" || subject == "" || verification == "" || response == "" {
+		return "", "", "", "", fmt.Errorf("incomplete verify session request (id='%s', subject='%s', verification='%s')", id, subject, verification)
+	}
+	return id, subject, verification, response, nil
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {

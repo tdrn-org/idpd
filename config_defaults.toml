@@ -4,6 +4,10 @@ target = "stdout"
 color = -1
 file_name = "/var/log/idpd/idpd.log"
 file_size_limit = 0
+syslog_network = "tcp"
+syslog_address = "localhost:601"
+syslog_encoding = "rfc5424"
+syslog_facility = 4
 
 [server]
 address = "localhost:9123"
@@ -14,6 +18,13 @@ key_file = ""
 public_url = ""
 session_cookie = "idpd_session"
 session_cookie_max_age = "720h"
+
+[mail]
+address = "localhost:587"
+user = "idpd"
+password = ""
+from_address = "idpd@example.org"
+from_name = "IdPD"
 
 [database]
 type = "memory"
@@ -68,10 +79,11 @@ user.groups = ""
 group.name = "cn"
 group.members = "member"
 
-#[[userstore.static.user]]
+#[[userstore.static]]
+#subject = "subject"
 #password = "password"
 #groups = [ "group" ]
-#[userstore.static.user.profile]
+#[userstore.static.profile]
 #name = "name"
 #given_name = "given_name"
 #family_name = "family_name"
@@ -84,16 +96,16 @@ group.members = "member"
 #zoneinfo = "zoneinfo"
 #locale = "locale"
 #preferred_username = "preferred_username"
-#[userstore.static.user.address]
+#[userstore.static.address]
 #formatted = "formatted"
 #street = "street"
 #locality = "locality"
 #region = "region"
 #postal_code = "postal_code"
 #country = "country"
-#[userstore.static.user.phone]
+#[userstore.static.phone]
 #number = "number"
-#[userstore.static.user.email]
+#[userstore.static.email]
 #address = "address"
 
 [oauth2]

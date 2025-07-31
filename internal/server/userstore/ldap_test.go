@@ -49,10 +49,10 @@ func TestLDAPBackend(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, backend)
 
-	user, err := backend.LookupUserByEmail("user0@example.org")
+	user0, err := backend.LookupUser("user0")
 	require.NoError(t, err)
-	require.NotNil(t, user)
+	require.NotNil(t, user0)
 
-	err = backend.CheckPassword("user0@example.org", "user0secret")
+	err = backend.CheckPassword(user0.Subject, "user0secret")
 	require.NoError(t, err)
 }

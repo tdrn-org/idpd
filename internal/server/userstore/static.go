@@ -27,6 +27,7 @@ import (
 var StaticUpdateTime time.Time = time.Now()
 
 type StaticUser struct {
+	Subject  string
 	Password string
 	Profile  StaticUserProfile
 	Address  StaticUserAddress
@@ -70,6 +71,7 @@ type StaticUserEmail struct {
 func (user *StaticUser) toUser() *User {
 	profileLocale, _ := language.Parse(user.Profile.Locale)
 	return &User{
+		Subject: user.Subject,
 		Profile: UserProfile{
 			Name:              user.Profile.Name,
 			GivenName:         user.Profile.GivenName,
@@ -105,44 +107,52 @@ func (user *StaticUser) toUser() *User {
 
 func NewStaticBackend(users []StaticUser, logger *slog.Logger) (Backend, error) {
 	logger.Debug("creating static user store")
+	userMap := make(map[string]StaticUser, len(users))
+	for _, user := range users {
+		_, exists := userMap[user.Subject]
+		if !exists {
+			userMap[user.Subject] = user
+		} else {
+			logger.Warn("duplicate static user entry", slog.String("subject", user.Subject))
+		}
+	}
 	backend := &staticBackend{
-		users:  users,
+		users:  userMap,
 		logger: logger,
 	}
 	return backend, nil
 }
 
 type staticBackend struct {
-	users  []StaticUser
+	users  map[string]StaticUser
 	logger *slog.Logger
 }
 
-func (backend *staticBackend) LookupUserByEmail(email string) (*User, error) {
-	backend.logger.Debug("looking up user by email address", slog.String("email", email))
-	user, err := backend.lookupUserByEmail(email)
+func (backend *staticBackend) LookupUser(subject string) (*User, error) {
+	backend.logger.Debug("looking up user", slog.String("subject", subject))
+	user, err := backend.lookupUser(subject)
 	if err != nil {
 		return nil, err
 	}
 	return user.toUser(), nil
 }
 
-func (backend *staticBackend) lookupUserByEmail(email string) (*StaticUser, error) {
-	for _, user := range backend.users {
-		if user.Email.Address == email {
-			return &user, nil
-		}
+func (backend *staticBackend) lookupUser(subject string) (*StaticUser, error) {
+	user, exists := backend.users[subject]
+	if !exists {
+		return nil, fmt.Errorf("%w (subject: %s)", ErrUserNotFound, subject)
 	}
-	return nil, fmt.Errorf("%w (address: %s)", ErrUserNotFound, email)
+	return &user, nil
 }
 
-func (backend *staticBackend) CheckPassword(email string, password string) error {
-	backend.logger.Debug("checking user password", slog.String("email", email))
-	user, err := backend.lookupUserByEmail(email)
+func (backend *staticBackend) CheckPassword(subject string, password string) error {
+	backend.logger.Debug("checking user password", slog.String("subject", subject))
+	user, err := backend.lookupUser(subject)
 	if err != nil {
 		return err
 	}
 	if user.Password != password {
-		return fmt.Errorf("%w (email: %s)", ErrIncorrectPassword, email)
+		return fmt.Errorf("%w (subject: %s)", ErrIncorrectPassword, subject)
 	}
 	return nil
 }

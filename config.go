@@ -28,6 +28,7 @@ import (
 	"github.com/go-ldap/ldap/v3"
 	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd/internal/server"
+	"github.com/tdrn-org/idpd/internal/server/mail"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 )
 
@@ -35,11 +36,15 @@ const DefaultConfig string = "/etc/idpd/idpd.toml"
 
 type Config struct {
 	Logging struct {
-		Level         string `toml:"level"`
-		Target        string `toml:"target"`
-		Color         int    `toml:"color"`
-		FileName      string `toml:"file_name"`
-		FileSizeLimit int64  `toml:"file_size_limit"`
+		Level          string `toml:"level"`
+		Target         string `toml:"target"`
+		Color          int    `toml:"color"`
+		FileName       string `toml:"file_name"`
+		FileSizeLimit  int64  `toml:"file_size_limit"`
+		SyslogNetwork  string `toml:"syslog_network"`
+		SyslogAddress  string `toml:"syslog_address"`
+		SyslogEncoding string `toml:"syslog_encoding"`
+		SyslogFacility int    `toml:"syslog_facility"`
 	} `toml:"logging"`
 	Server struct {
 		Address             string         `toml:"address"`
@@ -51,6 +56,13 @@ type Config struct {
 		SessionCookie       string         `toml:"session_cookie"`
 		SessionCookieMaxAge DurationSpec   `toml:"session_cookie_max_age"`
 	} `toml:"server"`
+	Mail struct {
+		Address     string `toml:"address"`
+		User        string `toml:"user"`
+		Password    string `toml:"password"`
+		FromAddress string `toml:"from_address"`
+		FromName    string `toml:"from_name"`
+	} `toml:"mail"`
 	Database struct {
 		Type   DatabaseType `toml:"type"`
 		Memory struct {
@@ -117,6 +129,7 @@ type Config struct {
 			} `toml:"custom_mapping"`
 		} `toml:"ldap"`
 		Static []struct {
+			Subject  string `toml:"subject"`
 			Password string `toml:"password"`
 			Profile  struct {
 				Name              string `toml:"name"`
@@ -158,7 +171,7 @@ type Config struct {
 	} `toml:"oauth2"`
 	Mock struct {
 		Enabled  bool   `toml:"enabled"`
-		Email    string `toml:"email"`
+		Subject  string `toml:"subject"`
 		Password string `toml:"password"`
 		Rembemer bool   `toml:"remember"`
 	} `toml:"mock"`
@@ -170,11 +183,189 @@ type OAuth2Client struct {
 	RedirectURLs []string `toml:"redirect_urls"`
 }
 
-func (client *OAuth2Client) oauth2Client() *server.OAuth2Client {
+func (c *OAuth2Client) toServerOAuth2Client() *server.OAuth2Client {
 	return &server.OAuth2Client{
-		ID:           client.ID,
-		Secret:       client.Secret,
-		RedirectURLs: client.RedirectURLs,
+		ID:           c.ID,
+		Secret:       c.Secret,
+		RedirectURLs: c.RedirectURLs,
+	}
+}
+
+//go:embed config_defaults.toml
+var configDefaultsData string
+
+func LoadConfig(path string, strict bool) (*Config, error) {
+	slog.Info("loading config", slog.String("path", path))
+	config := &Config{}
+	_, err := toml.Decode(configDefaultsData, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode config defaults (cause: %w)", err)
+	}
+	meta, err := toml.DecodeFile(path, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode config '%s' (cause: %w)", path, err)
+	}
+	strictViolation := false
+	for _, key := range meta.Undecoded() {
+		strictViolation = true
+		slog.Warn("unexpected configuration key", slog.String("path", path), slog.Any("key", key))
+	}
+	if strict && strictViolation {
+		return nil, fmt.Errorf("config contains unexpected keys")
+	}
+	return config, nil
+}
+
+func (c *Config) toLogConfig() *log.Config {
+	return &log.Config{
+		Level:          c.Logging.Level,
+		AddSource:      false,
+		Target:         log.Target(c.Logging.Target),
+		Color:          log.Color(c.Logging.Color),
+		FileName:       c.Logging.FileName,
+		FileSizeLimit:  c.Logging.FileSizeLimit,
+		SyslogNetwork:  c.Logging.SyslogNetwork,
+		SyslogAddress:  c.Logging.SyslogAddress,
+		SyslogEncoding: c.Logging.SyslogEncoding,
+		SyslogFacility: c.Logging.SyslogFacility,
+	}
+}
+
+func (c *Config) toMailConfig() *mail.MailConfig {
+	return &mail.MailConfig{
+		Address:     c.Mail.Address,
+		User:        c.Mail.User,
+		Password:    c.Mail.Password,
+		FromAddress: c.Mail.FromAddress,
+		FromName:    c.Mail.FromName,
+	}
+}
+
+func (c *Config) toLDAPUserstoreConfig() (*userstore.LDAPConfig, error) {
+	var mapping *userstore.LDAPAttributeMapping
+	switch c.UserStore.LDAP.Mapping {
+	case "active_directory":
+		mapping = userstore.LDAPActiveDirectoryMapping()
+	case "openldap":
+		mapping = userstore.LDAPOpenLDAPMapping()
+	case "custom":
+		mapping = &userstore.LDAPAttributeMapping{}
+		mapping.User.Profile.Name = c.UserStore.LDAP.CustomMapping.User.Profile.Name
+		mapping.User.Profile.GivenName = c.UserStore.LDAP.CustomMapping.User.Profile.GivenName
+		mapping.User.Profile.FamilyName = c.UserStore.LDAP.CustomMapping.User.Profile.FamilyName
+		mapping.User.Profile.MiddleName = c.UserStore.LDAP.CustomMapping.User.Profile.MiddleName
+		mapping.User.Profile.Nickname = c.UserStore.LDAP.CustomMapping.User.Profile.Nickname
+		mapping.User.Profile.Profile = c.UserStore.LDAP.CustomMapping.User.Profile.Profile
+		mapping.User.Profile.Picture = c.UserStore.LDAP.CustomMapping.User.Profile.Picture
+		mapping.User.Profile.Website = c.UserStore.LDAP.CustomMapping.User.Profile.Website
+		mapping.User.Profile.Birthdate = c.UserStore.LDAP.CustomMapping.User.Profile.Birthdate
+		mapping.User.Profile.Zoneinfo = c.UserStore.LDAP.CustomMapping.User.Profile.Zoneinfo
+		mapping.User.Profile.Locale = c.UserStore.LDAP.CustomMapping.User.Profile.Locale
+		mapping.User.Profile.PreferredUsername = c.UserStore.LDAP.CustomMapping.User.Profile.PreferredUsername
+		mapping.User.Profile.UpdatedAt = c.UserStore.LDAP.CustomMapping.User.Profile.UpdatedAt
+		mapping.User.Address.Formatted = c.UserStore.LDAP.CustomMapping.User.Address.Formatted
+		mapping.User.Address.Street = c.UserStore.LDAP.CustomMapping.User.Address.Street
+		mapping.User.Address.Locality = c.UserStore.LDAP.CustomMapping.User.Address.Locality
+		mapping.User.Address.Region = c.UserStore.LDAP.CustomMapping.User.Address.Region
+		mapping.User.Address.PostalCode = c.UserStore.LDAP.CustomMapping.User.Address.PostalCode
+		mapping.User.Address.Country = c.UserStore.LDAP.CustomMapping.User.Address.Country
+		mapping.User.Phone.Number = c.UserStore.LDAP.CustomMapping.User.Phone.Number
+		mapping.User.Email.Address = c.UserStore.LDAP.CustomMapping.User.Email.Address
+		mapping.User.Groups = c.UserStore.LDAP.CustomMapping.User.Groups
+		mapping.Group.Name = c.UserStore.LDAP.CustomMapping.Group.Name
+		mapping.Group.Members = c.UserStore.LDAP.CustomMapping.Group.Members
+	default:
+		return nil, fmt.Errorf("unrecognized LDAP mapping: '%s'", c.UserStore.LDAP.Mapping)
+	}
+	err := mapping.Validate()
+	if err != nil {
+		return nil, err
+	}
+	ldapURLs := make([]string, 0, len(c.UserStore.LDAP.URLs))
+	for _, url := range c.UserStore.LDAP.URLs {
+		ldapURLs = append(ldapURLs, url.String())
+	}
+	ldapConfig := &userstore.LDAPConfig{
+		URLs:         ldapURLs,
+		BindDN:       c.UserStore.LDAP.BindDN,
+		BindPassword: c.UserStore.LDAP.BindPassword,
+		UserSearch: userstore.LDAPSearchConfig{
+			BaseDN:       c.UserStore.LDAP.UserBaseDN,
+			Scope:        ldap.ScopeWholeSubtree,
+			DerefAliases: ldap.NeverDerefAliases,
+			Filter:       c.UserStore.LDAP.UserFilter,
+		},
+		GroupSearch: userstore.LDAPSearchConfig{
+			BaseDN:       c.UserStore.LDAP.GroupBaseDN,
+			Scope:        ldap.ScopeWholeSubtree,
+			DerefAliases: ldap.NeverDerefAliases,
+			Filter:       c.UserStore.LDAP.GroupFilter,
+		},
+		Mapping: mapping,
+	}
+	return ldapConfig, nil
+}
+
+func (c *Config) toStaticUsers() []userstore.StaticUser {
+	users := make([]userstore.StaticUser, 0, len(c.UserStore.Static))
+	for _, static := range c.UserStore.Static {
+		users = append(users, userstore.StaticUser{
+			Subject:  static.Subject,
+			Password: static.Password,
+			Groups:   static.Groups,
+			Profile: userstore.StaticUserProfile{
+				Name:              static.Profile.Name,
+				GivenName:         static.Profile.GivenName,
+				FamilyName:        static.Profile.FamilyName,
+				MiddleName:        static.Profile.MiddleName,
+				Nickname:          static.Profile.Nickname,
+				Profile:           static.Profile.Profile,
+				Picture:           static.Profile.Picture,
+				Website:           static.Profile.Website,
+				Birthdate:         static.Profile.Birthdate,
+				Zoneinfo:          static.Profile.Zoneinfo,
+				Locale:            static.Profile.Locale,
+				PreferredUsername: static.Profile.PreferredUsername,
+			},
+			Address: userstore.StaticUserAddress{
+				Formatted:  static.Address.Formatted,
+				Street:     static.Address.Street,
+				Locality:   static.Address.Locality,
+				Region:     static.Address.Region,
+				PostalCode: static.Address.PostalCode,
+				Country:    static.Address.Country,
+			},
+			Phone: userstore.StaticUserPhone{
+				Number: static.Phone.Number,
+			},
+			Email: userstore.StaticUserEmail{
+				Address: static.Email.Address,
+			},
+		})
+	}
+	return users
+}
+
+func (c *Config) oauth2IssuerURL() string {
+	issuerURL := c.Server.PublicURL.String()
+	if issuerURL == "" {
+		issuerURL = string(c.Server.Protocol) + "://" + c.Server.Address
+	}
+	return issuerURL
+}
+
+func (c *Config) toOAuth2ProviderConfig() *server.OAuth2ProviderConfig {
+	issuerURL := c.oauth2IssuerURL()
+	defaultLogoutRedirectURL := c.OAuth2.DefaultLogoutRedirectURL
+	if defaultLogoutRedirectURL == "" {
+		defaultLogoutRedirectURL = issuerURL
+	}
+	return &server.OAuth2ProviderConfig{
+		Issuer:                   issuerURL,
+		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
+		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OAuth2.SigningKeyAlgorithm),
+		SigningKeyLifetime:       c.OAuth2.SigningKeyLifetime.Duration,
+		SigningKeyExpiry:         c.OAuth2.SigningKeyExpiry.Duration,
 	}
 }
 
@@ -394,175 +585,4 @@ func (url *URLSpec) UnmarshalTOML(value any) error {
 	}
 	url.URL = *parsedURL
 	return nil
-}
-
-//go:embed config_defaults.toml
-var configDefaultsData string
-
-func LoadConfig(path string, strict bool) (*Config, error) {
-	slog.Info("loading config", slog.String("path", path))
-	config := &Config{}
-	_, err := toml.Decode(configDefaultsData, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode config defaults (cause: %w)", err)
-	}
-	meta, err := toml.DecodeFile(path, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode config '%s' (cause: %w)", path, err)
-	}
-	strictViolation := false
-	for _, key := range meta.Undecoded() {
-		strictViolation = true
-		slog.Warn("unexpected configuration key", slog.String("path", path), slog.Any("key", key))
-	}
-	if strict && strictViolation {
-		return nil, fmt.Errorf("config contains unexpected keys")
-	}
-	return config, nil
-}
-
-func (c *Config) logConfig() *log.Config {
-	return &log.Config{
-		Level:         c.Logging.Level,
-		AddSource:     false,
-		Target:        log.Target(c.Logging.Target),
-		Color:         log.Color(c.Logging.Color),
-		FileName:      c.Logging.FileName,
-		FileSizeLimit: c.Logging.FileSizeLimit,
-	}
-}
-
-func (c *Config) ldapUserstoreConfig() (*userstore.LDAPConfig, error) {
-	var mapping *userstore.LDAPAttributeMapping
-	switch c.UserStore.LDAP.Mapping {
-	case "active_directory":
-		mapping = userstore.LDAPActiveDirectoryMapping()
-	case "openldap":
-		mapping = userstore.LDAPOpenLDAPMapping()
-	case "custom":
-		mapping = &userstore.LDAPAttributeMapping{}
-		mapping.User.Profile.Name = c.UserStore.LDAP.CustomMapping.User.Profile.Name
-		mapping.User.Profile.GivenName = c.UserStore.LDAP.CustomMapping.User.Profile.GivenName
-		mapping.User.Profile.FamilyName = c.UserStore.LDAP.CustomMapping.User.Profile.FamilyName
-		mapping.User.Profile.MiddleName = c.UserStore.LDAP.CustomMapping.User.Profile.MiddleName
-		mapping.User.Profile.Nickname = c.UserStore.LDAP.CustomMapping.User.Profile.Nickname
-		mapping.User.Profile.Profile = c.UserStore.LDAP.CustomMapping.User.Profile.Profile
-		mapping.User.Profile.Picture = c.UserStore.LDAP.CustomMapping.User.Profile.Picture
-		mapping.User.Profile.Website = c.UserStore.LDAP.CustomMapping.User.Profile.Website
-		mapping.User.Profile.Birthdate = c.UserStore.LDAP.CustomMapping.User.Profile.Birthdate
-		mapping.User.Profile.Zoneinfo = c.UserStore.LDAP.CustomMapping.User.Profile.Zoneinfo
-		mapping.User.Profile.Locale = c.UserStore.LDAP.CustomMapping.User.Profile.Locale
-		mapping.User.Profile.PreferredUsername = c.UserStore.LDAP.CustomMapping.User.Profile.PreferredUsername
-		mapping.User.Profile.UpdatedAt = c.UserStore.LDAP.CustomMapping.User.Profile.UpdatedAt
-		mapping.User.Address.Formatted = c.UserStore.LDAP.CustomMapping.User.Address.Formatted
-		mapping.User.Address.Street = c.UserStore.LDAP.CustomMapping.User.Address.Street
-		mapping.User.Address.Locality = c.UserStore.LDAP.CustomMapping.User.Address.Locality
-		mapping.User.Address.Region = c.UserStore.LDAP.CustomMapping.User.Address.Region
-		mapping.User.Address.PostalCode = c.UserStore.LDAP.CustomMapping.User.Address.PostalCode
-		mapping.User.Address.Country = c.UserStore.LDAP.CustomMapping.User.Address.Country
-		mapping.User.Phone.Number = c.UserStore.LDAP.CustomMapping.User.Phone.Number
-		mapping.User.Email.Address = c.UserStore.LDAP.CustomMapping.User.Email.Address
-		mapping.User.Groups = c.UserStore.LDAP.CustomMapping.User.Groups
-		mapping.Group.Name = c.UserStore.LDAP.CustomMapping.Group.Name
-		mapping.Group.Members = c.UserStore.LDAP.CustomMapping.Group.Members
-	default:
-		return nil, fmt.Errorf("unrecognized LDAP mapping: '%s'", c.UserStore.LDAP.Mapping)
-	}
-	err := mapping.Validate()
-	if err != nil {
-		return nil, err
-	}
-	ldapURLs := make([]string, 0, len(c.UserStore.LDAP.URLs))
-	for _, url := range c.UserStore.LDAP.URLs {
-		ldapURLs = append(ldapURLs, url.String())
-	}
-	ldapConfig := &userstore.LDAPConfig{
-		URLs:         ldapURLs,
-		BindDN:       c.UserStore.LDAP.BindDN,
-		BindPassword: c.UserStore.LDAP.BindPassword,
-		UserSearch: userstore.LDAPSearchConfig{
-			BaseDN:       c.UserStore.LDAP.UserBaseDN,
-			Scope:        ldap.ScopeWholeSubtree,
-			DerefAliases: ldap.NeverDerefAliases,
-			Filter:       c.UserStore.LDAP.UserFilter,
-		},
-		GroupSearch: userstore.LDAPSearchConfig{
-			BaseDN:       c.UserStore.LDAP.GroupBaseDN,
-			Scope:        ldap.ScopeWholeSubtree,
-			DerefAliases: ldap.NeverDerefAliases,
-			Filter:       c.UserStore.LDAP.GroupFilter,
-		},
-		Mapping: mapping,
-	}
-	return ldapConfig, nil
-}
-
-func (c *Config) staticUsers() []userstore.StaticUser {
-	users := make([]userstore.StaticUser, 0, len(c.UserStore.Static))
-	for _, static := range c.UserStore.Static {
-		users = append(users, userstore.StaticUser{
-			Password: static.Password,
-			Groups:   static.Groups,
-			Profile: userstore.StaticUserProfile{
-				Name:              static.Profile.Name,
-				GivenName:         static.Profile.GivenName,
-				FamilyName:        static.Profile.FamilyName,
-				MiddleName:        static.Profile.MiddleName,
-				Nickname:          static.Profile.Nickname,
-				Profile:           static.Profile.Profile,
-				Picture:           static.Profile.Picture,
-				Website:           static.Profile.Website,
-				Birthdate:         static.Profile.Birthdate,
-				Zoneinfo:          static.Profile.Zoneinfo,
-				Locale:            static.Profile.Locale,
-				PreferredUsername: static.Profile.PreferredUsername,
-			},
-			Address: userstore.StaticUserAddress{
-				Formatted:  static.Address.Formatted,
-				Street:     static.Address.Street,
-				Locality:   static.Address.Locality,
-				Region:     static.Address.Region,
-				PostalCode: static.Address.PostalCode,
-				Country:    static.Address.Country,
-			},
-			Phone: userstore.StaticUserPhone{
-				Number: static.Phone.Number,
-			},
-			Email: userstore.StaticUserEmail{
-				Address: static.Email.Address,
-			},
-		})
-	}
-	return users
-}
-
-func (c *Config) OAuth2IssuerURL() string {
-	issuerURL := c.Server.PublicURL.String()
-	if issuerURL == "" {
-		issuerURL = string(c.Server.Protocol) + "://" + c.Server.Address
-	}
-	return issuerURL
-}
-
-func (c *Config) oauth2ProviderConfig() *server.OAuth2ProviderConfig {
-	issuerURL := c.OAuth2IssuerURL()
-	defaultLogoutRedirectURL := c.OAuth2.DefaultLogoutRedirectURL
-	if defaultLogoutRedirectURL == "" {
-		defaultLogoutRedirectURL = issuerURL
-	}
-	return &server.OAuth2ProviderConfig{
-		Issuer:                   issuerURL,
-		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
-		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OAuth2.SigningKeyAlgorithm),
-		SigningKeyLifetime:       c.OAuth2.SigningKeyLifetime.Duration,
-		SigningKeyExpiry:         c.OAuth2.SigningKeyExpiry.Duration,
-	}
-}
-
-func (c *Config) oauth2Clients() []*server.OAuth2Client {
-	oauth2Clients := make([]*server.OAuth2Client, 0, len(c.OAuth2.Clients))
-	for _, client := range c.OAuth2.Clients {
-		oauth2Clients = append(oauth2Clients, client.oauth2Client())
-	}
-	return oauth2Clients
 }
