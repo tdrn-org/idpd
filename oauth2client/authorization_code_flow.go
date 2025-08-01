@@ -102,9 +102,7 @@ type AuthorizationCodeFlow[C oidc.IDClaims] struct {
 	redirectURL          *url.URL
 	providerFunc         func() (rp.RelyingParty, error)
 	codeExchangeCallback CodeExchangeCallback[C]
-	client               *http.Client
 	logger               *slog.Logger
-	mutex                sync.RWMutex
 }
 
 func (flow *AuthorizationCodeFlow[C]) Mount(handler httpserver.Handler) *AuthorizationCodeFlow[C] {
@@ -134,21 +132,7 @@ func (flow *AuthorizationCodeFlow[C]) redirectHandler(w http.ResponseWriter, r *
 }
 
 func (flow *AuthorizationCodeFlow[C]) codeExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[C], state string, _ rp.RelyingParty) {
-	flow.updateClient(r.Context(), tokens.Token)
-	if flow.codeExchangeCallback != nil {
-		flow.codeExchangeCallback(w, r, tokens, state, flow)
-	}
-}
-
-func (flow *AuthorizationCodeFlow[C]) updateClient(ctx context.Context, token *oauth2.Token) error {
-	provider, err := flow.providerFunc()
-	if err != nil {
-		return err
-	}
-	flow.mutex.Lock()
-	defer flow.mutex.Unlock()
-	flow.client = provider.OAuthConfig().Client(ctx, token)
-	return nil
+	flow.codeExchangeCallback(w, r, tokens, state, flow)
 }
 
 func (flow *AuthorizationCodeFlow[C]) Authenticate() error {
@@ -168,13 +152,12 @@ func (flow *AuthorizationCodeFlow[C]) Authenticate() error {
 	}
 }
 
-func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context) (*http.Client, error) {
-	flow.mutex.RLock()
-	defer flow.mutex.RUnlock()
-	if flow.client == nil {
-		return nil, ErrNotAuthenticated
+func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context, token *oauth2.Token) (*http.Client, error) {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return nil, err
 	}
-	return flow.client, nil
+	return provider.OAuthConfig().Client(ctx, token), nil
 }
 
 func (flow *AuthorizationCodeFlow[C]) GetEndSessionEndpoint() string {
@@ -201,12 +184,8 @@ func (flow *AuthorizationCodeFlow[C]) UserinfoEndpoint() string {
 	return provider.UserinfoEndpoint()
 }
 
-func (flow *AuthorizationCodeFlow[C]) GetUserInfo(ctx context.Context) (*oidc.UserInfo, error) {
+func (flow *AuthorizationCodeFlow[C]) GetUserInfo(client *http.Client, ctx context.Context) (*oidc.UserInfo, error) {
 	provider, err := flow.providerFunc()
-	if err != nil {
-		return nil, err
-	}
-	client, err := flow.Client(ctx)
 	if err != nil {
 		return nil, err
 	}

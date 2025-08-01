@@ -176,15 +176,15 @@ func (s *Server) initAndStart(config *Config) error {
 }
 
 func (s *Server) initHttpServer(config *Config) error {
-	issuerURL, err := url.Parse(config.oauth2IssuerURL())
-	if err != nil {
-		return fmt.Errorf("invalid issuer URL '%s' (cause: %w)", config.oauth2IssuerURL(), err)
-	}
 	httpServer := &httpserver.Instance{
 		Addr:      config.Server.Address,
 		AccessLog: config.Server.AccessLog,
 	}
-	err = httpServer.Listen()
+	err := httpServer.Listen()
+	if err != nil {
+		return err
+	}
+	issuerURL, err := config.oauth2IssuerURL(httpServer)
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,6 @@ func (s *Server) initHttpServer(config *Config) error {
 	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionCookieMaxAge.Seconds()))
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
-	config.Server.Address = httpServer.ListenerAddr()
 	s.oauth2IssuerURL = issuerURL
 	return nil
 }
@@ -271,7 +270,10 @@ func (s *Server) initOAuth2Provider(config *Config) error {
 		opOpts = append(opOpts, op.WithAllowInsecure())
 	}
 	logger.Info("initializing OAuth2 provider")
-	providerConfig := config.toOAuth2ProviderConfig()
+	providerConfig, err := config.toOAuth2ProviderConfig(s.httpServer)
+	if err != nil {
+		return err
+	}
 	provider, err := providerConfig.NewProvider(s.database, s.userStore, opOpts...)
 	if err != nil {
 		return err
@@ -285,7 +287,7 @@ func (s *Server) initOAuth2Provider(config *Config) error {
 	oauth2Client := &server.OAuth2Client{
 		ID:           uuid.NewString(),
 		Secret:       uuid.NewString(),
-		RedirectURLs: []string{providerConfig.Issuer + "/authorized"},
+		RedirectURLs: []string{providerConfig.IssuerURL.JoinPath("/authorized").String()},
 	}
 	err = provider.AddClient(oauth2Client)
 	if err != nil {
@@ -364,7 +366,12 @@ type UserInfo struct {
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	oidcUserInfo, err := s.authFLow.GetUserInfo(r.Context())
+	client, err := s.authFlowClient(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	oidcUserInfo, err := s.authFLow.GetUserInfo(client, r.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -472,7 +479,7 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
-	client, err := s.authFLow.Client(r.Context())
+	client, err := s.authFlowClient(r)
 	alert := AlertNone
 	if err == nil {
 		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())
@@ -512,12 +519,11 @@ func (s *Server) authFlowClient(r *http.Request) (*http.Client, error) {
 		return nil, err
 	}
 	ctx := r.Context()
-	// TODO: Handle persistent user session
-	_, err = s.database.SelectUserSession(ctx, sessionID)
+	session, err := s.database.SelectUserSession(ctx, sessionID)
 	if err != nil {
 		return nil, oauth2client.ErrNotAuthenticated
 	}
-	client, err := s.authFLow.Client(ctx)
+	client, err := s.authFLow.Client(ctx, session.OAuth2Token())
 	if err != nil {
 		return nil, err
 	}

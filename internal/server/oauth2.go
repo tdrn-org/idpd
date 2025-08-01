@@ -140,21 +140,17 @@ func (c *opClient) ClockSkew() time.Duration {
 }
 
 type OAuth2ProviderConfig struct {
-	Issuer                   string
-	DefaultLogoutRedirectURL string
+	IssuerURL                *url.URL
+	DefaultLogoutRedirectURL *url.URL
 	SigningKeyAlgorithm      jose.SignatureAlgorithm
 	SigningKeyLifetime       time.Duration
 	SigningKeyExpiry         time.Duration
 }
 
 func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
-	issuerURL, err := url.Parse(config.Issuer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse issuer '%s' (cause: %w)", config.Issuer, err)
-	}
-	logger := slog.With(slog.String("issuer", issuerURL.String()))
+	logger := slog.With(slog.String("issuer", config.IssuerURL.String()))
 	provider := &OAuth2Provider{
-		issuerURL:           issuerURL,
+		issuerURL:           config.IssuerURL,
 		driver:              driver,
 		backend:             backend,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
@@ -165,7 +161,7 @@ func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend 
 	}
 	opConfig := &op.Config{
 		CryptoKey:                sha256.Sum256([]byte(rand.Text())),
-		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURL,
+		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURL.String(),
 		CodeMethodS256:           true,
 		AuthMethodPost:           true,
 		AuthMethodPrivateKeyJWT:  true,
@@ -180,7 +176,7 @@ func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend 
 		BackChannelLogoutSupported:        false,
 		BackChannelLogoutSessionSupported: false,
 	}
-	opProvider, err := op.NewProvider(opConfig, provider, op.StaticIssuer(config.Issuer), opOpts...)
+	opProvider, err := op.NewProvider(opConfig, provider, op.StaticIssuer(config.IssuerURL.String()), opOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OAuth2 provider (cause: %w)", err)
 	}
@@ -280,7 +276,7 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 			return "", err
 		}
 		slog.Info("invalid OAuth2 user login", slog.String("subject", subject))
-		verifyHandler.Tainted()
+		verifyHandler.Taint()
 	}
 	err = p.driver.AuthenticateOAuth2AuthRequest(ctx, id, subject, verifyHandler.GenerateChallenge, remember)
 	if err != nil {

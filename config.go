@@ -27,6 +27,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-ldap/ldap/v3"
 	"github.com/tdrn-org/go-log"
+	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/mail"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
@@ -346,27 +347,40 @@ func (c *Config) toStaticUsers() []userstore.StaticUser {
 	return users
 }
 
-func (c *Config) oauth2IssuerURL() string {
-	issuerURL := c.Server.PublicURL.String()
-	if issuerURL == "" {
-		issuerURL = string(c.Server.Protocol) + "://" + c.Server.Address
+func (c *Config) oauth2IssuerURL(httpServer *httpserver.Instance) (*url.URL, error) {
+	rawIssuerURL := c.Server.PublicURL.String()
+	if rawIssuerURL == "" {
+		rawIssuerURL = string(c.Server.Protocol) + "://" + httpServer.ListenerAddr()
 	}
-	return issuerURL
+	issuerURL, err := url.Parse(rawIssuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid issuer URL '%s' (cause: %w)", rawIssuerURL, err)
+	}
+	return issuerURL, nil
 }
 
-func (c *Config) toOAuth2ProviderConfig() *server.OAuth2ProviderConfig {
-	issuerURL := c.oauth2IssuerURL()
-	defaultLogoutRedirectURL := c.OAuth2.DefaultLogoutRedirectURL
-	if defaultLogoutRedirectURL == "" {
+func (c *Config) toOAuth2ProviderConfig(httpServer *httpserver.Instance) (*server.OAuth2ProviderConfig, error) {
+	issuerURL, err := c.oauth2IssuerURL(httpServer)
+	if err != nil {
+		return nil, err
+	}
+	var defaultLogoutRedirectURL *url.URL
+	if c.OAuth2.DefaultLogoutRedirectURL != "" {
+		defaultLogoutRedirectURL, err = url.Parse(c.OAuth2.DefaultLogoutRedirectURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid default logout redirect URL '%s' (cause: %w)", c.OAuth2.DefaultLogoutRedirectURL, err)
+		}
+	} else {
 		defaultLogoutRedirectURL = issuerURL
 	}
-	return &server.OAuth2ProviderConfig{
-		Issuer:                   issuerURL,
+	oauth2ProviderConfig := &server.OAuth2ProviderConfig{
+		IssuerURL:                issuerURL,
 		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
 		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OAuth2.SigningKeyAlgorithm),
 		SigningKeyLifetime:       c.OAuth2.SigningKeyLifetime.Duration,
 		SigningKeyExpiry:         c.OAuth2.SigningKeyExpiry.Duration,
 	}
+	return oauth2ProviderConfig, nil
 }
 
 func notAStringErr(value any) error {

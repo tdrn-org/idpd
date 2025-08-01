@@ -25,7 +25,7 @@
 					>
 						Login
 					</h1>
-					<div class="space-y-4 md:space-y-6">
+					<div class="space-y-4 md:space-y-6 text-gray-500 dark:text-gray-300">
 						<p>Subject: {userInfo.subject}</p>
 						<p>Email: {userInfo.email}</p>
 					</div>

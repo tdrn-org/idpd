@@ -17,9 +17,7 @@
 package oauth2client
 
 import (
-	"context"
 	"errors"
-	"net/http"
 	"net/url"
 
 	"github.com/gorilla/securecookie"
@@ -28,11 +26,8 @@ import (
 
 var ErrNotAuthenticated = errors.New("not authenticated")
 
-type UserInfo map[string]interface{}
-
 type AuthorizationFlow interface {
 	Authenticate() error
-	Client(ctx context.Context) (*http.Client, error)
 }
 
 func newCookieHandler(url *url.URL) *httphelper.CookieHandler {

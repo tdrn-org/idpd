@@ -18,7 +18,6 @@ package oauth2client_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -55,7 +54,9 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	flowClient := &http.Client{
 		Jar: jar,
 	}
+	var httpClient *http.Client
 	flow, err := config.NewFlow(flowClient, context.Background(), func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
+		httpClient, _ = flow.Client(r.Context(), tokens.Token)
 		http.Redirect(w, r, clientBaseURL, http.StatusFound)
 	})
 	require.NoError(t, err)
@@ -66,13 +67,8 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	err = callbackServer.Serve()
 	require.NoError(t, err)
 	testFlow(t, flow)
-	httpClient, err := flow.Client(t.Context())
-	require.NoError(t, err)
-	rsp, err := httpClient.Get(flow.UserinfoEndpoint())
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rsp.StatusCode)
-	var userInfo oauth2client.UserInfo
-	err = json.NewDecoder(rsp.Body).Decode(&userInfo)
+	require.NotNil(t, httpClient)
+	userInfo, err := flow.GetUserInfo(httpClient, context.Background())
 	require.NoError(t, err)
 	fmt.Println(userInfo)
 	callbackServer.Shutdown(context.Background())
