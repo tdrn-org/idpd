@@ -14,22 +14,27 @@
 		<Alert />
 		{#await sessionUserInfo() then userInfo}
 			<div class="mb-6 flex items-center text-2xl font-semibold text-gray-900 dark:text-white">
-				<Fingerprint />&nbsp;Welcome {userInfo.given_name}
+				<Fingerprint />&nbsp;Welcome {userInfo.name}
 			</div>
 			<div
 				class="w-full rounded-lg bg-white shadow sm:max-w-md md:mt-0 xl:p-0 dark:border dark:border-gray-700 dark:bg-gray-800"
 			>
-				<div class="space-y-4 p-6 text-gray-900 sm:p-8 md:space-y-6 dark:text-white">
-					<p>Subject: {userInfo.sub}</p>
-					<p>Name: {userInfo.name}</p>
-					<p>Email: {userInfo.email}</p>
-					<p>Username: {userInfo.preferred_username}</p>
-				</div>
-				<div class="flex items-center justify-between">
-					<a
-						class="button w-full rounded-lg bg-gray-600 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-700 dark:focus:ring-gray-800"
-						href="/session/terminate">Sign out</a
+				<div class="space-y-4 p-6 sm:p-8 md:space-y-6">
+					<h1
+						class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white"
 					>
+						Login
+					</h1>
+					<div class="space-y-4 md:space-y-6">
+						<p>Subject: {userInfo.subject}</p>
+						<p>Email: {userInfo.email}</p>
+					</div>
+					<div class="flex items-center justify-between">
+						<a
+							class="button w-full rounded-lg bg-gray-600 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-700 dark:focus:ring-gray-800"
+							href="/session/terminate">Sign out</a
+						>
+					</div>
 				</div>
 			</div>
 		{:catch}

@@ -18,6 +18,7 @@ package oauth2client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -31,6 +32,8 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"golang.org/x/oauth2"
 )
+
+const clientGetFailure = "client Get operation failure (cause: %w)"
 
 type AuthorizationCodeFlowConfig[C oidc.IDClaims] struct {
 	BaseURL         string
@@ -196,6 +199,31 @@ func (flow *AuthorizationCodeFlow[C]) UserinfoEndpoint() string {
 		return ""
 	}
 	return provider.UserinfoEndpoint()
+}
+
+func (flow *AuthorizationCodeFlow[C]) GetUserInfo(ctx context.Context) (*oidc.UserInfo, error) {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return nil, err
+	}
+	client, err := flow.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	userInfoResponse, err := client.Get(provider.UserinfoEndpoint())
+	if err != nil {
+		return nil, fmt.Errorf(clientGetFailure, err)
+	}
+	if userInfoResponse.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("user info endpoint failure (status: %s)", userInfoResponse.Status)
+	}
+	defer userInfoResponse.Body.Close()
+	userInfo := &oidc.UserInfo{}
+	err = json.NewDecoder(userInfoResponse.Body).Decode(userInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode user info endpoint response (cause: %w)", err)
+	}
+	return userInfo, nil
 }
 
 func (flow *AuthorizationCodeFlow[C]) GetDeviceAuthorizationEndpoint() string {

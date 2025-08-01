@@ -18,9 +18,9 @@ package idpd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -357,19 +357,32 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, subject 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
+type UserInfo struct {
+	Name    string `json:"name"`
+	Subject string `json:"subject"`
+	Email   string `json:"email"`
+}
+
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	client, err := s.authFlowClient(r)
+	oidcUserInfo, err := s.authFLow.GetUserInfo(r.Context())
 	if err != nil {
-		slog.Warn("session not authenticated", slog.Any("err", err))
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	userInfoResponse, err := client.Get(s.authFLow.UserinfoEndpoint())
-	if err != nil || userInfoResponse.StatusCode != http.StatusOK {
+	name := oidcUserInfo.Name
+	if name == "" {
+		name = oidcUserInfo.Subject
+	}
+	userInfo := &UserInfo{
+		Name:    name,
+		Subject: oidcUserInfo.Subject,
+		Email:   oidcUserInfo.Email,
+	}
+	err = json.NewEncoder(w).Encode(userInfo)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	io.Copy(w, userInfoResponse.Body)
 }
 
 func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
@@ -461,7 +474,7 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
 	client, err := s.authFLow.Client(r.Context())
 	alert := AlertNone
-	if err != nil {
+	if err == nil {
 		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())
 		if err != nil || endSessionResponse.StatusCode != http.StatusOK {
 			alert = AlertLogoffFailure

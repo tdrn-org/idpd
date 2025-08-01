@@ -16,7 +16,6 @@ password = "password0"
 address = "user0@example.org"
 
 [oauth2]
-allow_insecure = true
 
 [[oauth2.client]]
 id = "authorization_code_flow"
