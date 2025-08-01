@@ -46,7 +46,7 @@ type VerifyHandler interface {
 	Method() VerifyMethod
 	Taint()
 	Tainted() bool
-	InitiateChallenge(ctx context.Context, subject string) (string, error)
+	GenerateChallenge(ctx context.Context, subject string) (string, error)
 	VerifyRepsonse(ctx context.Context, subject string, challenge string, response string) error
 }
 
@@ -68,7 +68,7 @@ func (*noneVerifyHandler) Tainted() bool {
 	return true
 }
 
-func (*noneVerifyHandler) InitiateChallenge(_ context.Context, _ string) (string, error) {
+func (*noneVerifyHandler) GenerateChallenge(_ context.Context, _ string) (string, error) {
 	return taintedChallenge, nil
 }
 
@@ -101,7 +101,7 @@ func (h *emailVerifyHandler) Tainted() bool {
 	return h.tainted
 }
 
-func (h *emailVerifyHandler) InitiateChallenge(_ context.Context, subject string) (string, error) {
+func (h *emailVerifyHandler) GenerateChallenge(_ context.Context, subject string) (string, error) {
 	if h.tainted {
 		return taintedChallenge, nil
 	}
@@ -159,7 +159,7 @@ func (*mockVerifyHandler) Tainted() bool {
 	return false
 }
 
-func (*mockVerifyHandler) InitiateChallenge(_ context.Context, _ string) (string, error) {
+func (*mockVerifyHandler) GenerateChallenge(_ context.Context, _ string) (string, error) {
 	return string(VerifyMethodNone), nil
 }
 

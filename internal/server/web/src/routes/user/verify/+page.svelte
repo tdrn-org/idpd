@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { Fingerprint } from '@lucide/svelte';
 
 	let id: string | null = '';
 	let subject: string | null = '';
@@ -25,8 +26,7 @@
 <section class="bg-gray-50 dark:bg-gray-900">
 	<div class="mx-auto flex flex-col items-center justify-center px-6 py-8 md:h-screen lg:py-0">
 		<div class="mb-6 flex items-center text-2xl font-semibold text-gray-900 dark:text-white">
-			<img class="mr-2 h-8 w-8" src="/img/login.svg" alt="logo" />
-			Login
+			<Fingerprint size={24} />&nbsp;Verify
 		</div>
 		<div
 			class="w-full rounded-lg bg-white shadow sm:max-w-md md:mt-0 xl:p-0 dark:border dark:border-gray-700 dark:bg-gray-800"
@@ -79,6 +79,12 @@
 						>Verifiy</button
 					>
 				</form>
+				<div class="flex items-center justify-between">
+					<a
+						class="button w-full rounded-lg bg-gray-600 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-700 dark:focus:ring-gray-800"
+						href="/">Cancel</a
+					>
+				</div>
 			</div>
 		</div>
 	</div>

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import Alert from '$lib/components/Alert.svelte';
 	import type { UserInfo } from '$lib/session';
+	import { Fingerprint } from '@lucide/svelte';
 	async function sessionUserInfo(): Promise<UserInfo> {
 		const response = await fetch(`/session`);
 		const userInfo: UserInfo = await response.json();
@@ -9,19 +11,25 @@
 
 <section class="bg-gray-50 dark:bg-gray-900">
 	<div class="mx-auto flex flex-col items-center justify-center px-6 py-8 md:h-screen lg:py-0">
+		<Alert />
 		{#await sessionUserInfo() then userInfo}
 			<div class="mb-6 flex items-center text-2xl font-semibold text-gray-900 dark:text-white">
-				<img class="mr-2 h-8 w-8" src="/img/login.svg" alt="logo" />
-				Welcome {userInfo.given_name}
+				<Fingerprint />&nbsp;Welcome {userInfo.given_name}
 			</div>
 			<div
 				class="w-full rounded-lg bg-white shadow sm:max-w-md md:mt-0 xl:p-0 dark:border dark:border-gray-700 dark:bg-gray-800"
 			>
-				<div class="space-y-4 p-6 sm:p-8 md:space-y-6 text-gray-900 dark:text-white">
+				<div class="space-y-4 p-6 text-gray-900 sm:p-8 md:space-y-6 dark:text-white">
 					<p>Subject: {userInfo.sub}</p>
 					<p>Name: {userInfo.name}</p>
 					<p>Email: {userInfo.email}</p>
 					<p>Username: {userInfo.preferred_username}</p>
+				</div>
+				<div class="flex items-center justify-between">
+					<a
+						class="button w-full rounded-lg bg-gray-600 px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-700 dark:focus:ring-gray-800"
+						href="/session/terminate">Sign out</a
+					>
 				</div>
 			</div>
 		{:catch}
@@ -29,7 +37,7 @@
 				href="/user"
 				class="mb-6 flex items-center text-2xl font-semibold text-gray-900 dark:text-white"
 			>
-				<img class="mr-2 h-64 w-64" src="/img/login.svg" alt="logo" />
+				<Fingerprint size={96} />
 			</a>
 		{/await}
 	</div>

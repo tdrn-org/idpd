@@ -43,7 +43,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	}
 	idpdServer.AddOAuth2Client(client)
 	config := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		Issuer:       idpdServer.OAuth2IssuerURL(),
+		Issuer:       idpdServer.OAuth2IssuerURL().String(),
 		ClientId:     client.ID,
 		ClientSecret: client.Secret,
 		BaseURL:      clientBaseURL,

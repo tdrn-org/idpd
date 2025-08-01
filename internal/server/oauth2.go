@@ -282,7 +282,7 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 		slog.Info("invalid OAuth2 user login", slog.String("subject", subject))
 		verifyHandler.Tainted()
 	}
-	err = p.driver.AuthenticateOAuth2AuthRequest(ctx, id, subject, verifyHandler.InitiateChallenge, remember)
+	err = p.driver.AuthenticateOAuth2AuthRequest(ctx, id, subject, verifyHandler.GenerateChallenge, remember)
 	if err != nil {
 		return "", fmt.Errorf("invalid OAuth2 auth request id: %s (cause: %w)", id, err)
 	}

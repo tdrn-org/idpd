@@ -23,6 +23,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -99,14 +100,14 @@ type Server struct {
 	mailer          *mail.Mailer
 	database        database.Driver
 	userStore       userstore.Backend
-	oauth2IssuerURL string
+	oauth2IssuerURL *url.URL
 	oauth2Provider  *server.OAuth2Provider
 	oauth2Client    *server.OAuth2Client
 	authFLow        *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
 	stoppedWG       sync.WaitGroup
 }
 
-func (s *Server) OAuth2IssuerURL() string {
+func (s *Server) OAuth2IssuerURL() *url.URL {
 	return s.oauth2IssuerURL
 }
 
@@ -175,11 +176,15 @@ func (s *Server) initAndStart(config *Config) error {
 }
 
 func (s *Server) initHttpServer(config *Config) error {
+	issuerURL, err := url.Parse(config.oauth2IssuerURL())
+	if err != nil {
+		return fmt.Errorf("invalid issuer URL '%s' (cause: %w)", config.oauth2IssuerURL(), err)
+	}
 	httpServer := &httpserver.Instance{
 		Addr:      config.Server.Address,
 		AccessLog: config.Server.AccessLog,
 	}
-	err := httpServer.Listen()
+	err = httpServer.Listen()
 	if err != nil {
 		return err
 	}
@@ -189,7 +194,7 @@ func (s *Server) initHttpServer(config *Config) error {
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	config.Server.Address = httpServer.ListenerAddr()
-	s.oauth2IssuerURL = config.oauth2IssuerURL()
+	s.oauth2IssuerURL = issuerURL
 	return nil
 }
 
@@ -259,7 +264,7 @@ func (s *Server) initUserStore(config *Config) error {
 }
 
 func (s *Server) initOAuth2Provider(config *Config) error {
-	logger := slog.With(slog.String("issuer", s.oauth2IssuerURL))
+	logger := slog.With(slog.String("issuer", s.oauth2IssuerURL.String()))
 	opOpts := make([]op.Option, 0, 2)
 	opOpts = append(opOpts, op.WithLogger(logger))
 	if config.Server.Protocol == ServerProtocolHttp {
@@ -293,8 +298,8 @@ func (s *Server) initOAuth2Provider(config *Config) error {
 
 func (s *Server) initOAuth2AuthFlow(config *Config) error {
 	authFlowConfig := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		BaseURL:      s.oauth2IssuerURL,
-		Issuer:       s.oauth2IssuerURL,
+		BaseURL:      s.oauth2IssuerURL.String(),
+		Issuer:       s.oauth2IssuerURL.String(),
 		ClientId:     s.oauth2Client.ID,
 		ClientSecret: s.oauth2Client.Secret,
 		Scopes:       []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
@@ -353,29 +358,14 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, subject 
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	sessionId, exists := s.sessionCookie.Get(r)
-	if !exists {
+	client, err := s.authFlowClient(r)
+	if err != nil {
+		slog.Warn("session not authenticated", slog.Any("err", err))
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	ctx := r.Context()
-	// TODO: Handle persistent user session
-	_, err := s.database.SelectUserSession(ctx, sessionId)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	httpClient, err := s.authFLow.Client(ctx)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	userInfoResponse, err := httpClient.Get(s.authFLow.UserinfoEndpoint())
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	if userInfoResponse.StatusCode != http.StatusOK {
+	userInfoResponse, err := client.Get(s.authFLow.UserinfoEndpoint())
+	if err != nil || userInfoResponse.StatusCode != http.StatusOK {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -386,14 +376,14 @@ func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Reques
 	id, subject, password, verification, remember, err := s.parseAuthenticateForm(r)
 	if err != nil {
 		slog.Error("failed to process authenticate session request", slog.Any("err", err))
-		w.WriteHeader(http.StatusBadRequest)
+		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
 	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, subject, password, verifyHandler, remember)
 	if err != nil {
 		slog.Warn("authenticate session error", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
-		w.WriteHeader(http.StatusInternalServerError)
+		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -437,14 +427,14 @@ func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
 	id, subject, verification, response, err := s.parseVerifyForm(r)
 	if err != nil {
 		slog.Error("failed to process verify session request", slog.Any("err", err))
-		w.WriteHeader(http.StatusBadRequest)
+		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
 	redirectURL, err := s.oauth2Provider.Verify(r.Context(), id, subject, verifyHandler, response)
 	if err != nil {
 		slog.Warn("verify session failure", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
-		w.WriteHeader(http.StatusInternalServerError)
+		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -469,7 +459,19 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
+	client, err := s.authFLow.Client(r.Context())
+	alert := AlertNone
+	if err != nil {
+		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())
+		if err != nil || endSessionResponse.StatusCode != http.StatusOK {
+			alert = AlertLogoffFailure
+		}
+	}
 	s.sessionCookie.Delete(w)
+	if alert != AlertNone {
+		s.redirectAlert(w, r, alert)
+	}
+	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
 }
 
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
@@ -480,5 +482,47 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 		return
 	}
 	s.sessionCookie.Set(w, userSession.ID, userSession.Remember)
-	http.Redirect(w, r, s.oauth2IssuerURL, http.StatusFound)
+	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
+}
+
+func (s *Server) sessionID(r *http.Request) (string, error) {
+	sessionID, exists := s.sessionCookie.Get(r)
+	if !exists {
+		return "", oauth2client.ErrNotAuthenticated
+	}
+	return sessionID, nil
+}
+
+func (s *Server) authFlowClient(r *http.Request) (*http.Client, error) {
+	sessionID, err := s.sessionID(r)
+	if err != nil {
+		return nil, err
+	}
+	ctx := r.Context()
+	// TODO: Handle persistent user session
+	_, err = s.database.SelectUserSession(ctx, sessionID)
+	if err != nil {
+		return nil, oauth2client.ErrNotAuthenticated
+	}
+	client, err := s.authFLow.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+type Alert string
+
+const (
+	AlertNone          Alert = ""
+	AlertLoginFailure  Alert = "login_failure"
+	AlertLogoffFailure Alert = "logoff_failure"
+)
+
+func (s *Server) redirectAlert(w http.ResponseWriter, r *http.Request, alert Alert) {
+	redirectURL := *s.oauth2IssuerURL
+	query := redirectURL.Query()
+	query.Add("alert", string(alert))
+	redirectURL.RawQuery = query.Encode()
+	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 }
