@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Alert from '$lib/components/Alert.svelte';
 	import type { UserInfo } from '$lib/session';
-	import { Fingerprint } from '@lucide/svelte';
+	import { CircleX, Cog, Fingerprint } from '@lucide/svelte';
 	async function sessionUserInfo(): Promise<UserInfo> {
 		const response = await fetch(`/session`);
 		const userInfo: UserInfo = await response.json();
@@ -28,6 +28,13 @@
 					<div class="space-y-4 md:space-y-6 text-gray-500 dark:text-gray-300">
 						<p>Subject: {userInfo.subject}</p>
 						<p>Email: {userInfo.email}</p>
+						<p>TOTP:
+							{#if userInfo.totp_registration}
+							{new Date(userInfo.totp_registration).toDateString()}
+							{:else}
+							- <Cog size={16} /> <CircleX size={16} />
+							{/if}
+						</p>
 					</div>
 					<div class="flex items-center justify-between">
 						<a

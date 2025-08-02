@@ -360,9 +360,10 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, subject 
 }
 
 type UserInfo struct {
-	Name    string `json:"name"`
-	Subject string `json:"subject"`
-	Email   string `json:"email"`
+	Name             string    `json:"name"`
+	Subject          string    `json:"subject"`
+	Email            string    `json:"email"`
+	TOTPRegistration time.Time `json:"totp_registration,omitzero"`
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {

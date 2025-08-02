@@ -91,17 +91,26 @@ CREATE TABLE signing_key(
 );
 CREATE TABLE user_session_request(
     id TEXT PRIMARY KEY,
-    state TEXT,
+    subject TEXT,
+    remember INTEGER,
     create_time INTEGER,
-    remember INTEGER
+    state TEXT
 );
 CREATE TABLE user_session(
     id TEXT PRIMARY KEY,
+    subject TEXT,
     remember INTEGER,
     access_token TEXT,
     token_type TEXT,
     refresh_token TEXT,
     expiration INTEGER
+);
+CREATE TABLE user_totp_secret(
+    subject TEXT,
+    secret TEXT,
+    validated INTEGER,
+    create_time INTEGER,
+    validation_time INTEGER
 );
 CREATE TABLE version(
     schema TEXT

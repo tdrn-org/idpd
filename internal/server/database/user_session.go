@@ -25,22 +25,25 @@ import (
 
 type UserSessionRequest struct {
 	ID         string
-	State      string
-	CreateTime int64
+	Subject    string
 	Remember   bool
+	CreateTime int64
+	State      string
 }
 
-func NewUserSessionRequest(state string, remember bool) *UserSessionRequest {
+func NewUserSessionRequest(subject string, remember bool, state string) *UserSessionRequest {
 	return &UserSessionRequest{
 		ID:         uuid.NewString(),
-		State:      state,
-		CreateTime: time.Now().UnixMicro(),
+		Subject:    subject,
 		Remember:   remember,
+		CreateTime: time.Now().UnixMicro(),
+		State:      state,
 	}
 }
 
 type UserSession struct {
 	ID           string
+	Subject      string
 	Remember     bool
 	AccessToken  string
 	TokenType    string
@@ -48,9 +51,10 @@ type UserSession struct {
 	Expiration   int64
 }
 
-func NewUserSession(token *oauth2.Token, remember bool) *UserSession {
+func NewUserSession(token *oauth2.Token, subject string, remember bool) *UserSession {
 	return &UserSession{
 		ID:           uuid.NewString(),
+		Subject:      subject,
 		Remember:     remember,
 		AccessToken:  token.AccessToken,
 		TokenType:    token.TokenType,

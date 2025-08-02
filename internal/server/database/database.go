@@ -425,14 +425,15 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	userSessionRequest := NewUserSessionRequest(authRequest.State, authRequest.Remember)
+	userSessionRequest := NewUserSessionRequest(authRequest.Subject, authRequest.Remember, authRequest.State)
 	args1 := []any{
 		userSessionRequest.ID,
-		userSessionRequest.State,
-		userSessionRequest.CreateTime,
+		userSessionRequest.Subject,
 		userSessionRequest.Remember,
+		userSessionRequest.CreateTime,
+		userSessionRequest.State,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_session_request (id,state,create_time,remember) VALUES($1,$2,$3,$4)", args1...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_session_request (id,subject,remember,create_time,state) VALUES($1,$2,$3,$4,$5)", args1...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1007,16 +1008,17 @@ func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Contex
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	userSession := NewUserSession(token, userSessionRequest.Remember)
+	userSession := NewUserSession(token, userSessionRequest.Subject, userSessionRequest.Remember)
 	args := []any{
 		userSession.ID,
+		userSession.Subject,
 		userSession.Remember,
 		userSession.AccessToken,
 		userSession.TokenType,
 		userSession.RefreshToken,
 		userSession.Expiration,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,remember,access_token,token_type,refresh_token,expiration) VALUES($1,$2,$3,$4,$5,$6)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,remember,access_token,token_type,refresh_token,expiration) VALUES($1,$2,$3,$4,$5,$6,$7)", args...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1027,11 +1029,12 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx conte
 	userSessionRequest := &UserSessionRequest{
 		State: state,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT id,create_time,remember FROM user_session_request WHERE state=$1", userSessionRequest.State)
+	row := d.queryRowTx(tx, txCtx, "SELECT id,subject,remember,create_time FROM user_session_request WHERE state=$1", userSessionRequest.State)
 	args := []any{
 		&userSessionRequest.ID,
-		&userSessionRequest.CreateTime,
+		&userSessionRequest.Subject,
 		&userSessionRequest.Remember,
+		&userSessionRequest.CreateTime,
 	}
 	err := row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1051,8 +1054,9 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	userSession := &UserSession{
 		ID: id,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
+	row := d.queryRowTx(tx, txCtx, "SELECT subject,remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
 	args := []any{
+		&userSession.Subject,
 		&userSession.Remember,
 		&userSession.AccessToken,
 		&userSession.TokenType,
