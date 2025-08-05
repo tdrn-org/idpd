@@ -47,6 +47,9 @@
 #from_address = "idpd@example.org"
 #from_name = "IdPD"
 
+[geoip]
+#city_db = "GeoLite2-City.mmdb"
+
 [database]
 # memory|sqlite|postgres
 #type = "memory"

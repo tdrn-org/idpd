@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/tdrn-org/go-tlsconf/tlsserver"
+	"github.com/tdrn-org/idpd/internal/access"
 )
 
 type Handler interface {
@@ -176,7 +177,7 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.logger.Debug("http server request", slog.String(r.Method, r.RequestURI))
-	remoteIP := s.remoteIP(r)
+	remoteIP := access.GetHttpRequestRemoteIP(r)
 	if !s.AccessLog {
 		s.mux.ServeHTTP(w, r)
 	} else {
@@ -201,32 +202,6 @@ func (s *Instance) Close() error {
 
 func (s *Instance) WaitStopped() {
 	s.stoppedWG.Wait()
-}
-
-func (s *Instance) remoteIP(r *http.Request) string {
-	remoteIPHeaders := []string{
-		"True-Client-IP",
-		"X-Real-IP",
-		"X-Forwarded-For",
-	}
-	for _, remoteIPHeader := range remoteIPHeaders {
-		remoteIP := r.Header.Get(remoteIPHeader)
-		if remoteIP != "" {
-			i := strings.Index(remoteIP, ",")
-			if i >= 0 {
-				remoteIP = remoteIP[:i]
-			}
-			if remoteIP != "" {
-				return remoteIP
-			}
-		}
-	}
-	remoteAddr := r.RemoteAddr
-	remoteIP, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		remoteIP = remoteAddr
-	}
-	return remoteIP
 }
 
 type wrappedResponseWriter struct {

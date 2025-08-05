@@ -3,7 +3,7 @@ module github.com/tdrn-org/idpd
 go 1.24
 
 require (
-	github.com/go-jose/go-jose/v4 v4.1.1
+	github.com/go-jose/go-jose/v4 v4.1.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/tdrn-org/go-tlsconf v0.0.4
@@ -26,6 +26,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/muhlemmer/httpforwarded v0.1.0 // indirect
+	github.com/oschwald/maxminddb-golang v1.13.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
@@ -35,6 +36,7 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
+	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
@@ -48,12 +50,14 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.11
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/mattn/go-sqlite3 v1.14.30
+	github.com/maxmind/mmdbwriter v1.0.0
 	github.com/mocktools/go-smtp-mock/v2 v2.5.1
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.8
 	github.com/pquerna/otp v1.5.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tdrn-org/go-conf v0.0.4
 	github.com/tdrn-org/go-log v0.4.1
-	github.com/zitadel/oidc/v3 v3.42.0
+	github.com/zitadel/oidc/v3 v3.44.0
 	golang.org/x/sys v0.34.0 // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 )

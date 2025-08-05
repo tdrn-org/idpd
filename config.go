@@ -64,6 +64,9 @@ type Config struct {
 		FromAddress string `toml:"from_address"`
 		FromName    string `toml:"from_name"`
 	} `toml:"mail"`
+	GeoIP struct {
+		CityDB string `toml:"city_db"`
+	} `toml:"geoip"`
 	Database struct {
 		Type   DatabaseType `toml:"type"`
 		Memory struct {

@@ -33,8 +33,10 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/google/uuid"
 	"github.com/tdrn-org/idpd/httpserver"
+	"github.com/tdrn-org/idpd/internal/access"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/database"
+	"github.com/tdrn-org/idpd/internal/server/geoip"
 	"github.com/tdrn-org/idpd/internal/server/mail"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
@@ -98,6 +100,7 @@ type Server struct {
 	httpServer      *httpserver.Instance
 	sessionCookie   *server.CookieHandler
 	mailer          *mail.Mailer
+	locationService *geoip.LocationService
 	database        database.Driver
 	userStore       userstore.Backend
 	oauth2IssuerURL *url.URL
@@ -148,7 +151,7 @@ func (s *Server) shutdown(ctx context.Context) error {
 	slog.Info("initiating shutdown")
 	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancelShutdown()
-	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close())
+	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close(), s.locationService.Close())
 	if err != nil {
 		return err
 	}
@@ -160,6 +163,7 @@ func (s *Server) initAndStart(config *Config) error {
 	inits := []func(*Config) error{
 		s.initHttpServer,
 		s.initMailer,
+		s.initGeoIP,
 		s.initDatabase,
 		s.initUserStore,
 		s.initOAuth2Provider,
@@ -203,6 +207,21 @@ func (s *Server) initMailer(config *Config) error {
 		return err
 	}
 	s.mailer = mailer
+	return nil
+}
+
+func (s *Server) initGeoIP(config *Config) error {
+	_, err := os.Stat(config.GeoIP.CityDB)
+	if err != nil {
+		s.locationService = geoip.NewLocationService(geoip.DummyProvider(), nil)
+		return nil
+	}
+	slog.Info("intializing GeoIP provider")
+	provider, err := geoip.OpenMaxMindDB(config.GeoIP.CityDB)
+	if err != nil {
+		return err
+	}
+	s.locationService = geoip.NewLocationService(provider, nil)
 	return nil
 }
 
@@ -360,10 +379,23 @@ func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, subject 
 }
 
 type UserInfo struct {
-	Name             string    `json:"name"`
-	Subject          string    `json:"subject"`
-	Email            string    `json:"email"`
-	TOTPRegistration time.Time `json:"totp_registration,omitzero"`
+	Name                 string              `json:"name"`
+	Subject              string              `json:"subject"`
+	Email                string              `json:"email"`
+	EmailVerification    UserVerificationLog `json:"email_verification"`
+	TOTPVerification     UserVerificationLog `json:"totp_verification"`
+	PasskeyVerification  UserVerificationLog `json:"passkey_verification"`
+	WebAuthnVerification UserVerificationLog `json:"webauthn_verification"`
+}
+
+type UserVerificationLog struct {
+	Registration time.Time `json:"registration,omitzero"`
+	LastUsed     time.Time `json:"last_used,omitzero"`
+	Host         string    `json:"host"`
+	Country      string    `json:"country,omitempty"`
+	CountryCode  string    `json:"country_code,omitempty"`
+	Lat          float64   `json:"lat"`
+	Lon          float64   `json:"lon"`
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
@@ -385,6 +417,29 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		Name:    name,
 		Subject: oidcUserInfo.Subject,
 		Email:   oidcUserInfo.Email,
+		EmailVerification: UserVerificationLog{
+			LastUsed: time.Now(),
+			Host:     r.RemoteAddr,
+		},
+	}
+	logs, err := s.database.SelectUserVerificationLogs(r.Context(), userInfo.Subject)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	for _, log := range logs {
+		switch server.VerifyMethod(log.Method) {
+		case server.VerifyMethodEmail:
+			userInfo.EmailVerification = UserVerificationLog{
+				Registration: time.UnixMicro(log.FirstUsed),
+				LastUsed:     time.UnixMicro(log.LastUsed),
+				Host:         log.Host,
+				Country:      log.Country,
+				CountryCode:  log.CountryCode,
+				Lat:          log.Lat,
+				Lon:          log.Lon,
+			}
+		}
 	}
 	err = json.NewEncoder(w).Encode(userInfo)
 	if err != nil {
@@ -413,7 +468,7 @@ func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Reques
 func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
 	switch server.VerifyMethod(verification) {
 	case server.VerifyMethodEmail:
-		return server.EmailVerifyHandler(s.mailer, s.userStore)
+		return server.EmailVerifyHandler(s.mailer, s.database, s.userStore)
 	case server.VerifyMethodTOTP:
 		return server.NoneVerifyHandler()
 	case server.VerifyMethodPasskey:
@@ -445,6 +500,7 @@ func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string,
 }
 
 func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
+	remoteIP := access.GetHttpRequestRemoteIP(r)
 	id, subject, verification, response, err := s.parseVerifyForm(r)
 	if err != nil {
 		slog.Error("failed to process verify session request", slog.Any("err", err))
@@ -452,7 +508,18 @@ func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
-	redirectURL, err := s.oauth2Provider.Verify(r.Context(), id, subject, verifyHandler, response)
+	userVerificationLog := database.NewUserVerificationLog(subject, string(verifyHandler.Method()), remoteIP)
+	remoteLocation, err := s.locationService.Lookup(remoteIP)
+	if err != nil && !errors.Is(err, geoip.ErrNotFound) {
+		slog.Error("failed to lookup location info", slog.String("remoteIP", remoteIP), slog.Any("err", err))
+	} else if remoteLocation != nil {
+		userVerificationLog.Country = remoteLocation.Country
+		userVerificationLog.CountryCode = remoteLocation.CountryCode
+		userVerificationLog.Lat = remoteLocation.Lat
+		userVerificationLog.Lon = remoteLocation.Lon
+	}
+	userVerificationCtx := context.WithValue(r.Context(), verifyHandler, userVerificationLog)
+	redirectURL, err := s.oauth2Provider.Verify(userVerificationCtx, id, subject, verifyHandler, response)
 	if err != nil {
 		slog.Warn("verify session failure", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)

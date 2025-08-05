@@ -57,6 +57,8 @@ type Driver interface {
 	RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error)
 	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, error)
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
+	InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error)
+	SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error)
 	Close() error
 }
 
@@ -410,7 +412,7 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 	if authRequest.Subject != subject {
 		return nil, d.rollbackTx(tx, fmt.Errorf("non-matching OAuth auth request: %s != %s", authRequest.Subject, subject))
 	}
-	err = verifyChallengeResponse(ctx, authRequest.Subject, authRequest.Challenge, response)
+	err = verifyChallengeResponse(txCtx, authRequest.Subject, authRequest.Challenge, response)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1070,6 +1072,95 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 		return nil, d.rollbackTx(tx, fmt.Errorf("select user session failure (cause: %w)", err))
 	}
 	return userSession, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error) {
+	d.logger.Debug("inserting/updating user verification log", slog.String("subject", log.Subject), slog.String("method", log.Method))
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	updatedLog := &UserVerificationLog{
+		Subject: log.Subject,
+		Method:  log.Method,
+	}
+	row := d.queryRowTx(tx, txCtx, "SELECT first_used FROM user_verification_log WHERE subject=$1 AND method=$2", updatedLog.Subject, updatedLog.Method)
+	args0 := []any{
+		&updatedLog.FirstUsed,
+	}
+	err = row.Scan(args0...)
+	if errors.Is(err, sql.ErrNoRows) {
+		updatedLog = log
+		args1 := []any{
+			updatedLog.Subject,
+			updatedLog.Method,
+			updatedLog.FirstUsed,
+			updatedLog.LastUsed,
+			updatedLog.Host,
+			updatedLog.Country,
+			updatedLog.CountryCode,
+			updatedLog.Lat,
+			updatedLog.Lon,
+		}
+		err = d.execTx(tx, txCtx, "INSERT INTO user_verification_log (subject,method,first_used,last_used,host,country,country_code,lat,lon) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", args1...)
+		if err != nil {
+			return nil, d.rollbackTx(tx, fmt.Errorf("insert user verification log failure (cause: %w)", err))
+		}
+	} else if err != nil {
+		return nil, d.rollbackTx(tx, fmt.Errorf("select user verification log failure (cause: %w)", err))
+	} else {
+		updatedLog.Update(log)
+		args2 := []any{
+			updatedLog.LastUsed,
+			updatedLog.Host,
+			updatedLog.Country,
+			updatedLog.CountryCode,
+			updatedLog.Lat,
+			updatedLog.Lon,
+			updatedLog.Subject,
+			updatedLog.Method,
+		}
+		err = d.execTx(tx, txCtx, "UPDATE user_verification_log SET last_used=$1,host=$2,country=$3,country_code=$4,lat=$5,lon=$6 WHERE subject=$7 AND method=$8", args2...)
+		if err != nil {
+			return nil, d.rollbackTx(tx, fmt.Errorf("update user verification log failure (cause: %w)", err))
+		}
+	}
+	return log, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error) {
+	d.logger.Debug("selecting user verification logs", slog.String("subject", subject))
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := d.queryTx(tx, txCtx, "SELECT method,first_used,last_used,host,country,country_code,lat,lon FROM user_verification_log WHERE subject=$1", subject)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	logs := make([]*UserVerificationLog, 0, 4)
+	for rows.Next() {
+		log := &UserVerificationLog{
+			Subject: subject,
+		}
+		args := []any{
+			&log.Method,
+			&log.FirstUsed,
+			&log.LastUsed,
+			&log.Host,
+			&log.Country,
+			&log.CountryCode,
+			&log.Lat,
+			&log.Lon,
+		}
+		err = rows.Scan(args...)
+		if err != nil {
+			return nil, fmt.Errorf("select user verification log failure (cause: %w)", err)
+		}
+		logs = append(logs, log)
+	}
+	return logs, d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) Close() error {

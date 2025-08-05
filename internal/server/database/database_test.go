@@ -69,6 +69,7 @@ func testDriver(t *testing.T, d database.Driver) {
 	oauth2RefreshToken(t, d)
 	signingKey(t, d)
 	userSession(t, d)
+	userVerificationLog(t, d)
 }
 
 func schema1Update(t *testing.T, d database.Driver) {
@@ -298,6 +299,25 @@ func userSession(t *testing.T, d database.Driver) {
 	require.Equal(t, oauth2Token.AccessToken, userSession0.AccessToken)
 	require.Equal(t, oauth2Token.RefreshToken, userSession0.RefreshToken)
 	require.Equal(t, oauth2Token.Expiry.UnixMicro(), userSession0.Expiration)
+}
+
+func userVerificationLog(t *testing.T, d database.Driver) {
+	ctx := t.Context()
+
+	log0 := database.NewUserVerificationLog("subject", "method", "host")
+	log1, err := d.InsertOrUpdateUserVerificationLog(ctx, log0)
+	require.NoError(t, err)
+	require.Equal(t, log0, log1)
+
+	log1.LastUsed = time.UnixMicro(log1.LastUsed).Add(time.Second).UnixMicro()
+	log2, err := d.InsertOrUpdateUserVerificationLog(ctx, log1)
+	require.NoError(t, err)
+	require.Equal(t, log1, log2)
+
+	logs, err := d.SelectUserVerificationLogs(ctx, log0.Subject)
+	require.NoError(t, err)
+	require.Len(t, logs, 1)
+	require.Equal(t, log2, logs[0])
 }
 
 func init() {

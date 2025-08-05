@@ -18,14 +18,7 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
-	"fmt"
-	"math/big"
-
-	"github.com/tdrn-org/idpd/internal/server/mail"
-	"github.com/tdrn-org/idpd/internal/server/templates"
-	"github.com/tdrn-org/idpd/internal/server/userstore"
 )
 
 type VerifyMethod string
@@ -47,7 +40,7 @@ type VerifyHandler interface {
 	Taint()
 	Tainted() bool
 	GenerateChallenge(ctx context.Context, subject string) (string, error)
-	VerifyRepsonse(ctx context.Context, subject string, challenge string, response string) error
+	VerifyResponse(ctx context.Context, subject string, challenge string, response string) error
 }
 
 func NoneVerifyHandler() VerifyHandler {
@@ -72,97 +65,6 @@ func (*noneVerifyHandler) GenerateChallenge(_ context.Context, _ string) (string
 	return taintedChallenge, nil
 }
 
-func (h *noneVerifyHandler) VerifyRepsonse(_ context.Context, _ string, _ string, _ string) error {
+func (h *noneVerifyHandler) VerifyResponse(_ context.Context, _ string, _ string, _ string) error {
 	return errUserNotAuthenticated
-}
-
-func EmailVerifyHandler(mailer *mail.Mailer, userStore userstore.Backend) VerifyHandler {
-	return &emailVerifyHandler{
-		mailer:    mailer,
-		userStore: userStore,
-	}
-}
-
-type emailVerifyHandler struct {
-	mailer    *mail.Mailer
-	userStore userstore.Backend
-	tainted   bool
-}
-
-func (*emailVerifyHandler) Method() VerifyMethod {
-	return VerifyMethodEmail
-}
-
-func (h *emailVerifyHandler) Taint() {
-	h.tainted = true
-}
-
-func (h *emailVerifyHandler) Tainted() bool {
-	return h.tainted
-}
-
-func (h *emailVerifyHandler) GenerateChallenge(_ context.Context, subject string) (string, error) {
-	if h.tainted {
-		return taintedChallenge, nil
-	}
-	random, err := rand.Int(rand.Reader, big.NewInt(999999))
-	if err != nil {
-		return "", fmt.Errorf("failed to generate verification code (cause: %w)", err)
-	}
-	code := fmt.Sprintf("%06d", random.Uint64())
-	user, err := h.userStore.LookupUser(subject)
-	if err != nil {
-		return "", err
-	}
-	userEmail := user.Email.Address
-	if userEmail == "" {
-		return "", fmt.Errorf("no email defined for user (subject: %s)", subject)
-	}
-	userName := user.Profile.Name
-	err = h.mailer.NewMessage().Subject("Verification code").BodyFromHTMLTemplate(templates.FS, templates.VerficationCodeTemplate, &templates.VerificationCodeData{Code: code}).SendTo(userEmail, userName)
-	if err != nil {
-		return "", err
-	}
-	return h.challenge(code), nil
-}
-
-func (h *emailVerifyHandler) VerifyRepsonse(_ context.Context, subject string, challenge string, response string) error {
-	if challenge == taintedChallenge {
-		h.tainted = true
-		return errUserNotAuthenticated
-	}
-	if challenge != h.challenge(response) {
-		return fmt.Errorf("invalid email verification code")
-	}
-	return nil
-}
-
-func (h *emailVerifyHandler) challenge(code string) string {
-	return string(VerifyMethodEmail) + ":" + code
-}
-
-func MockVerifyHandler() VerifyHandler {
-	return &mockVerifyHandler{}
-}
-
-type mockVerifyHandler struct{}
-
-func (*mockVerifyHandler) Method() VerifyMethod {
-	return VerifyMethodNone
-}
-
-func (*mockVerifyHandler) Taint() {
-	// Nothing to do here
-}
-
-func (*mockVerifyHandler) Tainted() bool {
-	return false
-}
-
-func (*mockVerifyHandler) GenerateChallenge(_ context.Context, _ string) (string, error) {
-	return string(VerifyMethodNone), nil
-}
-
-func (h *mockVerifyHandler) VerifyRepsonse(_ context.Context, _ string, _ string, _ string) error {
-	return nil
 }

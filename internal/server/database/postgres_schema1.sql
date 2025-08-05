@@ -105,12 +105,16 @@ CREATE TABLE user_session(
     refresh_token TEXT,
     expiration BIGINT
 );
-CREATE TABLE user_totp_secret(
+CREATE TABLE user_verification_log(
     subject TEXT,
-    secret TEXT,
-    validated BOOLEAN,
-    create_time BIGINT,
-    validation_time BIGINT
+    method TEXT,
+    first_used BIGINT,
+    last_used BIGINT,
+    host TEXT,
+    country TEXT,
+    country_code TEXT,
+    lat DOUBLE PRECISION,
+    lon DOUBLE PRECISION
 );
 CREATE TABLE version(
     schema TEXT

@@ -1,7 +1,14 @@
 <script lang="ts">
 	import Alert from '$lib/components/Alert.svelte';
+	import VerificationLog from '$lib/components/VerificationLog.svelte';
 	import type { UserInfo } from '$lib/session';
-	import { CircleX, Cog, Fingerprint } from '@lucide/svelte';
+	import {
+		Fingerprint,
+		KeyRound,
+		Mail,
+		RectangleEllipsis,
+		ScanFace
+	} from '@lucide/svelte';
 	async function sessionUserInfo(): Promise<UserInfo> {
 		const response = await fetch(`/session`);
 		const userInfo: UserInfo = await response.json();
@@ -25,16 +32,45 @@
 					>
 						Login
 					</h1>
-					<div class="space-y-4 md:space-y-6 text-gray-500 dark:text-gray-300">
+					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<p>Subject: {userInfo.subject}</p>
 						<p>Email: {userInfo.email}</p>
-						<p>TOTP:
-							{#if userInfo.totp_registration}
-							{new Date(userInfo.totp_registration).toDateString()}
-							{:else}
-							- <Cog size={16} /> <CircleX size={16} />
-							{/if}
+						<p>
+							<a
+								href="/session/details"
+								class="font-medium text-blue-600 underline hover:no-underline dark:text-blue-500"
+								>Details</a
+							>
 						</p>
+					</div>
+					<h1
+						class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white"
+					>
+						Verification methods
+					</h1>
+					<div class="space-y-1 text-gray-500 dark:text-gray-300">
+						<div class="flex">
+							<Mail />&nbsp;Email code
+						</div>
+						<VerificationLog id="email" log={userInfo.email_verification} />
+					</div>
+					<div class="space-y-1 text-gray-500 dark:text-gray-300">
+						<div class="flex">
+							<RectangleEllipsis />&nbsp;TOTP code
+						</div>
+						<VerificationLog id="totp" log={userInfo.totp_verification} />
+					</div>
+					<div class="space-y-1 text-gray-500 dark:text-gray-300">
+						<div class="flex">
+							<ScanFace />&nbsp;Passkey
+						</div>
+						<VerificationLog id="passkey" log={userInfo.passkey_verification} />
+					</div>
+					<div class="space-y-1 text-gray-500 dark:text-gray-300">
+						<div class="flex">
+							<KeyRound />&nbsp;WebAuthn
+						</div>
+						<VerificationLog id="webauthn" log={userInfo.webauthn_verification} />
 					</div>
 					<div class="flex items-center justify-between">
 						<a
