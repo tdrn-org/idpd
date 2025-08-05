@@ -1,4 +1,4 @@
-const knownFlags = new Set<string>([
+export const KNOWN_FLAGS = new Set<string>([
     'ad',
     'ae',
     'af',

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { KNOWN_FLAGS } from '$lib/flags';
 	import type { UserVerificationLog } from '$lib/session';
 
 	export let id: string;
@@ -62,7 +63,7 @@
 		{formatDate(new Date(log.last_used))}
 		{#if log.country_code}
 			(<button popovertarget={id}>
-				{#if knownFlags.has(log.country_code.toLowerCase())}
+				{#if KNOWN_FLAGS.has(log.country_code.toLowerCase())}
 					<img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"
 						alt="{log.country_code} country flag"
