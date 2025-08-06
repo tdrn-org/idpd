@@ -47,6 +47,9 @@
 #from_address = "idpd@example.org"
 #from_name = "IdPD"
 
+[totp]
+#issuer = ""
+
 [geoip]
 #city_db = "GeoLite2-City.mmdb"
 

@@ -64,6 +64,9 @@ type Config struct {
 		FromAddress string `toml:"from_address"`
 		FromName    string `toml:"from_name"`
 	} `toml:"mail"`
+	TOTP struct {
+		Issuer string `toml:"issuer"`
+	} `toml:"totp"`
 	GeoIP struct {
 		CityDB string `toml:"city_db"`
 	} `toml:"geoip"`
@@ -242,6 +245,16 @@ func (c *Config) toMailConfig() *mail.MailConfig {
 		Password:    c.Mail.Password,
 		FromAddress: c.Mail.FromAddress,
 		FromName:    c.Mail.FromName,
+	}
+}
+
+func (c *Config) toTOTPConfig(defaultIssuer string) *server.TOTPConfig {
+	issuer := c.TOTP.Issuer
+	if issuer == "" {
+		issuer = defaultIssuer
+	}
+	return &server.TOTPConfig{
+		Issuer: issuer,
 	}
 }
 

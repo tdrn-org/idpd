@@ -18,29 +18,28 @@ package server
 
 import (
 	"context"
-	"errors"
+
+	"github.com/tdrn-org/idpd/internal/server/database"
 )
 
 type VerifyMethod string
 
 const (
 	VerifyMethodNone     VerifyMethod = ""
-	VerifyMethodEmail    VerifyMethod = "email"
-	VerifyMethodTOTP     VerifyMethod = "totp"
-	VerifyMethodPasskey  VerifyMethod = "passkey"
-	VerifyMethodWebAuthn VerifyMethod = "webauthn"
+	VerifyMethodEmail    VerifyMethod = VerifyMethod(database.EmailKey)
+	VerifyMethodTOTP     VerifyMethod = VerifyMethod(database.TOTPKey)
+	VerifyMethodPasskey  VerifyMethod = VerifyMethod(database.PasskeyKey)
+	VerifyMethodWebAuthn VerifyMethod = VerifyMethod(database.WebAuthnKey)
 )
 
-var errUserNotAuthenticated = errors.New("user not authenticated")
-
-const taintedChallenge = "tainted"
+const taintedChallenge string = "tainted"
 
 type VerifyHandler interface {
 	Method() VerifyMethod
 	Taint()
 	Tainted() bool
 	GenerateChallenge(ctx context.Context, subject string) (string, error)
-	VerifyResponse(ctx context.Context, subject string, challenge string, response string) error
+	VerifyResponse(ctx context.Context, subject string, challenge string, response string) (bool, error)
 }
 
 func NoneVerifyHandler() VerifyHandler {
@@ -65,6 +64,6 @@ func (*noneVerifyHandler) GenerateChallenge(_ context.Context, _ string) (string
 	return taintedChallenge, nil
 }
 
-func (h *noneVerifyHandler) VerifyResponse(_ context.Context, _ string, _ string, _ string) error {
-	return errUserNotAuthenticated
+func (h *noneVerifyHandler) VerifyResponse(_ context.Context, _ string, _ string, _ string) (bool, error) {
+	return false, nil
 }

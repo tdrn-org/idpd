@@ -42,6 +42,6 @@ func (*mockVerifyHandler) GenerateChallenge(_ context.Context, _ string) (string
 	return string(VerifyMethodNone), nil
 }
 
-func (h *mockVerifyHandler) VerifyResponse(_ context.Context, _ string, _ string, _ string) error {
-	return nil
+func (h *mockVerifyHandler) VerifyResponse(_ context.Context, _ string, _ string, _ string) (bool, error) {
+	return true, nil
 }

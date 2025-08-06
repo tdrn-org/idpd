@@ -116,6 +116,16 @@ CREATE TABLE user_verification_log(
     lat DOUBLE PRECISION,
     lon DOUBLE PRECISION
 );
+CREATE TABLE user_totp_registration_request(
+    subject TEXT,
+    secret TEXT,
+    expiration BIGINT
+);
+CREATE TABLE user_totp_registration(
+    subject TEXT,
+    secret TEXT,
+    create_time BIGINT
+);
 CREATE TABLE version(
     schema TEXT
 );

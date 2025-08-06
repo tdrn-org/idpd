@@ -28,34 +28,34 @@ import (
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 )
 
-func EmailVerifyHandler(mailer *mail.Mailer, database database.Driver, userStore userstore.Backend) VerifyHandler {
-	return &emailVerifyHandler{
-		mailer:    mailer,
-		database:  database,
-		userStore: userStore,
-	}
-}
-
-type emailVerifyHandler struct {
+type EmailVerifyHandler struct {
 	mailer    *mail.Mailer
 	database  database.Driver
 	userStore userstore.Backend
 	tainted   bool
 }
 
-func (*emailVerifyHandler) Method() VerifyMethod {
+func NewEmailVerifyHandler(mailer *mail.Mailer, database database.Driver, userStore userstore.Backend) *EmailVerifyHandler {
+	return &EmailVerifyHandler{
+		mailer:    mailer,
+		database:  database,
+		userStore: userStore,
+	}
+}
+
+func (*EmailVerifyHandler) Method() VerifyMethod {
 	return VerifyMethodEmail
 }
 
-func (h *emailVerifyHandler) Taint() {
+func (h *EmailVerifyHandler) Taint() {
 	h.tainted = true
 }
 
-func (h *emailVerifyHandler) Tainted() bool {
+func (h *EmailVerifyHandler) Tainted() bool {
 	return h.tainted
 }
 
-func (h *emailVerifyHandler) GenerateChallenge(_ context.Context, subject string) (string, error) {
+func (h *EmailVerifyHandler) GenerateChallenge(_ context.Context, subject string) (string, error) {
 	if h.tainted {
 		return taintedChallenge, nil
 	}
@@ -80,19 +80,19 @@ func (h *emailVerifyHandler) GenerateChallenge(_ context.Context, subject string
 	return h.challenge(code), nil
 }
 
-func (h *emailVerifyHandler) VerifyResponse(ctx context.Context, subject string, challenge string, response string) error {
+func (h *EmailVerifyHandler) VerifyResponse(ctx context.Context, subject string, challenge string, response string) (bool, error) {
 	if challenge == taintedChallenge {
 		h.tainted = true
-		return errUserNotAuthenticated
+		return false, nil
 	}
 	if challenge != h.challenge(response) {
-		return fmt.Errorf("invalid email verification code")
+		return false, nil
 	}
 	userVerificationLog := ctx.Value(h).(*database.UserVerificationLog)
 	_, err := h.database.InsertOrUpdateUserVerificationLog(ctx, userVerificationLog)
-	return err
+	return true, err
 }
 
-func (h *emailVerifyHandler) challenge(code string) string {
+func (h *EmailVerifyHandler) challenge(code string) string {
 	return string(VerifyMethodEmail) + ":" + code
 }

@@ -32,8 +32,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const EmailKey string = "email"
+const TOTPKey string = "totp"
+const PasskeyKey string = "passkey"
+const WebAuthnKey string = "webauthn"
+
 type GenerateChallengeFunc func(ctx context.Context, subject string) (string, error)
-type VerifyChallengeResponseFunc func(ctx context.Context, subject string, challenge string, response string) error
+type VerifyChallengeResponseFunc func(ctx context.Context, subject string, challenge string, response string) (bool, error)
 type GenerateSigningKeyFunc func(algorithm string) (*SigningKey, error)
 
 type Driver interface {
@@ -59,6 +64,9 @@ type Driver interface {
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
 	InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error)
 	SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error)
+	InsertUserTOTPRegistrationRequest(ctx context.Context, request *UserTOTPRegistrationRequest) error
+	SelectUserTOTPRegistrationRequest(ctx context.Context, subject string) (*UserTOTPRegistrationRequest, error)
+	VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, challenge string, response string) (*UserTOTPRegistration, error)
 	Close() error
 }
 
@@ -412,9 +420,12 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 	if authRequest.Subject != subject {
 		return nil, d.rollbackTx(tx, fmt.Errorf("non-matching OAuth auth request: %s != %s", authRequest.Subject, subject))
 	}
-	err = verifyChallengeResponse(txCtx, authRequest.Subject, authRequest.Challenge, response)
+	verified, err := verifyChallengeResponse(txCtx, authRequest.Subject, authRequest.Challenge, response)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
+	}
+	if !verified {
+		return nil, d.commitTx(tx, ctx == txCtx)
 	}
 	authRequest.AuthTime = time.Now().UnixMicro()
 	authRequest.Done = true
@@ -1111,6 +1122,7 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 	} else {
 		updatedLog.Update(log)
 		args2 := []any{
+			updatedLog.FirstUsed,
 			updatedLog.LastUsed,
 			updatedLog.Host,
 			updatedLog.Country,
@@ -1120,7 +1132,7 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 			updatedLog.Subject,
 			updatedLog.Method,
 		}
-		err = d.execTx(tx, txCtx, "UPDATE user_verification_log SET last_used=$1,host=$2,country=$3,country_code=$4,lat=$5,lon=$6 WHERE subject=$7 AND method=$8", args2...)
+		err = d.execTx(tx, txCtx, "UPDATE user_verification_log SET first_used=$1,last_used=$2,host=$3,country=$4,country_code=$5,lat=$6,lon=$7 WHERE subject=$8 AND method=$9", args2...)
 		if err != nil {
 			return nil, d.rollbackTx(tx, fmt.Errorf("update user verification log failure (cause: %w)", err))
 		}
@@ -1136,7 +1148,7 @@ func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject
 	}
 	rows, err := d.queryTx(tx, txCtx, "SELECT method,first_used,last_used,host,country,country_code,lat,lon FROM user_verification_log WHERE subject=$1", subject)
 	if err != nil {
-		return nil, err
+		return nil, d.rollbackTx(tx, err)
 	}
 	defer rows.Close()
 	logs := make([]*UserVerificationLog, 0, 4)
@@ -1156,11 +1168,84 @@ func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject
 		}
 		err = rows.Scan(args...)
 		if err != nil {
-			return nil, fmt.Errorf("select user verification log failure (cause: %w)", err)
+			return nil, d.rollbackTx(tx, fmt.Errorf("select user verification log failure (cause: %w)", err))
 		}
 		logs = append(logs, log)
 	}
 	return logs, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) deleteUserVerificationLog(tx *sql.Tx, txCtx context.Context, subject string, method string) error {
+	err := d.execTx(tx, txCtx, "DELETE FROM user_verification_log WHERE subject=$1 AND method=$2", subject, method)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *databaseDriver) InsertUserTOTPRegistrationRequest(ctx context.Context, request *UserTOTPRegistrationRequest) error {
+	d.logger.Debug("inserting user TOTP registration request", slog.String("subject", request.Subject))
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE subject=$1", request.Subject)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	args := []any{
+		request.Subject,
+		request.Secret,
+		request.Expiration,
+	}
+	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration_request (subject,secret,expiration) VALUES($1,$2,$3)", args...)
+	if err != nil {
+		return d.rollbackTx(tx, fmt.Errorf("insert user TOTP registration request failure (cause: %w)", err))
+	}
+	return d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) SelectUserTOTPRegistrationRequest(ctx context.Context, subject string) (*UserTOTPRegistrationRequest, error) {
+	d.logger.Debug("selecting user TOTP registration request", slog.String("subject", subject))
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	registrationRequest := &UserTOTPRegistrationRequest{
+		Subject: subject,
+	}
+	row := d.queryRowTx(tx, txCtx, "SELECT secret,expiration FROM user_totp_registration_request WHERE subject=$1", registrationRequest.Subject)
+	args := []any{
+		&registrationRequest.Secret,
+		&registrationRequest.Expiration,
+	}
+	err = row.Scan(args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user TOTP registration request: %s)", ErrObjectNotFound, registrationRequest.Subject))
+	} else if err != nil {
+		return nil, d.rollbackTx(tx, fmt.Errorf("select user TOTP registration request failure (cause: %w)", err))
+	}
+	return registrationRequest, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, challenge string, response string) (*UserTOTPRegistration, error) {
+	d.logger.Debug("verifying and transforming user TOTP registration request", slog.String("subject", subject))
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = d.deleteUserVerificationLog(tx, txCtx, subject, TOTPKey)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	verified, err := verifyChallengeResponse(txCtx, subject, challenge, response)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	if !verified {
+		return nil, d.commitTx(tx, ctx == txCtx)
+	}
+	return nil, d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) Close() error {

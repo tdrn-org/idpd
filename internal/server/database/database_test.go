@@ -125,7 +125,7 @@ func oauth2AuthRequest(t *testing.T, d database.Driver) {
 	err = d.AuthenticateOAuth2AuthRequest(ctx, authRequest1.ID, "subject", generateChallenge, true)
 	require.NoError(t, err)
 
-	verifyChallengeResponse := func(_ context.Context, _ string, _ string, _ string) error { return nil }
+	verifyChallengeResponse := func(_ context.Context, _ string, _ string, _ string) (bool, error) { return true, nil }
 	userSessionRequest, err := d.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, authRequest1.ID, "subject", verifyChallengeResponse, "")
 	require.NoError(t, err)
 	require.Equal(t, authRequest1.State, userSessionRequest.State)
@@ -284,7 +284,7 @@ func userSession(t *testing.T, d database.Driver) {
 	err := d.AuthenticateOAuth2AuthRequest(ctx, authRequest0.ID, "subject", generateChallenge, true)
 	require.NoError(t, err)
 
-	verifyChallengeResponse := func(_ context.Context, _ string, _ string, _ string) error { return nil }
+	verifyChallengeResponse := func(_ context.Context, _ string, _ string, _ string) (bool, error) { return true, nil }
 	userSessionRequest0, err := d.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, authRequest0.ID, "subject", verifyChallengeResponse, "")
 	require.NoError(t, err)
 

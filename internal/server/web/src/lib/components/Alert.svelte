@@ -7,8 +7,20 @@
 	onMount(() => {
 		const alert = page.url.searchParams.get('alert');
 		switch (alert) {
+			case 'server_failure': {
+				message = 'Server failure';
+				break;
+			}
 			case 'login_failure': {
 				message = 'Login failure';
+				break;
+			}
+			case 'logoff_failure': {
+				message = 'Logoff failure';
+				break;
+			}
+			case 'verify_failure': {
+				message = '2nd factor verification failure';
 				break;
 			}
 		}

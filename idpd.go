@@ -100,6 +100,7 @@ type Server struct {
 	httpServer      *httpserver.Instance
 	sessionCookie   *server.CookieHandler
 	mailer          *mail.Mailer
+	totpProvider    *server.TOTPProvider
 	locationService *geoip.LocationService
 	database        database.Driver
 	userStore       userstore.Backend
@@ -163,6 +164,7 @@ func (s *Server) initAndStart(config *Config) error {
 	inits := []func(*Config) error{
 		s.initHttpServer,
 		s.initMailer,
+		s.initTOTP,
 		s.initGeoIP,
 		s.initDatabase,
 		s.initUserStore,
@@ -207,6 +209,11 @@ func (s *Server) initMailer(config *Config) error {
 		return err
 	}
 	s.mailer = mailer
+	return nil
+}
+
+func (s *Server) initTOTP(config *Config) error {
+	s.totpProvider = config.toTOTPConfig(s.oauth2IssuerURL.Host).NewTOTPProvider()
 	return nil
 }
 
@@ -348,6 +355,8 @@ func (s *Server) startServer(config *Config) error {
 	s.httpServer.HandleFunc("/session/authenticate", s.handleSessionAuthenticate)
 	s.httpServer.HandleFunc("/session/verify", s.handleSessionVerify)
 	s.httpServer.HandleFunc("/session/terminate", s.handleSessionTerminate)
+	s.httpServer.HandleFunc("/session/totp_register", s.handleSessionTOTPRegister)
+	s.httpServer.HandleFunc("/session/totp_verify", s.handleSessionTOTPVerify)
 	switch config.Server.Protocol {
 	case ServerProtocolHttp:
 		return s.httpServer.Serve()
@@ -398,8 +407,18 @@ type UserVerificationLog struct {
 	Lon          float64   `json:"lon"`
 }
 
+func (l *UserVerificationLog) update(log *database.UserVerificationLog) {
+	l.Registration = time.UnixMicro(log.FirstUsed)
+	l.LastUsed = time.UnixMicro(log.LastUsed)
+	l.Host = log.Host
+	l.Country = log.Country
+	l.CountryCode = log.CountryCode
+	l.Lat = log.Lat
+	l.Lon = log.Lon
+}
+
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	client, err := s.authFlowClient(r)
+	_, client, err := s.userSessionClient(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -430,15 +449,15 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	for _, log := range logs {
 		switch server.VerifyMethod(log.Method) {
 		case server.VerifyMethodEmail:
-			userInfo.EmailVerification = UserVerificationLog{
-				Registration: time.UnixMicro(log.FirstUsed),
-				LastUsed:     time.UnixMicro(log.LastUsed),
-				Host:         log.Host,
-				Country:      log.Country,
-				CountryCode:  log.CountryCode,
-				Lat:          log.Lat,
-				Lon:          log.Lon,
-			}
+			userInfo.EmailVerification.update(log)
+		case server.VerifyMethodTOTP:
+			userInfo.TOTPVerification.update(log)
+		case server.VerifyMethodPasskey:
+			userInfo.PasskeyVerification.update(log)
+		case server.VerifyMethodWebAuthn:
+			userInfo.WebAuthnVerification.update(log)
+		default:
+			slog.Warn("unexpected verification log", slog.String("method", log.Method))
 		}
 	}
 	err = json.NewEncoder(w).Encode(userInfo)
@@ -468,9 +487,9 @@ func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Reques
 func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
 	switch server.VerifyMethod(verification) {
 	case server.VerifyMethodEmail:
-		return server.EmailVerifyHandler(s.mailer, s.database, s.userStore)
+		return server.NewEmailVerifyHandler(s.mailer, s.database, s.userStore)
 	case server.VerifyMethodTOTP:
-		return server.NoneVerifyHandler()
+		return server.NewTOTPVerifyHandler(s.totpProvider, s.database, false)
 	case server.VerifyMethodPasskey:
 		return server.NoneVerifyHandler()
 	case server.VerifyMethodWebAuthn:
@@ -508,17 +527,7 @@ func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
-	userVerificationLog := database.NewUserVerificationLog(subject, string(verifyHandler.Method()), remoteIP)
-	remoteLocation, err := s.locationService.Lookup(remoteIP)
-	if err != nil && !errors.Is(err, geoip.ErrNotFound) {
-		slog.Error("failed to lookup location info", slog.String("remoteIP", remoteIP), slog.Any("err", err))
-	} else if remoteLocation != nil {
-		userVerificationLog.Country = remoteLocation.Country
-		userVerificationLog.CountryCode = remoteLocation.CountryCode
-		userVerificationLog.Lat = remoteLocation.Lat
-		userVerificationLog.Lon = remoteLocation.Lon
-	}
-	userVerificationCtx := context.WithValue(r.Context(), verifyHandler, userVerificationLog)
+	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), subject, verifyHandler, remoteIP)
 	redirectURL, err := s.oauth2Provider.Verify(userVerificationCtx, id, subject, verifyHandler, response)
 	if err != nil {
 		slog.Warn("verify session failure", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
@@ -547,7 +556,7 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
-	client, err := s.authFlowClient(r)
+	_, client, err := s.userSessionClient(r)
 	alert := AlertNone
 	if err == nil {
 		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())
@@ -562,6 +571,79 @@ func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
 }
 
+type UserTOTPRegistrationRequest struct {
+	QRCode string `json:"qr_code"`
+	OTPUrl string `json:"otp_url"`
+}
+
+func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Request) {
+	session, err := s.userSession(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	secret, qrCode, otpURL, err := s.totpProvider.GenerateRegistrationRequest(session.Subject, 256, 256)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	registrationRequest := database.NewUserTOTPRegistrationRequest(session.Subject, secret)
+	err = s.database.InsertUserTOTPRegistrationRequest(r.Context(), registrationRequest)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	registrationRequestInfo := &UserTOTPRegistrationRequest{
+		QRCode: qrCode,
+		OTPUrl: otpURL,
+	}
+	err = json.NewEncoder(w).Encode(registrationRequestInfo)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request) {
+	session, err := s.userSession(r)
+	if err != nil {
+		s.redirectAlert(w, r, AlertLoginFailure)
+		return
+	}
+	code, err := s.parseVerifyTOTPForm(r)
+	if err != nil {
+		s.redirectAlert(w, r, AlertLoginFailure)
+		return
+	}
+	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
+	remoteIP := access.GetHttpRequestRemoteIP(r)
+	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), session.Subject, verifyHandler, remoteIP)
+	challenge, err := verifyHandler.GenerateChallenge(userVerificationCtx, session.Subject)
+	if err != nil {
+		s.redirectAlert(w, r, AlertVerifyFailure)
+	}
+	_, err = s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, challenge, code)
+	if err != nil {
+		s.redirectAlert(w, r, AlertVerifyFailure)
+	}
+	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
+}
+
+func (s *Server) parseVerifyTOTPForm(r *http.Request) (string, error) {
+	if r.Method != http.MethodPost {
+		return "", fmt.Errorf("invalid verify TOTP request")
+	}
+	err := r.ParseForm()
+	if err != nil {
+		return "", fmt.Errorf("failed to parse verify TOTP request")
+	}
+	code := r.PostFormValue("code")
+	if code == "" {
+		return "", fmt.Errorf("incomplete verify TOTP request")
+	}
+	return code, nil
+}
+
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
 	ctx := r.Context()
 	userSession, err := s.database.TransformAndDeleteUserSessionRequest(ctx, state, tokens.Token)
@@ -573,37 +655,52 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
 }
 
-func (s *Server) sessionID(r *http.Request) (string, error) {
+func (s *Server) userSession(r *http.Request) (*database.UserSession, error) {
 	sessionID, exists := s.sessionCookie.Get(r)
 	if !exists {
-		return "", oauth2client.ErrNotAuthenticated
+		return nil, oauth2client.ErrNotAuthenticated
 	}
-	return sessionID, nil
-}
-
-func (s *Server) authFlowClient(r *http.Request) (*http.Client, error) {
-	sessionID, err := s.sessionID(r)
-	if err != nil {
-		return nil, err
-	}
-	ctx := r.Context()
-	session, err := s.database.SelectUserSession(ctx, sessionID)
+	session, err := s.database.SelectUserSession(r.Context(), sessionID)
 	if err != nil {
 		return nil, oauth2client.ErrNotAuthenticated
 	}
-	client, err := s.authFLow.Client(ctx, session.OAuth2Token())
+	return session, nil
+}
+
+func (s *Server) userSessionClient(r *http.Request) (*database.UserSession, *http.Client, error) {
+	session, err := s.userSession(r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return client, nil
+	client, err := s.authFLow.Client(r.Context(), session.OAuth2Token())
+	if err != nil {
+		return nil, nil, err
+	}
+	return session, client, nil
+}
+
+func (s *Server) contextWithUserVerificationLog(ctx context.Context, subject string, verifyHandler server.VerifyHandler, remoteIP string) context.Context {
+	userVerificationLog := database.NewUserVerificationLog(subject, string(verifyHandler.Method()), remoteIP)
+	remoteLocation, err := s.locationService.Lookup(remoteIP)
+	if err != nil && !errors.Is(err, geoip.ErrNotFound) {
+		slog.Error("failed to lookup location info", slog.String("remoteIP", remoteIP), slog.Any("err", err))
+	} else if remoteLocation != nil {
+		userVerificationLog.Country = remoteLocation.Country
+		userVerificationLog.CountryCode = remoteLocation.CountryCode
+		userVerificationLog.Lat = remoteLocation.Lat
+		userVerificationLog.Lon = remoteLocation.Lon
+	}
+	return context.WithValue(ctx, verifyHandler, userVerificationLog)
 }
 
 type Alert string
 
 const (
 	AlertNone          Alert = ""
+	AlertServerFailure Alert = "server_failure"
 	AlertLoginFailure  Alert = "login_failure"
 	AlertLogoffFailure Alert = "logoff_failure"
+	AlertVerifyFailure Alert = "verify_failure"
 )
 
 func (s *Server) redirectAlert(w http.ResponseWriter, r *http.Request, alert Alert) {

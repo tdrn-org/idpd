@@ -18,3 +18,8 @@ export type UserInfo = {
     passkey_verification: UserVerificationLog
     webauthn_verification: UserVerificationLog
 }
+
+export type UserTOTPRegistrationRequest = {
+    qr_code: string
+    otp_url: string
+}

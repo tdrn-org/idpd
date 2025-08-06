@@ -82,7 +82,7 @@
 					Country: {log.country}&nbsp;<img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"
 						alt="{log.country_code} country flag"
-						width={16}
+						width={32}
 						height={24}
 					/>
 				</p>

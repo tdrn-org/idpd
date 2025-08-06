@@ -7,8 +7,10 @@
 		KeyRound,
 		Mail,
 		RectangleEllipsis,
+		RefreshCcw,
 		ScanFace
 	} from '@lucide/svelte';
+	
 	async function sessionUserInfo(): Promise<UserInfo> {
 		const response = await fetch(`/session`);
 		const userInfo: UserInfo = await response.json();
@@ -27,11 +29,11 @@
 				class="w-full rounded-lg bg-white shadow sm:max-w-md md:mt-0 xl:p-0 dark:border dark:border-gray-700 dark:bg-gray-800"
 			>
 				<div class="space-y-4 p-6 sm:p-8 md:space-y-6">
-					<h1
+					<h3
 						class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white"
 					>
 						Login
-					</h1>
+					</h3>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<p>Subject: {userInfo.subject}</p>
 						<p>Email: {userInfo.email}</p>
@@ -43,11 +45,11 @@
 							>
 						</p>
 					</div>
-					<h1
+					<h3
 						class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white"
 					>
 						Verification methods
-					</h1>
+					</h3>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
 							<Mail />&nbsp;Email code
@@ -56,19 +58,19 @@
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
-							<RectangleEllipsis />&nbsp;TOTP code
+							<RectangleEllipsis />&nbsp;TOTP code&nbsp;<a href="/user/totp" class="text-blue-600 hover:no-underline dark:text-blue-500"><RefreshCcw /></a>
 						</div>
 						<VerificationLog id="totp" log={userInfo.totp_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
-							<ScanFace />&nbsp;Passkey
+							<ScanFace />&nbsp;Passkey&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><RefreshCcw /></a>
 						</div>
 						<VerificationLog id="passkey" log={userInfo.passkey_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
-							<KeyRound />&nbsp;WebAuthn
+							<KeyRound />&nbsp;WebAuthn&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><RefreshCcw /></a>
 						</div>
 						<VerificationLog id="webauthn" log={userInfo.webauthn_verification} />
 					</div>

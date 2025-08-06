@@ -22,16 +22,22 @@ import (
 
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/idpd/internal/server"
 )
 
 func TestTOTPProvider(t *testing.T) {
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "issuer",
-		AccountName: "subject",
-	})
+	config := server.TOTPConfig{
+		Issuer: "issuer",
+	}
+	provider := config.NewTOTPProvider()
+	secret, qrCode, otpURL, err := provider.GenerateRegistrationRequest("subject", 64, 64)
 	require.NoError(t, err)
-	passcode, err := totp.GenerateCode(key.Secret(), time.Now())
+	require.NotEmpty(t, secret)
+	require.NotEmpty(t, qrCode)
+	require.NotEmpty(t, otpURL)
+
+	code, err := totp.GenerateCode(secret, time.Now())
 	require.NoError(t, err)
-	valid := totp.Validate(passcode, key.Secret())
-	require.True(t, valid)
+	verified := provider.VerifyCode(secret, code)
+	require.True(t, verified)
 }
