@@ -7,8 +7,10 @@
 		KeyRound,
 		Mail,
 		RectangleEllipsis,
-		RefreshCcw,
-		ScanFace
+		ScanFace,
+
+		Settings2
+
 	} from '@lucide/svelte';
 	
 	async function sessionUserInfo(): Promise<UserInfo> {
@@ -58,19 +60,19 @@
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
-							<RectangleEllipsis />&nbsp;TOTP code&nbsp;<a href="/user/totp" class="text-blue-600 hover:no-underline dark:text-blue-500"><RefreshCcw /></a>
+							<RectangleEllipsis />&nbsp;TOTP code&nbsp;<a href="/user/totp" class="text-blue-600 hover:no-underline dark:text-blue-500"><Settings2 /></a>
 						</div>
 						<VerificationLog id="totp" log={userInfo.totp_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
-							<ScanFace />&nbsp;Passkey&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><RefreshCcw /></a>
+							<ScanFace />&nbsp;Passkey&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><Settings2 /></a>
 						</div>
 						<VerificationLog id="passkey" log={userInfo.passkey_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
 						<div class="flex">
-							<KeyRound />&nbsp;WebAuthn&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><RefreshCcw /></a>
+							<KeyRound />&nbsp;WebAuthn&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><Settings2 /></a>
 						</div>
 						<VerificationLog id="webauthn" log={userInfo.webauthn_verification} />
 					</div>

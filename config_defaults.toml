@@ -12,7 +12,7 @@ syslog_facility = 4
 [server]
 address = "localhost:9123"
 protocol = "http"
-access_log = true
+access_log = false
 cert_file = ""
 key_file = ""
 public_url = ""

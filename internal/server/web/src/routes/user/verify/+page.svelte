@@ -7,7 +7,7 @@
 	let id: string | null = '';
 	let subject: string | null = '';
 	let verification: string | null = '';
-	let code: string = '';
+	let response: string = '';
 
 	onMount(() => {
 		id = page.url.searchParams.get('id');
@@ -40,24 +40,23 @@
 				<form class="space-y-4 md:space-y-6" action="/session/verify" method="post">
 					<input type="hidden" name="id" value={id} />
 					<input type="hidden" name="verification" value={verification} />
+					<div>
+						<label
+							for="subject"
+							class="mb-2 block text-sm font-medium text-gray-900 dark:text-white">Your login</label
+						>
+						<input
+							type="input"
+							name="subject"
+							id="subject"
+							class="focus:ring-primary-600 focus:border-primary-600 block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
+							placeholder="Enter your login"
+							bind:value={subject}
+							required
+							readonly
+						/>
+					</div>
 					{#if verification == 'email'}
-						<div>
-							<label
-								for="subject"
-								class="mb-2 block text-sm font-medium text-gray-900 dark:text-white"
-								>Your login</label
-							>
-							<input
-								type="input"
-								name="subject"
-								id="subject"
-								class="focus:ring-primary-600 focus:border-primary-600 block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
-								placeholder="Enter your login"
-								bind:value={subject}
-								required
-								readonly
-							/>
-						</div>
 						<div>
 							<label for="code" class="mb-2 block text-sm font-medium text-gray-900 dark:text-white"
 								>Code</label
@@ -68,7 +67,22 @@
 								id="response"
 								class="focus:ring-primary-600 focus:border-primary-600 block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
 								placeholder="Enter the code you received via email"
-								bind:value={code}
+								bind:value={response}
+								required
+							/>
+						</div>
+					{:else if verification == 'totp'}
+						<div>
+							<label for="code" class="mb-2 block text-sm font-medium text-gray-900 dark:text-white"
+								>Code</label
+							>
+							<input
+								type="input"
+								name="response"
+								id="response"
+								class="focus:ring-primary-600 focus:border-primary-600 block w-full rounded-lg border border-gray-300 bg-gray-50 p-2.5 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:border-blue-500 dark:focus:ring-blue-500"
+								placeholder="Enter the code shown on your device"
+								bind:value={response}
 								required
 							/>
 						</div>

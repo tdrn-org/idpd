@@ -125,7 +125,11 @@ func (h *TOTPVerifyHandler) VerifyResponse(ctx context.Context, subject string, 
 		}
 		secret = registrationRequest.Secret
 	} else {
-		secret = ""
+		registration, err := h.database.SelectUserTOTPRegistration(ctx, subject)
+		if err != nil {
+			return false, err
+		}
+		secret = registration.Secret
 	}
 	verified := h.totpProvider.VerifyCode(secret, response)
 	if !verified {

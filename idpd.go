@@ -587,17 +587,17 @@ func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	registrationRequest := database.NewUserTOTPRegistrationRequest(session.Subject, secret)
-	err = s.database.InsertUserTOTPRegistrationRequest(r.Context(), registrationRequest)
+	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
+	_, err = s.database.GenerateUserTOTPRegistrationRequest(r.Context(), session.Subject, secret, verifyHandler.GenerateChallenge)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	registrationRequestInfo := &UserTOTPRegistrationRequest{
+	registrationInfo := &UserTOTPRegistrationRequest{
 		QRCode: qrCode,
 		OTPUrl: otpURL,
 	}
-	err = json.NewEncoder(w).Encode(registrationRequestInfo)
+	err = json.NewEncoder(w).Encode(registrationInfo)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -610,7 +610,7 @@ func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request)
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
-	code, err := s.parseVerifyTOTPForm(r)
+	response, err := s.parseVerifyTOTPForm(r)
 	if err != nil {
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
@@ -618,12 +618,11 @@ func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request)
 	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
 	remoteIP := access.GetHttpRequestRemoteIP(r)
 	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), session.Subject, verifyHandler, remoteIP)
-	challenge, err := verifyHandler.GenerateChallenge(userVerificationCtx, session.Subject)
+	registration, err := s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, response)
 	if err != nil {
 		s.redirectAlert(w, r, AlertVerifyFailure)
 	}
-	_, err = s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, challenge, code)
-	if err != nil {
+	if registration == nil {
 		s.redirectAlert(w, r, AlertVerifyFailure)
 	}
 	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
@@ -637,11 +636,11 @@ func (s *Server) parseVerifyTOTPForm(r *http.Request) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to parse verify TOTP request")
 	}
-	code := r.PostFormValue("code")
-	if code == "" {
+	response := r.PostFormValue("response")
+	if response == "" {
 		return "", fmt.Errorf("incomplete verify TOTP request")
 	}
-	return code, nil
+	return response, nil
 }
 
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {

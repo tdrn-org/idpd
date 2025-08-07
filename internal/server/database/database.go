@@ -64,9 +64,10 @@ type Driver interface {
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
 	InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error)
 	SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error)
-	InsertUserTOTPRegistrationRequest(ctx context.Context, request *UserTOTPRegistrationRequest) error
+	GenerateUserTOTPRegistrationRequest(ctx context.Context, subject string, secret string, generateChallengeFunc GenerateChallengeFunc) (*UserTOTPRegistrationRequest, error)
 	SelectUserTOTPRegistrationRequest(ctx context.Context, subject string) (*UserTOTPRegistrationRequest, error)
-	VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, challenge string, response string) (*UserTOTPRegistration, error)
+	VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserTOTPRegistration, error)
+	SelectUserTOTPRegistration(ctx context.Context, subject string) (*UserTOTPRegistration, error)
 	Close() error
 }
 
@@ -1183,26 +1184,32 @@ func (d *databaseDriver) deleteUserVerificationLog(tx *sql.Tx, txCtx context.Con
 	return nil
 }
 
-func (d *databaseDriver) InsertUserTOTPRegistrationRequest(ctx context.Context, request *UserTOTPRegistrationRequest) error {
-	d.logger.Debug("inserting user TOTP registration request", slog.String("subject", request.Subject))
+func (d *databaseDriver) GenerateUserTOTPRegistrationRequest(ctx context.Context, subject string, secret string, generateChallengeFunc GenerateChallengeFunc) (*UserTOTPRegistrationRequest, error) {
+	d.logger.Debug("generating user TOTP registration request", slog.String("subject", subject))
 	tx, txCtx, err := d.beginTx(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE subject=$1", request.Subject)
+	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE subject=$1", subject)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return nil, d.rollbackTx(tx, err)
 	}
+	challenge, err := generateChallengeFunc(txCtx, subject)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	request := NewUserTOTPRegistrationRequest(subject, secret, challenge)
 	args := []any{
 		request.Subject,
 		request.Secret,
+		request.Challenge,
 		request.Expiration,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration_request (subject,secret,expiration) VALUES($1,$2,$3)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration_request (subject,secret,challenge,expiration) VALUES($1,$2,$3,$4)", args...)
 	if err != nil {
-		return d.rollbackTx(tx, fmt.Errorf("insert user TOTP registration request failure (cause: %w)", err))
+		return nil, d.rollbackTx(tx, fmt.Errorf("insert user TOTP registration request failure (cause: %w)", err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return request, d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) SelectUserTOTPRegistrationRequest(ctx context.Context, subject string) (*UserTOTPRegistrationRequest, error) {
@@ -1211,41 +1218,95 @@ func (d *databaseDriver) SelectUserTOTPRegistrationRequest(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	registrationRequest := &UserTOTPRegistrationRequest{
-		Subject: subject,
+	request, err := d.selectUserTOTPRegistrationRequest(tx, txCtx, subject)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT secret,expiration FROM user_totp_registration_request WHERE subject=$1", registrationRequest.Subject)
-	args := []any{
-		&registrationRequest.Secret,
-		&registrationRequest.Expiration,
-	}
-	err = row.Scan(args...)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user TOTP registration request: %s)", ErrObjectNotFound, registrationRequest.Subject))
-	} else if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select user TOTP registration request failure (cause: %w)", err))
-	}
-	return registrationRequest, d.commitTx(tx, ctx == txCtx)
+	return request, d.commitTx(tx, ctx == txCtx)
 }
 
-func (d *databaseDriver) VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, challenge string, response string) (*UserTOTPRegistration, error) {
+func (d *databaseDriver) selectUserTOTPRegistrationRequest(tx *sql.Tx, txCtx context.Context, subject string) (*UserTOTPRegistrationRequest, error) {
+	request := &UserTOTPRegistrationRequest{
+		Subject: subject,
+	}
+	row := d.queryRowTx(tx, txCtx, "SELECT secret,challenge,expiration FROM user_totp_registration_request WHERE subject=$1", request.Subject)
+	args := []any{
+		&request.Secret,
+		&request.Challenge,
+		&request.Expiration,
+	}
+	err := row.Scan(args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w (unknown user TOTP registration request: %s)", ErrObjectNotFound, request.Subject)
+	} else if err != nil {
+		return nil, fmt.Errorf("select user TOTP registration request failure (cause: %w)", err)
+	}
+	return request, nil
+}
+
+func (d *databaseDriver) VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserTOTPRegistration, error) {
 	d.logger.Debug("verifying and transforming user TOTP registration request", slog.String("subject", subject))
 	tx, txCtx, err := d.beginTx(ctx)
 	if err != nil {
 		return nil, err
 	}
+	request, err := d.selectUserTOTPRegistrationRequest(tx, txCtx, subject)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
 	err = d.deleteUserVerificationLog(tx, txCtx, subject, TOTPKey)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
-	verified, err := verifyChallengeResponse(txCtx, subject, challenge, response)
+	verified, err := verifyChallengeResponse(txCtx, subject, request.Challenge, response)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	if !verified {
 		return nil, d.commitTx(tx, ctx == txCtx)
 	}
-	return nil, d.commitTx(tx, ctx == txCtx)
+	err = d.deleteUserTOTPRegistration(tx, txCtx, subject)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	registration := NewUserTOTPRegistrationFromRequest(request)
+	args := []any{
+		registration.Subject,
+		registration.Secret,
+		registration.CreateTime,
+	}
+	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration (subject,secret,create_time) VALUES($1,$2,$3)", args...)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
+	return registration, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) deleteUserTOTPRegistration(tx *sql.Tx, txCtx context.Context, subject string) error {
+	return d.execTx(tx, txCtx, "DELETE FROM user_totp_registration WHERE subject=$1", subject)
+}
+
+func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject string) (*UserTOTPRegistration, error) {
+	d.logger.Debug("selecting user TOTP registration", slog.String("subject", subject))
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	registration := &UserTOTPRegistration{
+		Subject: subject,
+	}
+	row := d.queryRowTx(tx, txCtx, "SELECT secret,create_time FROM user_totp_registration WHERE subject=$1", registration.Subject)
+	args := []any{
+		&registration.Secret,
+		&registration.CreateTime,
+	}
+	err = row.Scan(args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w (unknown user TOTP registration: %s)", ErrObjectNotFound, registration.Subject)
+	} else if err != nil {
+		return nil, fmt.Errorf("select user TOTP registration failure (cause: %w)", err)
+	}
+	return registration, d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) Close() error {

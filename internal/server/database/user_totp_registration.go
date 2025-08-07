@@ -21,13 +21,15 @@ import "time"
 type UserTOTPRegistrationRequest struct {
 	Subject    string
 	Secret     string
+	Challenge  string
 	Expiration int64
 }
 
-func NewUserTOTPRegistrationRequest(subject string, secret string) *UserTOTPRegistrationRequest {
+func NewUserTOTPRegistrationRequest(subject string, secret string, challenge string) *UserTOTPRegistrationRequest {
 	return &UserTOTPRegistrationRequest{
 		Subject:    subject,
 		Secret:     secret,
+		Challenge:  challenge,
 		Expiration: time.Now().Add(5 * time.Minute).UnixMicro(),
 	}
 }
