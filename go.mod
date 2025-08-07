@@ -6,6 +6,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
+	github.com/rs/cors v1.11.1
 	github.com/tdrn-org/go-tlsconf v0.0.4
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/text v0.27.0
@@ -28,7 +29,6 @@ require (
 	github.com/muhlemmer/httpforwarded v0.1.0 // indirect
 	github.com/oschwald/maxminddb-golang v1.13.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rs/cors v1.11.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/zitadel/logging v0.6.2 // indirect
 	github.com/zitadel/schema v1.3.1 // indirect

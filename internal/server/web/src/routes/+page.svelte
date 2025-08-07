@@ -8,11 +8,9 @@
 		Mail,
 		RectangleEllipsis,
 		ScanFace,
-
 		Settings2
-
 	} from '@lucide/svelte';
-	
+
 	async function sessionUserInfo(): Promise<UserInfo> {
 		const response = await fetch(`/session`);
 		const userInfo: UserInfo = await response.json();
@@ -53,27 +51,30 @@
 						Verification methods
 					</h3>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
-						<div class="flex">
-							<Mail />&nbsp;Email code
-						</div>
+						<Mail class="inline" /> Email code
 						<VerificationLog id="email" log={userInfo.email_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
-						<div class="flex">
-							<RectangleEllipsis />&nbsp;TOTP code&nbsp;<a href="/user/totp" class="text-blue-600 hover:no-underline dark:text-blue-500"><Settings2 /></a>
-						</div>
+						<RectangleEllipsis class="inline" />&nbsp;TOTP code&nbsp;<a
+							href="/user/totp"
+							class="text-blue-600 hover:no-underline dark:text-blue-500"
+							><Settings2 class="inline" /></a
+						>
 						<VerificationLog id="totp" log={userInfo.totp_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
-						<div class="flex">
-							<ScanFace />&nbsp;Passkey&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><Settings2 /></a>
-						</div>
+						<ScanFace class="inline" /> Passkey
+						<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"
+							><Settings2 class="inline" /></a
+						>
 						<VerificationLog id="passkey" log={userInfo.passkey_verification} />
 					</div>
 					<div class="space-y-1 text-gray-500 dark:text-gray-300">
-						<div class="flex">
-							<KeyRound />&nbsp;WebAuthn&nbsp;<a href="/" class="text-blue-600 hover:no-underline dark:text-blue-500"><Settings2 /></a>
-						</div>
+						<KeyRound class="inline" /> WebAuthn&nbsp;<a
+							href="/"
+							class="text-blue-600 hover:no-underline dark:text-blue-500"
+							><Settings2 class="inline" /></a
+						>
 						<VerificationLog id="webauthn" log={userInfo.webauthn_verification} />
 					</div>
 					<div class="flex items-center justify-between">

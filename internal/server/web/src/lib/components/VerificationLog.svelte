@@ -57,7 +57,7 @@
 		-
 	{/if}
 </div>
-<div class="flex">
+<div>
 	Last used:
 	{#if log.last_used}
 		{formatDate(new Date(log.last_used))}
@@ -72,6 +72,7 @@
 						alt="{log.country_code} country flag"
 						width={16}
 						height={24}
+						class="inline"
 					/>
 				{:else}
 					{log.country_code.toUpperCase()}
@@ -81,12 +82,13 @@
 				<p>
 					From: {log.host}
 				</p>
-				<p class="flex">
+				<p>
 					Country: {log.country}&nbsp;<img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"
 						alt="{log.country_code} country flag"
 						width={32}
 						height={24}
+						class="inline"
 					/>
 				</p>
 				<p>

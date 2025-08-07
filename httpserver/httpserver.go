@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/cors"
 	"github.com/tdrn-org/go-tlsconf/tlsserver"
 	"github.com/tdrn-org/idpd/internal/access"
 )
@@ -113,9 +114,10 @@ func (s *Instance) Serve() error {
 	}
 	s.baseURL = baseURL
 	s.logger = slog.With(slog.Any("baseURL", s.baseURL))
+	cors := cors.AllowAll()
 	s.httpServer = &http.Server{
 		Addr:    s.Addr,
-		Handler: s,
+		Handler: cors.Handler(s),
 	}
 	s.stoppedWG.Add(1)
 	go func() {
@@ -154,9 +156,10 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 		}
 		certificates = append(certificates, *certificate)
 	}
+	cors := cors.AllowAll()
 	s.httpServer = &http.Server{
 		Addr:    s.Addr,
-		Handler: s,
+		Handler: cors.Handler(s),
 		TLSConfig: &tls.Config{
 			Certificates: certificates,
 		},
