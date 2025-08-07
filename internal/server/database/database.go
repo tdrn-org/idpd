@@ -1111,10 +1111,11 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 			updatedLog.Host,
 			updatedLog.Country,
 			updatedLog.CountryCode,
+			updatedLog.City,
 			updatedLog.Lat,
 			updatedLog.Lon,
 		}
-		err = d.execTx(tx, txCtx, "INSERT INTO user_verification_log (subject,method,first_used,last_used,host,country,country_code,lat,lon) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", args1...)
+		err = d.execTx(tx, txCtx, "INSERT INTO user_verification_log (subject,method,first_used,last_used,host,country,country_code,city,lat,lon) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", args1...)
 		if err != nil {
 			return nil, d.rollbackTx(tx, fmt.Errorf("insert user verification log failure (cause: %w)", err))
 		}
@@ -1128,12 +1129,13 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 			updatedLog.Host,
 			updatedLog.Country,
 			updatedLog.CountryCode,
+			updatedLog.City,
 			updatedLog.Lat,
 			updatedLog.Lon,
 			updatedLog.Subject,
 			updatedLog.Method,
 		}
-		err = d.execTx(tx, txCtx, "UPDATE user_verification_log SET first_used=$1,last_used=$2,host=$3,country=$4,country_code=$5,lat=$6,lon=$7 WHERE subject=$8 AND method=$9", args2...)
+		err = d.execTx(tx, txCtx, "UPDATE user_verification_log SET first_used=$1,last_used=$2,host=$3,country=$4,country_code=$5,city=$6,lat=$7,lon=$8 WHERE subject=$9 AND method=$10", args2...)
 		if err != nil {
 			return nil, d.rollbackTx(tx, fmt.Errorf("update user verification log failure (cause: %w)", err))
 		}
@@ -1147,7 +1149,7 @@ func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject
 	if err != nil {
 		return nil, err
 	}
-	rows, err := d.queryTx(tx, txCtx, "SELECT method,first_used,last_used,host,country,country_code,lat,lon FROM user_verification_log WHERE subject=$1", subject)
+	rows, err := d.queryTx(tx, txCtx, "SELECT method,first_used,last_used,host,country,country_code,city,lat,lon FROM user_verification_log WHERE subject=$1", subject)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1164,6 +1166,7 @@ func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject
 			&log.Host,
 			&log.Country,
 			&log.CountryCode,
+			&log.City,
 			&log.Lat,
 			&log.Lon,
 		}

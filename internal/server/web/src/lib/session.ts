@@ -4,6 +4,7 @@ export type UserVerificationLog = {
     host: string | null
     country: string | null
     country_code: string | null
+    city: string | null
     lat: number | null
     lon: number | null
 

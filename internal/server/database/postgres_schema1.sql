@@ -113,6 +113,7 @@ CREATE TABLE user_verification_log(
     host TEXT,
     country TEXT,
     country_code TEXT,
+    city TEXT,
     lat DOUBLE PRECISION,
     lon DOUBLE PRECISION
 );

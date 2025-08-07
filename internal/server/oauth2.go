@@ -292,8 +292,6 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 
 func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, verifyHandler VerifyHandler, response string) (string, error) {
 	slog.Info("verifying OAuth2 user", slog.String("id", id), slog.String("subject", subject), slog.String("verification", string(verifyHandler.Method())))
-
-	// TODO: Integrate VerifyHandler
 	sessionRequest, err := p.driver.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, id, subject, verifyHandler.VerifyResponse, response)
 	if err != nil {
 		return "", fmt.Errorf("OAuth2 user verification failure: %s (cause: %w)", id, err)

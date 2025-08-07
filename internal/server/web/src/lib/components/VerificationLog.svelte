@@ -63,6 +63,9 @@
 		{formatDate(new Date(log.last_used))}
 		{#if log.country_code}
 			(<button popovertarget={id}>
+				{#if log.city}
+					{log.city},
+				{/if}
 				{#if KNOWN_FLAGS.has(log.country_code.toLowerCase())}
 					<img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"

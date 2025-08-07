@@ -24,6 +24,7 @@ type Location struct {
 	Host        string
 	Country     string
 	CountryCode string
+	City        string
 	Lon         float64
 	Lat         float64
 }

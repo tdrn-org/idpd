@@ -94,9 +94,14 @@ func initHostDB(t *testing.T) (string, string) {
 		record := mmdbtype.Map{
 			"country": mmdbtype.Map{
 				"names": mmdbtype.Map{
-					"en": mmdbtype.String("dev"),
+					"en": mmdbtype.String("devCountry"),
 				},
 				"iso_code": mmdbtype.String("dv"),
+			},
+			"city": mmdbtype.Map{
+				"names": mmdbtype.Map{
+					"en": mmdbtype.String("devCity"),
+				},
 			},
 			"location": mmdbtype.Map{
 				"latitude":  mmdbtype.Float64(0.0),

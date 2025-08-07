@@ -37,35 +37,35 @@ func NewCookieHandler(name string, path string, secure bool, sameSite http.SameS
 	}
 }
 
-func (ch *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) {
+func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) {
 	cookie := &http.Cookie{
-		Name:     ch.name,
+		Name:     h.name,
 		Value:    value,
-		Path:     ch.path,
+		Path:     h.path,
 		MaxAge:   maxAge,
-		Secure:   ch.secure,
+		Secure:   h.secure,
 		HttpOnly: true,
-		SameSite: ch.sameSite,
+		SameSite: h.sameSite,
 	}
 	http.SetCookie(w, cookie)
 }
 
-func (ch *CookieHandler) Set(w http.ResponseWriter, value string, remember bool) {
+func (h *CookieHandler) Set(w http.ResponseWriter, value string, remember bool) {
 	maxAge := 0
 	if remember {
-		maxAge = ch.maxAge
+		maxAge = h.maxAge
 	}
-	ch.set(w, value, maxAge)
+	h.set(w, value, maxAge)
 }
 
-func (ch *CookieHandler) Get(r *http.Request) (string, bool) {
-	cookie, err := r.Cookie(ch.name)
+func (h *CookieHandler) Get(r *http.Request) (string, bool) {
+	cookie, err := r.Cookie(h.name)
 	if err != nil {
 		return "", false
 	}
 	return cookie.Value, true
 }
 
-func (ch *CookieHandler) Delete(w http.ResponseWriter) {
-	ch.set(w, "", -1)
+func (h *CookieHandler) Delete(w http.ResponseWriter) {
+	h.set(w, "", -1)
 }

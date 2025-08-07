@@ -26,6 +26,7 @@ type UserVerificationLog struct {
 	Host        string
 	Country     string
 	CountryCode string
+	City        string
 	Lat         float64
 	Lon         float64
 }
@@ -46,6 +47,7 @@ func (l *UserVerificationLog) Update(log *UserVerificationLog) {
 	l.Host = log.Host
 	l.Country = log.Country
 	l.CountryCode = log.CountryCode
+	l.City = log.City
 	l.Lat = log.Lat
 	l.Lon = log.Lon
 }

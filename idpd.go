@@ -403,6 +403,7 @@ type UserVerificationLog struct {
 	Host         string    `json:"host"`
 	Country      string    `json:"country,omitempty"`
 	CountryCode  string    `json:"country_code,omitempty"`
+	City         string    `json:"city,omitempty"`
 	Lat          float64   `json:"lat"`
 	Lon          float64   `json:"lon"`
 }
@@ -413,6 +414,7 @@ func (l *UserVerificationLog) update(log *database.UserVerificationLog) {
 	l.Host = log.Host
 	l.Country = log.Country
 	l.CountryCode = log.CountryCode
+	l.City = log.City
 	l.Lat = log.Lat
 	l.Lon = log.Lon
 }

@@ -32,6 +32,11 @@ type MaxMindDBLocation struct {
 		} `maxminddb:"names"`
 		ISOCode string `maxminddb:"iso_code"`
 	} `maxminddb:"country"`
+	City struct {
+		Names struct {
+			EN string `maxminddb:"en"`
+		} `maxminddb:"names"`
+	} `maxminddb:"city"`
 	Location struct {
 		Latitude  *float64 `maxminddb:"latitude"`
 		Longitude *float64 `maxminddb:"longitude"`
@@ -39,13 +44,14 @@ type MaxMindDBLocation struct {
 }
 
 func (l *MaxMindDBLocation) toLookupResult(host string) (*Location, error) {
-	if l.Country.Names.EN == "" || l.Country.ISOCode == "" {
+	if l.Country.Names.EN == "" || l.Country.ISOCode == "" || l.City.Names.EN == "" {
 		return nil, ErrNotFound
 	}
 	location := &Location{
 		Host:        host,
 		Country:     l.Country.Names.EN,
 		CountryCode: l.Country.ISOCode,
+		City:        l.City.Names.EN,
 		Lat:         *l.Location.Latitude,
 		Lon:         *l.Location.Longitude,
 	}
