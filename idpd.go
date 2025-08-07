@@ -683,11 +683,12 @@ func (s *Server) userSessionClient(r *http.Request) (*database.UserSession, *htt
 func (s *Server) contextWithUserVerificationLog(ctx context.Context, subject string, verifyHandler server.VerifyHandler, remoteIP string) context.Context {
 	userVerificationLog := database.NewUserVerificationLog(subject, string(verifyHandler.Method()), remoteIP)
 	remoteLocation, err := s.locationService.Lookup(remoteIP)
-	if err != nil && !errors.Is(err, geoip.ErrNotFound) {
+	if err != nil {
 		slog.Error("failed to lookup location info", slog.String("remoteIP", remoteIP), slog.Any("err", err))
-	} else if remoteLocation != nil {
+	} else if remoteLocation != geoip.NoLocation {
 		userVerificationLog.Country = remoteLocation.Country
 		userVerificationLog.CountryCode = remoteLocation.CountryCode
+		userVerificationLog.City = remoteLocation.City
 		userVerificationLog.Lat = remoteLocation.Lat
 		userVerificationLog.Lon = remoteLocation.Lon
 	}

@@ -45,7 +45,7 @@ type MaxMindDBLocation struct {
 
 func (l *MaxMindDBLocation) toLookupResult(host string) (*Location, error) {
 	if l.Country.Names.EN == "" || l.Country.ISOCode == "" || l.City.Names.EN == "" {
-		return nil, ErrNotFound
+		return NoLocation, nil
 	}
 	location := &Location{
 		Host:        host,
@@ -101,7 +101,7 @@ func (p *MaxMindDBProvider) Lookup(host string) (*Location, error) {
 		}
 		return location.toLookupResult(host)
 	}
-	return nil, ErrNotFound
+	return NoLocation, nil
 }
 
 func (p *MaxMindDBProvider) Close() error {

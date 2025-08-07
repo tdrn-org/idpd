@@ -58,6 +58,6 @@ require (
 	github.com/tdrn-org/go-conf v0.0.4
 	github.com/tdrn-org/go-log v0.4.1
 	github.com/zitadel/oidc/v3 v3.44.0
-	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 )

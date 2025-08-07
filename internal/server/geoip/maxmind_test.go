@@ -40,8 +40,9 @@ func TestMaxMindDBProvider(t *testing.T) {
 	require.NotEmpty(t, location.Country)
 	require.NotEmpty(t, location.CountryCode)
 
-	_, err = provider.Lookup("localhost")
-	require.ErrorIs(t, err, geoip.ErrNotFound)
+	location, err = provider.Lookup("localhost")
+	require.NoError(t, err)
+	require.Equal(t, geoip.NoLocation, location)
 
 	err = provider.Close()
 	require.NoError(t, err)
@@ -58,9 +59,11 @@ func TestMaxMindDBService(t *testing.T) {
 	require.NotNil(t, location)
 	require.NotEmpty(t, location.Country)
 	require.NotEmpty(t, location.CountryCode)
+	require.NotEmpty(t, location.City)
 
-	_, err = service.Lookup("localhost")
-	require.ErrorIs(t, err, geoip.ErrNotFound)
+	location, err = service.Lookup("localhost")
+	require.NoError(t, err)
+	require.Equal(t, geoip.NoLocation, location)
 
 	err = service.Close()
 	require.NoError(t, err)

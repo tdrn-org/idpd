@@ -18,8 +18,6 @@ package geoip
 
 import "errors"
 
-var ErrNotFound = errors.New("not found")
-
 type Location struct {
 	Host        string
 	Country     string
@@ -28,6 +26,8 @@ type Location struct {
 	Lon         float64
 	Lat         float64
 }
+
+var NoLocation *Location = &Location{}
 
 type Provider interface {
 	Lookup(host string) (*Location, error)
@@ -61,8 +61,8 @@ func (s *LocationService) Lookup(host string) (*Location, error) {
 		return location, nil
 	}
 	location, err := s.provider.Lookup(host)
-	if err != nil {
-		return nil, err
+	if err != nil || location == NoLocation {
+		return NoLocation, err
 	}
 	s.cache.UpdateCache(host, location)
 	return location, nil
@@ -82,7 +82,7 @@ func DummyProvider() Provider {
 type dummyProvider struct{}
 
 func (p *dummyProvider) Lookup(_ string) (*Location, error) {
-	return nil, ErrNotFound
+	return NoLocation, nil
 }
 
 func (p *dummyProvider) Close() error {
