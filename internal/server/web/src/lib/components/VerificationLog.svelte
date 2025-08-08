@@ -78,7 +78,7 @@
 					{log.country_code.toUpperCase()}
 				{/if}
 			</button>)
-			<div popover id="{id}" class="w-64 text-sm text-gray-500 transition-opacity duration-300 bg-white border border-gray-200 rounded-lg shadow-xs opacity-0 dark:text-gray-400 dark:border-gray-600 dark:bg-gray-800">
+			<div popover id="{id}" class="absolute text-sm text-gray-500 bg-white border border-gray-200 rounded-lg shadow-xs dark:text-gray-400 dark:border-gray-600 dark:bg-gray-800">
 				<p>
 					From: {log.host}
 				</p>
