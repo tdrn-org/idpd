@@ -37,8 +37,8 @@
 #public_url = ""
 # session cookie name
 #session_cookie = "idpd_session"
-# session cookie max age (in seconds)
-#session_cookie_max_age = "720h" # 30 days
+# session cookie lifetime = max age (in seconds)
+#session_cookie_lifetime = "720h" # 30 days
 
 [mail]
 #address = "localhost:587"

@@ -70,24 +70,27 @@
 					<img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"
 						alt="{log.country_code} country flag"
-						width={16}
-						height={24}
+						width={24}
+						height={16}
 						class="inline"
 					/>
 				{:else}
 					{log.country_code.toUpperCase()}
 				{/if}
 			</button>)
-			<div popover {id}>
+			<div popover id="{id}" class="w-64 text-sm text-gray-500 transition-opacity duration-300 bg-white border border-gray-200 rounded-lg shadow-xs opacity-0 dark:text-gray-400 dark:border-gray-600 dark:bg-gray-800">
 				<p>
 					From: {log.host}
 				</p>
+				{#if log.city}
+					City: {log.city}
+				{/if}
 				<p>
-					Country: {log.country}&nbsp;<img
+					Country: {log.country} <img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"
 						alt="{log.country_code} country flag"
-						width={32}
-						height={24}
+						width={24}
+						height={16}
 						class="inline"
 					/>
 				</p>

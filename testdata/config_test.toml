@@ -13,7 +13,7 @@ cert_file = "idpd.crt"
 key_file = "idpd.key"
 public_url = "https://idpd.example.org"
 session_cookie = "idpd_session"
-session_cookie_max_age = "1h"
+session_cookie_lifetime = "1h"
 
 [mail]
 address = "smtp.example.org:25"

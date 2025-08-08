@@ -17,7 +17,7 @@ cert_file = ""
 key_file = ""
 public_url = ""
 session_cookie = "idpd_session"
-session_cookie_max_age = "720h"
+session_cookie_lifetime = "720h"
 
 [mail]
 address = "localhost:587"

@@ -48,14 +48,14 @@ type Config struct {
 		SyslogFacility int    `toml:"syslog_facility"`
 	} `toml:"logging"`
 	Server struct {
-		Address             string         `toml:"address"`
-		Protocol            ServerProtocol `toml:"protocol"`
-		AccessLog           bool           `toml:"access_log"`
-		CertFile            string         `toml:"cert_file"`
-		KeyFile             string         `toml:"key_file"`
-		PublicURL           URLSpec        `toml:"public_url"`
-		SessionCookie       string         `toml:"session_cookie"`
-		SessionCookieMaxAge DurationSpec   `toml:"session_cookie_max_age"`
+		Address               string         `toml:"address"`
+		Protocol              ServerProtocol `toml:"protocol"`
+		AccessLog             bool           `toml:"access_log"`
+		CertFile              string         `toml:"cert_file"`
+		KeyFile               string         `toml:"key_file"`
+		PublicURL             URLSpec        `toml:"public_url"`
+		SessionCookie         string         `toml:"session_cookie"`
+		SessionCookieLifetime DurationSpec   `toml:"session_cookie_lifetime"`
 	} `toml:"server"`
 	Mail struct {
 		Address     string `toml:"address"`

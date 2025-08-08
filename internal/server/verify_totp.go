@@ -18,62 +18,9 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
-	"fmt"
-	"image/png"
-	"log/slog"
-	"strings"
-	"time"
 
-	"github.com/pquerna/otp/totp"
 	"github.com/tdrn-org/idpd/internal/server/database"
 )
-
-type TOTPConfig struct {
-	Issuer string
-	Period time.Duration
-}
-
-func (c *TOTPConfig) NewTOTPProvider() *TOTPProvider {
-	logger := slog.With(slog.String("issuer", c.Issuer))
-	logger.Info("initializing TOTP provider")
-	return &TOTPProvider{
-		issuer: c.Issuer,
-		period: c.Period,
-		logger: logger,
-	}
-}
-
-type TOTPProvider struct {
-	issuer string
-	period time.Duration
-	logger *slog.Logger
-}
-
-func (p *TOTPProvider) GenerateRegistrationRequest(subject string, width int, height int) (string, string, string, error) {
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      p.issuer,
-		AccountName: subject,
-		Period:      uint(p.period.Seconds()),
-	})
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate TOTP key (cause: %w)", err)
-	}
-	qrCodeImage, err := key.Image(width, height)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate TOTP QR code image (cause: %w)", err)
-	}
-	qrCode := &strings.Builder{}
-	err = png.Encode(base64.NewEncoder(base64.StdEncoding, qrCode), qrCodeImage)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to encode TOTP QR code image (cause: %w)", err)
-	}
-	return key.Secret(), qrCode.String(), key.URL(), nil
-}
-
-func (p *TOTPProvider) VerifyCode(secret string, code string) bool {
-	return totp.Validate(code, secret)
-}
 
 type TOTPVerifyHandler struct {
 	totpProvider        *TOTPProvider

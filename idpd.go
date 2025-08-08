@@ -200,7 +200,7 @@ func (s *Server) initHttpServer(config *Config) error {
 	}
 	// TODO: Warn in case of insecure setup
 	secureCookies := config.Server.Protocol != ServerProtocolHttp
-	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionCookieMaxAge.Seconds()))
+	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionCookieLifetime.Seconds()))
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	s.oauth2IssuerURL = issuerURL
