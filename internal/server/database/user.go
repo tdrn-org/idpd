@@ -19,6 +19,7 @@ package database
 import (
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
@@ -147,4 +148,34 @@ func NewUserTOTPRegistrationFromRequest(request *UserTOTPRegistrationRequest) *U
 		Secret:     request.Secret,
 		CreateTime: time.Now().UnixMicro(),
 	}
+}
+
+type UserWebAuthnIdentity struct {
+	WebAuthnID          []byte
+	WebAuthnName        string
+	WebAuthnDisplayName string
+}
+
+func (wai *UserWebAuthnIdentity) WebAuthnUser() webauthn.User {
+	return &WebAuthnUser{wai: wai}
+}
+
+type WebAuthnUser struct {
+	wai *UserWebAuthnIdentity
+}
+
+func (wau *WebAuthnUser) WebAuthnID() []byte {
+	return wau.wai.WebAuthnID
+}
+
+func (wau *WebAuthnUser) WebAuthnName() string {
+	return wau.wai.WebAuthnName
+}
+
+func (wau *WebAuthnUser) WebAuthnDisplayName() string {
+	return wau.wai.WebAuthnDisplayName
+}
+
+func (wau *WebAuthnUser) WebAuthnCredentials() []webauthn.Credential {
+	return nil
 }

@@ -198,9 +198,11 @@ func (s *Server) initHttpServer(config *Config) error {
 	if err != nil {
 		return err
 	}
-	// TODO: Warn in case of insecure setup
-	secureCookies := config.Server.Protocol != ServerProtocolHttp
-	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionCookieLifetime.Seconds()))
+	secureCookies := ServerProtocol(issuerURL.Scheme) != ServerProtocolHttp
+	if !secureCookies {
+		slog.Warn("unsecure server protocol; disabling secure cookies")
+	}
+	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionLifetime.Seconds()))
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	s.oauth2IssuerURL = issuerURL
@@ -346,9 +348,10 @@ func (s *Server) initOAuth2AuthFlow(config *Config) error {
 }
 
 func (s *Server) startJobTicker(config *Config) error {
-	s.jobTicker = time.NewTicker(1 * time.Minute)
+	schedule := 5 * time.Minute
+	s.jobTicker = time.NewTicker(schedule)
 	s.jobTickerStopped = make(chan bool)
-	slog.Info("starting job ticker")
+	slog.Info("starting job ticker", slog.String("schedule", schedule.String()))
 	s.stoppedWG.Add(1)
 	go func() {
 		defer s.stoppedWG.Done()

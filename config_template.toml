@@ -37,8 +37,12 @@
 #public_url = ""
 # session cookie name
 #session_cookie = "idpd_session"
-# session cookie lifetime = max age (in seconds)
-#session_cookie_lifetime = "720h" # 30 days
+# session lifetime
+#session_lifetime = "720h" # 30 days
+# request lifetime
+#request_lifetime = "5m"
+# token lifetime
+#token_lifetime = "60m"
 
 [mail]
 #address = "localhost:587"

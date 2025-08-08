@@ -15,3 +15,40 @@
  */
 
 package server
+
+import (
+	"fmt"
+	"log/slog"
+
+	"github.com/go-webauthn/webauthn/webauthn"
+)
+
+type WebAuthnConfig struct {
+	RPID          string
+	RPDisplayName string
+	RPOrigins     []string
+}
+
+func (c *WebAuthnConfig) NewWebAuthnProvider() (*WebAuthnProvider, error) {
+	logger := slog.With("RPID", c.RPID)
+	logger.Info("initializing WebAuthn provider")
+	config := &webauthn.Config{
+		RPID:          c.RPID,
+		RPDisplayName: c.RPDisplayName,
+		RPOrigins:     c.RPOrigins,
+	}
+	rp, err := webauthn.New(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create WebAuthn provider (cause: %w)", err)
+	}
+	provider := &WebAuthnProvider{
+		rp:     rp,
+		logger: logger,
+	}
+	return provider, nil
+}
+
+type WebAuthnProvider struct {
+	rp     *webauthn.WebAuthn
+	logger *slog.Logger
+}

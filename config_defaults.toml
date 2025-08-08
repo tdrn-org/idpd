@@ -17,7 +17,9 @@ cert_file = ""
 key_file = ""
 public_url = ""
 session_cookie = "idpd_session"
-session_cookie_lifetime = "720h"
+session_lifetime = "720h"
+request_lifetime = "5m"
+token_lifetime = "60m"
 
 [mail]
 address = "localhost:587"

@@ -18,26 +18,18 @@ package server_test
 
 import (
 	"testing"
-	"time"
 
-	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/idpd/internal/server"
 )
 
-func TestTOTPProvider(t *testing.T) {
-	config := server.TOTPConfig{
-		Issuer: "issuer",
+func TestWebAuthnProvider(t *testing.T) {
+	config := server.WebAuthnConfig{
+		"localhost",
+		"localhost",
+		[]string{"http://localhost"},
 	}
-	provider := config.NewTOTPProvider()
-	secret, qrCode, otpURL, err := provider.GenerateRegistrationRequest("subject", 64, 64)
+	provider, err := config.NewWebAuthnProvider()
 	require.NoError(t, err)
-	require.NotEmpty(t, secret)
-	require.NotEmpty(t, qrCode)
-	require.NotEmpty(t, otpURL)
-
-	code, err := totp.GenerateCode(secret, time.Now())
-	require.NoError(t, err)
-	verified := provider.VerifyCode(secret, code)
-	require.True(t, verified)
+	require.NotNil(t, provider)
 }
