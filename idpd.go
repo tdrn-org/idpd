@@ -32,6 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server"
+	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/geoip"
 	"github.com/tdrn-org/idpd/internal/server/mail"
@@ -165,6 +166,7 @@ func (s *Server) shutdown(ctx context.Context) error {
 
 func (s *Server) initAndStart(config *Config) error {
 	inits := []func(*Config) error{
+		s.initServerConf,
 		s.initHttpServer,
 		s.initMailer,
 		s.initTOTP,
@@ -185,6 +187,16 @@ func (s *Server) initAndStart(config *Config) error {
 	return nil
 }
 
+func (s *Server) initServerConf(config *Config) error {
+	runtime := &serverconf.Runtime{
+		SessionLifetime: config.Server.SessionLifetime.Duration,
+		RequestLifetime: config.Server.RequestLifetime.Duration,
+		TokenLifetime:   config.Server.TokenLifetime.Duration,
+	}
+	runtime.Bind()
+	return nil
+}
+
 func (s *Server) initHttpServer(config *Config) error {
 	httpServer := &httpserver.Instance{
 		Addr:      config.Server.Address,
@@ -202,7 +214,7 @@ func (s *Server) initHttpServer(config *Config) error {
 	if !secureCookies {
 		slog.Warn("unsecure server protocol; disabling secure cookies")
 	}
-	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode, int(config.Server.SessionLifetime.Seconds()))
+	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode)
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	s.oauth2IssuerURL = issuerURL

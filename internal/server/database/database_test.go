@@ -298,7 +298,7 @@ func userSession(t *testing.T, d database.Driver) {
 	require.True(t, userSession0.Remember)
 	require.Equal(t, oauth2Token.AccessToken, userSession0.AccessToken)
 	require.Equal(t, oauth2Token.RefreshToken, userSession0.RefreshToken)
-	require.Equal(t, oauth2Token.Expiry.UnixMicro(), userSession0.Expiration)
+	require.Equal(t, oauth2Token.Expiry.UnixMicro(), userSession0.TokenExpiration)
 }
 
 func userVerificationLog(t *testing.T, d database.Driver) {

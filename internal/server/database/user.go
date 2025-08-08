@@ -21,6 +21,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
+	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -37,7 +38,7 @@ func NewUserSessionRequest(subject string, remember bool, state string) *UserSes
 		ID:         uuid.NewString(),
 		Subject:    subject,
 		Remember:   remember,
-		Expiration: time.Now().Add(RequestLifetime).UnixMicro(),
+		Expiration: time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 		State:      state,
 	}
 }
@@ -47,37 +48,43 @@ func (r *UserSessionRequest) Expired() bool {
 }
 
 type UserSession struct {
-	ID           string
-	Subject      string
-	Remember     bool
-	AccessToken  string
-	TokenType    string
-	RefreshToken string
-	Expiration   int64
+	ID                string
+	Subject           string
+	Remember          bool
+	AccessToken       string
+	TokenType         string
+	RefreshToken      string
+	TokenExpiration   int64
+	SessionExpiration int64
 }
 
 func NewUserSession(token *oauth2.Token, subject string, remember bool) *UserSession {
 	return &UserSession{
-		ID:           uuid.NewString(),
-		Subject:      subject,
-		Remember:     remember,
-		AccessToken:  token.AccessToken,
-		TokenType:    token.TokenType,
-		RefreshToken: token.RefreshToken,
-		Expiration:   token.Expiry.UnixMicro(),
+		ID:                uuid.NewString(),
+		Subject:           subject,
+		Remember:          remember,
+		AccessToken:       token.AccessToken,
+		TokenType:         token.TokenType,
+		RefreshToken:      token.RefreshToken,
+		TokenExpiration:   token.Expiry.UnixMicro(),
+		SessionExpiration: serverconf.LookupRuntime().SessionLifetime.Microseconds(),
 	}
 }
 
-func (session *UserSession) OAuth2Token() *oauth2.Token {
-	expiresIn := session.Expiration - time.Now().UnixMicro()
+func (s *UserSession) Expired() bool {
+	return s.SessionExpiration < time.Now().UnixMicro()
+}
+
+func (s *UserSession) OAuth2Token() *oauth2.Token {
+	expiresIn := s.SessionExpiration - time.Now().UnixMicro()
 	if expiresIn < 0 {
 		expiresIn = 0
 	}
 	return &oauth2.Token{
-		AccessToken:  session.AccessToken,
-		TokenType:    session.TokenType,
-		RefreshToken: session.RefreshToken,
-		Expiry:       time.UnixMicro(session.Expiration),
+		AccessToken:  s.AccessToken,
+		TokenType:    s.TokenType,
+		RefreshToken: s.RefreshToken,
+		Expiry:       time.UnixMicro(s.SessionExpiration),
 		ExpiresIn:    expiresIn,
 	}
 }
@@ -128,7 +135,7 @@ func NewUserTOTPRegistrationRequest(subject string, secret string, challenge str
 		Subject:    subject,
 		Secret:     secret,
 		Challenge:  challenge,
-		Expiration: time.Now().Add(RequestLifetime).UnixMicro(),
+		Expiration: time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 	}
 }
 

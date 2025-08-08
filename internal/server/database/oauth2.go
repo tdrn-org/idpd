@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tdrn-org/idpd/internal/server/conf"
+	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -67,7 +69,7 @@ func NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, 
 		ACR:           "",
 		AMR:           []string{"pwd"},
 		Audience:      []string{oidcAuthRequest.ClientID},
-		Expiration:    time.Now().Add(RequestLifetime).UnixMicro(),
+		Expiration:    time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 		ClientID:      oidcAuthRequest.ClientID,
 		CodeChallenge: codeChallenge,
 		Nonce:         oidcAuthRequest.Nonce,
@@ -178,7 +180,7 @@ func NewOAuth2TokenFromAuthRequest(request op.AuthRequest, refreshTokenID string
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
-		Expiration:     time.Now().Add(RequestLifetime).UnixMicro(),
+		Expiration:     time.Now().Add(conf.LookupRuntime().RequestLifetime).UnixMicro(),
 		Scopes:         request.GetScopes(),
 	}
 }
@@ -190,7 +192,7 @@ func NewOAuth2TokenFromTokenExchangeRequest(request op.TokenExchangeRequest, ref
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
-		Expiration:     time.Now().Add(TokenLifetime).UnixMicro(),
+		Expiration:     time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:         request.GetScopes(),
 	}
 }
@@ -232,7 +234,7 @@ func NewOAuth2RefreshTokenFromAuthRequest(id string, tokenID string, request op.
 		Audience:      request.GetAudience(),
 		Subject:       request.GetSubject(),
 		ClientID:      request.GetClientID(),
-		Expiration:    time.Now().Add(TokenLifetime).UnixMicro(),
+		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:        request.GetScopes(),
 		AccessTokenID: tokenID,
 	}
@@ -246,7 +248,7 @@ func NewOAuth2RefreshTokenFromRefreshToken(id string, tokenID string, refreshTok
 		Audience:      refreshToken.Audience,
 		Subject:       refreshToken.Subject,
 		ClientID:      refreshToken.ClientID,
-		Expiration:    time.Now().Add(TokenLifetime).UnixMicro(),
+		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:        refreshToken.Scopes,
 		AccessTokenID: tokenID,
 	}

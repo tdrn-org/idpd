@@ -18,6 +18,9 @@ package server
 
 import (
 	"net/http"
+
+	"github.com/tdrn-org/go-conf"
+	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 )
 
 type CookieHandler struct {
@@ -28,13 +31,18 @@ type CookieHandler struct {
 	maxAge   int
 }
 
-func NewCookieHandler(name string, path string, secure bool, sameSite http.SameSite, maxAge int) *CookieHandler {
-	return &CookieHandler{
+func NewCookieHandler(name string, path string, secure bool, sameSite http.SameSite) *CookieHandler {
+	h := &CookieHandler{
 		name:   name,
 		path:   path,
 		secure: secure,
-		maxAge: maxAge,
 	}
+	serverconf.BindToRuntime(h.applyRuntimeConfig)
+	return h
+}
+
+func (h *CookieHandler) applyRuntimeConfig(configuration conf.Configuration) {
+	h.maxAge = int(conf.Resolve[*serverconf.Runtime](configuration).SessionLifetime.Seconds())
 }
 
 func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) {

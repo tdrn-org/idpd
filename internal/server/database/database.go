@@ -33,9 +33,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const RequestLifetime time.Duration = 5 * time.Minute
-const TokenLifetime time.Duration = 60 * time.Minute
-
 const EmailKey string = "email"
 const TOTPKey string = "totp"
 const PasskeyKey string = "passkey"
@@ -1151,9 +1148,10 @@ func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Contex
 		session.AccessToken,
 		session.TokenType,
 		session.RefreshToken,
-		session.Expiration,
+		session.TokenExpiration,
+		session.SessionExpiration,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,remember,access_token,token_type,refresh_token,expiration) VALUES($1,$2,$3,$4,$5,$6,$7)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,remember,access_token,token_type,refresh_token,token_expiration,session_expiration) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", args...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1203,28 +1201,29 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	if err != nil {
 		return nil, err
 	}
-	userSession := &UserSession{
+	session := &UserSession{
 		ID: id,
 	}
-	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,remember,access_token,token_type,refresh_token,token_expiration,session_expiration FROM user_session WHERE id=$1", session.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	args := []any{
-		&userSession.Subject,
-		&userSession.Remember,
-		&userSession.AccessToken,
-		&userSession.TokenType,
-		&userSession.RefreshToken,
-		&userSession.Expiration,
+		&session.Subject,
+		&session.Remember,
+		&session.AccessToken,
+		&session.TokenType,
+		&session.RefreshToken,
+		&session.TokenExpiration,
+		&session.SessionExpiration,
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user session: %s)", ErrObjectNotFound, userSession.ID))
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user session: %s)", ErrObjectNotFound, session.ID))
 	} else if err != nil {
 		return nil, d.rollbackTx(tx, fmt.Errorf("select user session failure (cause: %w)", err))
 	}
-	return userSession, d.commitTx(tx, ctx == txCtx)
+	return session, d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error) {

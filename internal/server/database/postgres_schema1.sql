@@ -103,7 +103,8 @@ CREATE TABLE user_session(
     access_token TEXT,
     token_type TEXT,
     refresh_token TEXT,
-    expiration BIGINT
+    token_expiration BIGINT,
+    session_expiration BIGINT
 );
 CREATE TABLE user_verification_log(
     subject TEXT,
