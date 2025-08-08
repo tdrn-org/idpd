@@ -27,7 +27,7 @@ import (
 //go:embed sqlite3_schema1.sql
 var sqlite3Schema1Script []byte
 
-const sqlite3DSNPattern = "file:%s?mode=%s&_foreign_keys=on&_locking=EXCLUSIVE&_journal=WAL"
+const sqlite3DSNPattern = "file:%s?mode=%s&cache=shared&_foreign_keys=on&_locking=EXCLUSIVE&_journal=WAL"
 
 func OpenMemoryDB(logger *slog.Logger) (Driver, error) {
 	dsn := fmt.Sprintf(sqlite3DSNPattern, "idpd.db", "memory")

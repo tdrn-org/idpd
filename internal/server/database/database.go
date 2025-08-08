@@ -26,6 +26,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -94,6 +95,7 @@ func openDatabase(name string, driverName string, dsn string, logger *slog.Logge
 	d := &databaseDriver{
 		name:    name,
 		db:      db,
+		stmts:   make(map[string]*sql.Stmt),
 		logger:  logger,
 		scripts: scripts,
 	}
@@ -105,8 +107,10 @@ var ErrObjectNotFound = errors.New("object not found")
 type databaseDriver struct {
 	name    string
 	db      *sql.DB
+	stmts   map[string]*sql.Stmt
 	logger  *slog.Logger
 	scripts [][]byte
+	mutex   sync.RWMutex
 }
 
 func (d *databaseDriver) Name() string {
@@ -145,7 +149,10 @@ func (d *databaseDriver) querySchemaVersion(ctx context.Context) (SchemaVersion,
 	if err != nil {
 		return SchemaNone, err
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT schema FROM version")
+	row, err := d.queryRowTx(tx, txCtx, "SELECT schema FROM version")
+	if err != nil {
+		return SchemaNone, d.rollbackTx(tx, nil)
+	}
 	var schema SchemaVersion
 	err = row.Scan(&schema)
 	if err != nil {
@@ -238,7 +245,10 @@ func (d *databaseDriver) SelectOAuth2AuthRequest(ctx context.Context, id string)
 
 func (d *databaseDriver) selectOAuth2AuthRequest(tx *sql.Tx, txCtx context.Context, id string) (*OAuth2AuthRequest, error) {
 	authRequest := NewOAuth2AuthRequest(id)
-	row := d.queryRowTx(tx, txCtx, "SELECT acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id=$1", authRequest.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id=$1", authRequest.ID)
+	if err != nil {
+		return nil, err
+	}
 	args := []any{
 		&authRequest.ACR,
 		&authRequest.Expiration,
@@ -254,7 +264,7 @@ func (d *databaseDriver) selectOAuth2AuthRequest(tx *sql.Tx, txCtx context.Conte
 		&authRequest.Remember,
 		&authRequest.Done,
 	}
-	err := row.Scan(args...)
+	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w (unknown OAuth2 auth request: %s)", ErrObjectNotFound, authRequest.ID)
 	} else if err != nil {
@@ -298,10 +308,13 @@ func (d *databaseDriver) selectOAuth2AuthRequestAudiences(tx *sql.Tx, txCtx cont
 }
 
 func (d *databaseDriver) selectOAuth2AuthRequestCodeChallenge(tx *sql.Tx, txCtx context.Context, authRequest *OAuth2AuthRequest) error {
-	row := d.queryRowTx(tx, txCtx, "SELECT challenge,method FROM oauth2_auth_request_code_challenge WHERE auth_request_id=$1", authRequest.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT challenge,method FROM oauth2_auth_request_code_challenge WHERE auth_request_id=$1", authRequest.ID)
+	if err != nil {
+		return err
+	}
 	var challenge string
 	var method oidc.CodeChallengeMethod
-	err := row.Scan(&challenge, &method)
+	err = row.Scan(&challenge, &method)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	} else if err != nil {
@@ -338,7 +351,10 @@ func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code
 		return nil, err
 	}
 	authRequest := NewOAuth2AuthRequest("")
-	row := d.queryRowTx(tx, txCtx, "SELECT id,acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id IN (SELECT auth_request_id FROM oauth2_auth_code WHERE code=$1)", code)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT id,acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id IN (SELECT auth_request_id FROM oauth2_auth_code WHERE code=$1)", code)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
 	args := []any{
 		&authRequest.ID,
 		&authRequest.ACR,
@@ -357,9 +373,9 @@ func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w (unknown OAuth2 code request: %s)", ErrObjectNotFound, code)
+		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 code request: %s)", ErrObjectNotFound, code))
 	} else if err != nil {
-		return nil, fmt.Errorf("select OAuth2 auth request by code failure (cause: %w)", err)
+		return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 auth request by code failure (cause: %w)", err))
 	}
 	err = d.selectOAuth2AuthRequestAMRs(tx, txCtx, authRequest)
 	if err != nil {
@@ -598,7 +614,10 @@ func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAu
 		return nil, err
 	}
 	token := NewOAuth2Token(id)
-	row := d.queryRowTx(tx, txCtx, "SELECT client_id,subject,refresh_token_id,expiration FROM oauth2_token WHERE id=$1", token.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT client_id,subject,refresh_token_id,expiration FROM oauth2_token WHERE id=$1", token.ID)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
 	args0 := []any{
 		&token.ClientID,
 		&token.Subject,
@@ -829,7 +848,10 @@ func (d *databaseDriver) SelectOAuth2RefreshToken(ctx context.Context, id string
 
 func (d *databaseDriver) selectOAuth2RefreshToken(tx *sql.Tx, txCtx context.Context, id string) (*OAuth2RefreshToken, error) {
 	refreshToken := NewOAuth2RefreshToken(id)
-	row := d.queryRowTx(tx, txCtx, "SELECT auth_time,subject,client_id,expiration,access_token_id FROM oauth2_refresh_token WHERE id=$1", refreshToken.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT auth_time,subject,client_id,expiration,access_token_id FROM oauth2_refresh_token WHERE id=$1", refreshToken.ID)
+	if err != nil {
+		return nil, err
+	}
 	args := []any{
 		&refreshToken.AuthTime,
 		&refreshToken.Subject,
@@ -837,7 +859,7 @@ func (d *databaseDriver) selectOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 		&refreshToken.Expiration,
 		&refreshToken.AccessTokenID,
 	}
-	err := row.Scan(args...)
+	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w (unknown OAuth2 refresh token: %s)", ErrObjectNotFound, refreshToken.ID)
 	} else if err != nil {
@@ -1142,14 +1164,17 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx conte
 	userSessionRequest := &UserSessionRequest{
 		State: state,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT id,subject,remember,expiration FROM user_session_request WHERE state=$1", userSessionRequest.State)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT id,subject,remember,expiration FROM user_session_request WHERE state=$1", userSessionRequest.State)
+	if err != nil {
+		return nil, err
+	}
 	args := []any{
 		&userSessionRequest.ID,
 		&userSessionRequest.Subject,
 		&userSessionRequest.Remember,
 		&userSessionRequest.Expiration,
 	}
-	err := row.Scan(args...)
+	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w (unknown user session request state: %s)", ErrObjectNotFound, userSessionRequest.State)
 	} else if err != nil {
@@ -1181,7 +1206,10 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	userSession := &UserSession{
 		ID: id,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT subject,remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,remember,access_token,token_type,refresh_token,expiration FROM user_session WHERE id=$1", userSession.ID)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
 	args := []any{
 		&userSession.Subject,
 		&userSession.Remember,
@@ -1209,7 +1237,10 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 		Subject: log.Subject,
 		Method:  log.Method,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT first_used FROM user_verification_log WHERE subject=$1 AND method=$2", updatedLog.Subject, updatedLog.Method)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT first_used FROM user_verification_log WHERE subject=$1 AND method=$2", updatedLog.Subject, updatedLog.Method)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
 	args0 := []any{
 		&updatedLog.FirstUsed,
 	}
@@ -1345,13 +1376,16 @@ func (d *databaseDriver) selectUserTOTPRegistrationRequest(tx *sql.Tx, txCtx con
 	request := &UserTOTPRegistrationRequest{
 		Subject: subject,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT secret,challenge,expiration FROM user_totp_registration_request WHERE subject=$1", request.Subject)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT secret,challenge,expiration FROM user_totp_registration_request WHERE subject=$1", request.Subject)
+	if err != nil {
+		return nil, err
+	}
 	args := []any{
 		&request.Secret,
 		&request.Challenge,
 		&request.Expiration,
 	}
-	err := row.Scan(args...)
+	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w (unknown user TOTP registration request: %s)", ErrObjectNotFound, request.Subject)
 	} else if err != nil {
@@ -1430,7 +1464,10 @@ func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject
 	registration := &UserTOTPRegistration{
 		Subject: subject,
 	}
-	row := d.queryRowTx(tx, txCtx, "SELECT secret,create_time FROM user_totp_registration WHERE subject=$1", registration.Subject)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT secret,create_time FROM user_totp_registration WHERE subject=$1", registration.Subject)
+	if err != nil {
+		return nil, d.rollbackTx(tx, err)
+	}
 	args := []any{
 		&registration.Secret,
 		&registration.CreateTime,
@@ -1445,6 +1482,14 @@ func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject
 }
 
 func (d *databaseDriver) Close() error {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	for _, stmt := range d.stmts {
+		err := stmt.Close()
+		if err != nil {
+			d.logger.Warn("failed to close db statement", slog.Any("err", err))
+		}
+	}
 	return d.db.Close()
 }
 
@@ -1482,7 +1527,12 @@ func (d *databaseDriver) commitTx(tx *sql.Tx, nestedTx bool) error {
 
 func (d *databaseDriver) execTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) error {
 	d.logger.Debug("sql exec", slog.String("query", query))
-	result, err := tx.ExecContext(txCtx, query, args...)
+	stmt, err := d.prepareStmt(txCtx, query)
+	if err != nil {
+		return err
+	}
+	txStmt := tx.StmtContext(txCtx, stmt)
+	result, err := txStmt.ExecContext(txCtx, args...)
 	if err != nil {
 		return fmt.Errorf("sql exec failure (cause: %w)", err)
 	}
@@ -1493,18 +1543,49 @@ func (d *databaseDriver) execTx(tx *sql.Tx, txCtx context.Context, query string,
 	return nil
 }
 
-func (d *databaseDriver) queryRowTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) *sql.Row {
+func (d *databaseDriver) queryRowTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) (*sql.Row, error) {
 	d.logger.Debug("sql query", slog.String("query", query))
-	return tx.QueryRowContext(txCtx, query, args...)
+	stmt, err := d.prepareStmt(txCtx, query)
+	if err != nil {
+		return nil, err
+	}
+	txStmt := tx.StmtContext(txCtx, stmt)
+	return txStmt.QueryRowContext(txCtx, args...), nil
 }
 
 func (d *databaseDriver) queryTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) (*sql.Rows, error) {
 	d.logger.Debug("sql query", slog.String("query", query))
-	rows, err := tx.QueryContext(txCtx, query, args...)
+	stmt, err := d.prepareStmt(txCtx, query)
+	if err != nil {
+		return nil, err
+	}
+	txStmt := tx.StmtContext(txCtx, stmt)
+	rows, err := txStmt.QueryContext(txCtx, args...)
 	if err != nil {
 		return nil, fmt.Errorf("sql query failure (cause: %w)", err)
 	}
 	return rows, nil
+}
+
+func (d *databaseDriver) prepareStmt(ctx context.Context, query string) (*sql.Stmt, error) {
+	stmt := func() *sql.Stmt {
+		d.mutex.RLock()
+		defer d.mutex.RUnlock()
+		return d.stmts[query]
+	}()
+	if stmt != nil {
+		return stmt, nil
+	}
+	return func() (*sql.Stmt, error) {
+		d.mutex.Lock()
+		defer d.mutex.Unlock()
+		stmt, err := d.db.PrepareContext(ctx, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare statement: '%s' (cause: %w)", query, err)
+		}
+		d.stmts[query] = stmt
+		return stmt, nil
+	}()
 }
 
 func (d *databaseDriver) runScriptTx(tx *sql.Tx, txCtx context.Context, script []byte) error {

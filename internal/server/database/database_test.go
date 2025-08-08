@@ -92,7 +92,7 @@ func generateAndInsertOAuth2AuthRequest(t *testing.T, d database.Driver) *databa
 		ACR:        "acr",
 		AMR:        []string{"amr0", "amr1"},
 		Audience:   []string{"audience0", "audience1"},
-		Expiration: time.Now().UnixMicro(),
+		Expiration: time.Now().Add(time.Hour).UnixMicro(),
 		AuthTime:   time.Time{}.UnixMicro(),
 		ClientID:   "clientID",
 		CodeChallenge: &oidc.CodeChallenge{
@@ -169,7 +169,7 @@ func generateAndInsertOAuth2Token(t *testing.T, d database.Driver) *database.OAu
 		Subject:        "subject",
 		RefreshTokenID: "refreshTokenId",
 		Audience:       []string{"audience0", "audience1"},
-		Expiration:     time.Now().UnixMicro(),
+		Expiration:     time.Now().Add(time.Hour).UnixMicro(),
 		Scopes:         []string{"scope0", "scope1"},
 	}
 	err := d.InsertOAuth2Token(t.Context(), token)
@@ -199,7 +199,7 @@ func generateAndInsertOAuth2RefreshToken(t *testing.T, d database.Driver) *datab
 		Subject:        "subject",
 		RefreshTokenID: refreshTokenID,
 		Audience:       []string{"audience0", "audience1"},
-		Expiration:     time.Now().UnixMicro(),
+		Expiration:     time.Now().Add(time.Hour).UnixMicro(),
 		Scopes:         []string{"scope0", "scope1"},
 	}
 	refreshToken := &database.OAuth2RefreshToken{
@@ -209,7 +209,7 @@ func generateAndInsertOAuth2RefreshToken(t *testing.T, d database.Driver) *datab
 		Audience:      []string{"audience0", "audience1"},
 		Subject:       "subject",
 		ClientID:      "clientID",
-		Expiration:    time.Now().UnixMicro(),
+		Expiration:    time.Now().Add(time.Hour).UnixMicro(),
 		Scopes:        []string{"scope0", "scope1"},
 		AccessTokenID: token.ID,
 	}

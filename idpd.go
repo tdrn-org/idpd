@@ -227,7 +227,7 @@ func (s *Server) initGeoIP(config *Config) error {
 		s.locationService = geoip.NewLocationService(geoip.DummyProvider(), nil)
 		return nil
 	}
-	slog.Info("intializing GeoIP provider")
+	slog.Info("intializing GeoIP provider", slog.String("db", config.GeoIP.CityDB))
 	provider, err := geoip.OpenMaxMindDB(config.GeoIP.CityDB)
 	if err != nil {
 		return err
