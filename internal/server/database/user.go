@@ -76,7 +76,7 @@ func (s *UserSession) Expired() bool {
 }
 
 func (s *UserSession) OAuth2Token() *oauth2.Token {
-	expiresIn := s.SessionExpiration - time.Now().UnixMicro()
+	expiresIn := s.TokenExpiration - time.Now().UnixMicro()
 	if expiresIn < 0 {
 		expiresIn = 0
 	}

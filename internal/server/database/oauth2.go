@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tdrn-org/idpd/internal/server/conf"
 	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
@@ -180,7 +179,7 @@ func NewOAuth2TokenFromAuthRequest(request op.AuthRequest, refreshTokenID string
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
-		Expiration:     time.Now().Add(conf.LookupRuntime().RequestLifetime).UnixMicro(),
+		Expiration:     time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 		Scopes:         request.GetScopes(),
 	}
 }
