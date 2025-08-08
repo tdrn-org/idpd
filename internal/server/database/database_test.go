@@ -92,7 +92,7 @@ func generateAndInsertOAuth2AuthRequest(t *testing.T, d database.Driver) *databa
 		ACR:        "acr",
 		AMR:        []string{"amr0", "amr1"},
 		Audience:   []string{"audience0", "audience1"},
-		CreateTime: time.Now().UnixMicro(),
+		Expiration: time.Now().UnixMicro(),
 		AuthTime:   time.Time{}.UnixMicro(),
 		ClientID:   "clientID",
 		CodeChallenge: &oidc.CodeChallenge{

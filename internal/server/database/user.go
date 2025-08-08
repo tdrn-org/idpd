@@ -27,8 +27,8 @@ type UserSessionRequest struct {
 	ID         string
 	Subject    string
 	Remember   bool
-	CreateTime int64
 	State      string
+	Expiration int64
 }
 
 func NewUserSessionRequest(subject string, remember bool, state string) *UserSessionRequest {
@@ -36,9 +36,13 @@ func NewUserSessionRequest(subject string, remember bool, state string) *UserSes
 		ID:         uuid.NewString(),
 		Subject:    subject,
 		Remember:   remember,
-		CreateTime: time.Now().UnixMicro(),
+		Expiration: time.Now().Add(RequestLifetime).UnixMicro(),
 		State:      state,
 	}
+}
+
+func (r *UserSessionRequest) Expired() bool {
+	return r.Expiration < time.Now().UnixMicro()
 }
 
 type UserSession struct {
@@ -74,5 +78,73 @@ func (session *UserSession) OAuth2Token() *oauth2.Token {
 		RefreshToken: session.RefreshToken,
 		Expiry:       time.UnixMicro(session.Expiration),
 		ExpiresIn:    expiresIn,
+	}
+}
+
+type UserVerificationLog struct {
+	Subject     string
+	Method      string
+	FirstUsed   int64
+	LastUsed    int64
+	Host        string
+	Country     string
+	CountryCode string
+	City        string
+	Lat         float64
+	Lon         float64
+}
+
+func NewUserVerificationLog(subject string, method string, host string) *UserVerificationLog {
+	now := time.Now().UnixMicro()
+	return &UserVerificationLog{
+		Subject:   subject,
+		Method:    method,
+		FirstUsed: now,
+		LastUsed:  now,
+		Host:      host,
+	}
+}
+
+func (l *UserVerificationLog) Update(log *UserVerificationLog) {
+	l.LastUsed = log.LastUsed
+	l.Host = log.Host
+	l.Country = log.Country
+	l.CountryCode = log.CountryCode
+	l.City = log.City
+	l.Lat = log.Lat
+	l.Lon = log.Lon
+}
+
+type UserTOTPRegistrationRequest struct {
+	Subject    string
+	Secret     string
+	Challenge  string
+	Expiration int64
+}
+
+func NewUserTOTPRegistrationRequest(subject string, secret string, challenge string) *UserTOTPRegistrationRequest {
+	return &UserTOTPRegistrationRequest{
+		Subject:    subject,
+		Secret:     secret,
+		Challenge:  challenge,
+		Expiration: time.Now().Add(RequestLifetime).UnixMicro(),
+	}
+}
+
+func (r *UserTOTPRegistrationRequest) Expired() bool {
+	return r.Expiration < time.Now().UnixMicro()
+}
+
+type UserTOTPRegistration struct {
+	Subject    string
+	Secret     string
+	CreateTime int64
+}
+
+func NewUserTOTPRegistrationFromRequest(request *UserTOTPRegistrationRequest) *UserTOTPRegistration {
+	return &UserTOTPRegistration{
+		Subject:    request.Subject,
+		Secret:     request.Secret,
+		CreateTime: time.Now().UnixMicro(),
 	}
 }

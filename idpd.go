@@ -18,7 +18,6 @@ package idpd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -26,14 +25,12 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/google/uuid"
 	"github.com/tdrn-org/idpd/httpserver"
-	"github.com/tdrn-org/idpd/internal/access"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/geoip"
@@ -97,18 +94,20 @@ func startConfig(ctx context.Context, config *Config) (*Server, error) {
 const sessionCookiePath = "/session"
 
 type Server struct {
-	httpServer      *httpserver.Instance
-	sessionCookie   *server.CookieHandler
-	mailer          *mail.Mailer
-	totpProvider    *server.TOTPProvider
-	locationService *geoip.LocationService
-	database        database.Driver
-	userStore       userstore.Backend
-	oauth2IssuerURL *url.URL
-	oauth2Provider  *server.OAuth2Provider
-	oauth2Client    *server.OAuth2Client
-	authFLow        *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
-	stoppedWG       sync.WaitGroup
+	httpServer       *httpserver.Instance
+	sessionCookie    *server.CookieHandler
+	mailer           *mail.Mailer
+	totpProvider     *server.TOTPProvider
+	locationService  *geoip.LocationService
+	database         database.Driver
+	userStore        userstore.Backend
+	oauth2IssuerURL  *url.URL
+	oauth2Provider   *server.OAuth2Provider
+	oauth2Client     *server.OAuth2Client
+	authFLow         *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
+	jobTicker        *time.Ticker
+	jobTickerStopped chan bool
+	stoppedWG        sync.WaitGroup
 }
 
 func (s *Server) OAuth2IssuerURL() *url.URL {
@@ -152,6 +151,10 @@ func (s *Server) shutdown(ctx context.Context) error {
 	slog.Info("initiating shutdown")
 	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancelShutdown()
+	// Stop background job processing
+	s.jobTicker.Stop()
+	s.jobTickerStopped <- true
+	// Stop/Close running services
 	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close(), s.locationService.Close())
 	if err != nil {
 		return err
@@ -170,6 +173,7 @@ func (s *Server) initAndStart(config *Config) error {
 		s.initUserStore,
 		s.initOAuth2Provider,
 		s.initOAuth2AuthFlow,
+		s.startJobTicker,
 		s.startServer,
 	}
 	for _, init := range inits {
@@ -341,6 +345,26 @@ func (s *Server) initOAuth2AuthFlow(config *Config) error {
 	return nil
 }
 
+func (s *Server) startJobTicker(config *Config) error {
+	s.jobTicker = time.NewTicker(1 * time.Minute)
+	s.jobTickerStopped = make(chan bool)
+	slog.Info("starting job ticker")
+	s.stoppedWG.Add(1)
+	go func() {
+		defer s.stoppedWG.Done()
+		for stopped := false; !stopped; {
+			select {
+			case <-s.jobTickerStopped:
+				stopped = true
+			case <-s.jobTicker.C:
+				s.runJobs()
+			}
+		}
+		slog.Info("job ticker stopped")
+	}()
+	return nil
+}
+
 func (s *Server) startServer(config *Config) error {
 	s.oauth2Provider.Mount(s.httpServer)
 	s.authFLow.Mount(s.httpServer)
@@ -365,350 +389,4 @@ func (s *Server) startServer(config *Config) error {
 	default:
 		return fmt.Errorf("unexpected server protocol: %s", config.Server.Protocol)
 	}
-}
-
-func (s *Server) handleUserMock(w http.ResponseWriter, r *http.Request, subject string, password string, remember bool) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	verifyHandler := server.MockVerifyHandler()
-	_, err := s.oauth2Provider.Authenticate(r.Context(), id, subject, password, verifyHandler, remember)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	redirectURL, err := s.oauth2Provider.Verify(r.Context(), id, subject, verifyHandler, "")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, redirectURL, http.StatusFound)
-}
-
-type UserInfo struct {
-	Name                 string              `json:"name"`
-	Subject              string              `json:"subject"`
-	Email                string              `json:"email"`
-	EmailVerification    UserVerificationLog `json:"email_verification"`
-	TOTPVerification     UserVerificationLog `json:"totp_verification"`
-	PasskeyVerification  UserVerificationLog `json:"passkey_verification"`
-	WebAuthnVerification UserVerificationLog `json:"webauthn_verification"`
-}
-
-type UserVerificationLog struct {
-	Registration time.Time `json:"registration,omitzero"`
-	LastUsed     time.Time `json:"last_used,omitzero"`
-	Host         string    `json:"host"`
-	Country      string    `json:"country,omitempty"`
-	CountryCode  string    `json:"country_code,omitempty"`
-	City         string    `json:"city,omitempty"`
-	Lat          float64   `json:"lat"`
-	Lon          float64   `json:"lon"`
-}
-
-func (l *UserVerificationLog) update(log *database.UserVerificationLog) {
-	l.Registration = time.UnixMicro(log.FirstUsed)
-	l.LastUsed = time.UnixMicro(log.LastUsed)
-	l.Host = log.Host
-	l.Country = log.Country
-	l.CountryCode = log.CountryCode
-	l.City = log.City
-	l.Lat = log.Lat
-	l.Lon = log.Lon
-}
-
-func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	_, client, err := s.userSessionClient(r)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	oidcUserInfo, err := s.authFLow.GetUserInfo(client, r.Context())
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	name := oidcUserInfo.Name
-	if name == "" {
-		name = oidcUserInfo.Subject
-	}
-	userInfo := &UserInfo{
-		Name:    name,
-		Subject: oidcUserInfo.Subject,
-		Email:   oidcUserInfo.Email,
-		EmailVerification: UserVerificationLog{
-			LastUsed: time.Now(),
-			Host:     r.RemoteAddr,
-		},
-	}
-	logs, err := s.database.SelectUserVerificationLogs(r.Context(), userInfo.Subject)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	for _, log := range logs {
-		switch server.VerifyMethod(log.Method) {
-		case server.VerifyMethodEmail:
-			userInfo.EmailVerification.update(log)
-		case server.VerifyMethodTOTP:
-			userInfo.TOTPVerification.update(log)
-		case server.VerifyMethodPasskey:
-			userInfo.PasskeyVerification.update(log)
-		case server.VerifyMethodWebAuthn:
-			userInfo.WebAuthnVerification.update(log)
-		default:
-			slog.Warn("unexpected verification log", slog.String("method", log.Method))
-		}
-	}
-	err = json.NewEncoder(w).Encode(userInfo)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-}
-
-func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
-	id, subject, password, verification, remember, err := s.parseAuthenticateForm(r)
-	if err != nil {
-		slog.Error("failed to process authenticate session request", slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
-		return
-	}
-	verifyHandler := s.getVerifyHandler(verification)
-	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, subject, password, verifyHandler, remember)
-	if err != nil {
-		slog.Warn("authenticate session error", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
-		return
-	}
-	http.Redirect(w, r, redirectURL, http.StatusFound)
-}
-
-func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
-	switch server.VerifyMethod(verification) {
-	case server.VerifyMethodEmail:
-		return server.NewEmailVerifyHandler(s.mailer, s.database, s.userStore)
-	case server.VerifyMethodTOTP:
-		return server.NewTOTPVerifyHandler(s.totpProvider, s.database, false)
-	case server.VerifyMethodPasskey:
-		return server.NoneVerifyHandler()
-	case server.VerifyMethodWebAuthn:
-		return server.NoneVerifyHandler()
-	default:
-		return server.NoneVerifyHandler()
-	}
-}
-
-func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string, string, bool, error) {
-	if r.Method != http.MethodPost {
-		return "", "", "", "", false, fmt.Errorf("invalid authenticate session request")
-	}
-	err := r.ParseForm()
-	if err != nil {
-		return "", "", "", "", false, fmt.Errorf("failed to parse authenticate session request")
-	}
-	id := r.PostFormValue("id")
-	subject := r.PostFormValue("subject")
-	password := r.PostFormValue("password")
-	verification := r.PostFormValue("verification")
-	if id == "" || subject == "" || password == "" || verification == "" {
-		return "", "", "", "", false, fmt.Errorf("incomplete authenticate session request (id='%s', subject='%s', verification='%s')", id, subject, verification)
-	}
-	remember, _ := strconv.ParseBool(r.PostFormValue("remember"))
-	return id, subject, password, verification, remember, nil
-}
-
-func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
-	remoteIP := access.GetHttpRequestRemoteIP(r)
-	id, subject, verification, response, err := s.parseVerifyForm(r)
-	if err != nil {
-		slog.Error("failed to process verify session request", slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
-		return
-	}
-	verifyHandler := s.getVerifyHandler(verification)
-	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), subject, verifyHandler, remoteIP)
-	redirectURL, err := s.oauth2Provider.Verify(userVerificationCtx, id, subject, verifyHandler, response)
-	if err != nil {
-		slog.Warn("verify session failure", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
-		return
-	}
-	http.Redirect(w, r, redirectURL, http.StatusFound)
-}
-
-func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, string, error) {
-	if r.Method != http.MethodPost {
-		return "", "", "", "", fmt.Errorf("invalid verify session request")
-	}
-	err := r.ParseForm()
-	if err != nil {
-		return "", "", "", "", fmt.Errorf("failed to parse verify session request")
-	}
-	id := r.PostFormValue("id")
-	subject := r.PostFormValue("subject")
-	verification := r.PostFormValue("verification")
-	response := r.PostFormValue("response")
-	if id == "" || subject == "" || verification == "" || response == "" {
-		return "", "", "", "", fmt.Errorf("incomplete verify session request (id='%s', subject='%s', verification='%s')", id, subject, verification)
-	}
-	return id, subject, verification, response, nil
-}
-
-func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
-	_, client, err := s.userSessionClient(r)
-	alert := AlertNone
-	if err == nil {
-		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())
-		if err != nil || endSessionResponse.StatusCode != http.StatusOK {
-			alert = AlertLogoffFailure
-		}
-	}
-	s.sessionCookie.Delete(w)
-	if alert != AlertNone {
-		s.redirectAlert(w, r, alert)
-	}
-	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
-}
-
-type UserTOTPRegistrationRequest struct {
-	QRCode string `json:"qr_code"`
-	OTPUrl string `json:"otp_url"`
-}
-
-func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Request) {
-	session, err := s.userSession(r)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	secret, qrCode, otpURL, err := s.totpProvider.GenerateRegistrationRequest(session.Subject, 256, 256)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
-	_, err = s.database.GenerateUserTOTPRegistrationRequest(r.Context(), session.Subject, secret, verifyHandler.GenerateChallenge)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	registrationInfo := &UserTOTPRegistrationRequest{
-		QRCode: qrCode,
-		OTPUrl: otpURL,
-	}
-	err = json.NewEncoder(w).Encode(registrationInfo)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-}
-
-func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request) {
-	session, err := s.userSession(r)
-	if err != nil {
-		s.redirectAlert(w, r, AlertLoginFailure)
-		return
-	}
-	response, err := s.parseVerifyTOTPForm(r)
-	if err != nil {
-		s.redirectAlert(w, r, AlertLoginFailure)
-		return
-	}
-	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
-	remoteIP := access.GetHttpRequestRemoteIP(r)
-	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), session.Subject, verifyHandler, remoteIP)
-	registration, err := s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, response)
-	if err != nil {
-		s.redirectAlert(w, r, AlertVerifyFailure)
-	}
-	if registration == nil {
-		s.redirectAlert(w, r, AlertVerifyFailure)
-	}
-	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
-}
-
-func (s *Server) parseVerifyTOTPForm(r *http.Request) (string, error) {
-	if r.Method != http.MethodPost {
-		return "", fmt.Errorf("invalid verify TOTP request")
-	}
-	err := r.ParseForm()
-	if err != nil {
-		return "", fmt.Errorf("failed to parse verify TOTP request")
-	}
-	response := r.PostFormValue("response")
-	if response == "" {
-		return "", fmt.Errorf("incomplete verify TOTP request")
-	}
-	return response, nil
-}
-
-func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
-	ctx := r.Context()
-	userSession, err := s.database.TransformAndDeleteUserSessionRequest(ctx, state, tokens.Token)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	s.sessionCookie.Set(w, userSession.ID, userSession.Remember)
-	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
-}
-
-func (s *Server) userSession(r *http.Request) (*database.UserSession, error) {
-	sessionID, exists := s.sessionCookie.Get(r)
-	if !exists {
-		return nil, oauth2client.ErrNotAuthenticated
-	}
-	session, err := s.database.SelectUserSession(r.Context(), sessionID)
-	if err != nil {
-		return nil, oauth2client.ErrNotAuthenticated
-	}
-	return session, nil
-}
-
-func (s *Server) userSessionClient(r *http.Request) (*database.UserSession, *http.Client, error) {
-	session, err := s.userSession(r)
-	if err != nil {
-		return nil, nil, err
-	}
-	client, err := s.authFLow.Client(r.Context(), session.OAuth2Token())
-	if err != nil {
-		return nil, nil, err
-	}
-	return session, client, nil
-}
-
-func (s *Server) contextWithUserVerificationLog(ctx context.Context, subject string, verifyHandler server.VerifyHandler, remoteIP string) context.Context {
-	userVerificationLog := database.NewUserVerificationLog(subject, string(verifyHandler.Method()), remoteIP)
-	remoteLocation, err := s.locationService.Lookup(remoteIP)
-	if err != nil {
-		slog.Error("failed to lookup location info", slog.String("remoteIP", remoteIP), slog.Any("err", err))
-	} else if remoteLocation != geoip.NoLocation {
-		userVerificationLog.Country = remoteLocation.Country
-		userVerificationLog.CountryCode = remoteLocation.CountryCode
-		userVerificationLog.City = remoteLocation.City
-		userVerificationLog.Lat = remoteLocation.Lat
-		userVerificationLog.Lon = remoteLocation.Lon
-	}
-	return context.WithValue(ctx, verifyHandler, userVerificationLog)
-}
-
-type Alert string
-
-const (
-	AlertNone          Alert = ""
-	AlertServerFailure Alert = "server_failure"
-	AlertLoginFailure  Alert = "login_failure"
-	AlertLogoffFailure Alert = "logoff_failure"
-	AlertVerifyFailure Alert = "verify_failure"
-)
-
-func (s *Server) redirectAlert(w http.ResponseWriter, r *http.Request, alert Alert) {
-	redirectURL := *s.oauth2IssuerURL
-	query := redirectURL.Query()
-	query.Add("alert", string(alert))
-	redirectURL.RawQuery = query.Encode()
-	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 }

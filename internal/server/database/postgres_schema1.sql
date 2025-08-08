@@ -1,7 +1,7 @@
 CREATE TABLE oauth2_auth_request(
     id TEXT PRIMARY KEY,
 	acr TEXT,
-	create_time BIGINT,
+	expiration BIGINT,
 	auth_time BIGINT,
 	client_id TEXT,
 	nonce TEXT,
@@ -93,8 +93,8 @@ CREATE TABLE user_session_request(
     id TEXT PRIMARY KEY,
     subject TEXT,
     remember BOOLEAN,
-    create_time BIGINT,
-    state TEXT
+    state TEXT,
+    expiration BIGINT
 );
 CREATE TABLE user_session(
     id TEXT PRIMARY KEY,
