@@ -196,6 +196,18 @@ func NewOAuth2TokenFromTokenExchangeRequest(request op.TokenExchangeRequest, ref
 	}
 }
 
+func NewOAuth2TokenFromRefreshTokenRequest(request op.RefreshTokenRequest, refreshTokenID string) *OAuth2Token {
+	return &OAuth2Token{
+		ID:             uuid.NewString(),
+		ClientID:       request.GetClientID(),
+		Subject:        request.GetSubject(),
+		RefreshTokenID: refreshTokenID,
+		Audience:       request.GetAudience(),
+		Expiration:     time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Scopes:         request.GetScopes(),
+	}
+}
+
 func (t *OAuth2Token) Expired() bool {
 	return t.Expiration < time.Now().UnixMicro()
 }
@@ -226,6 +238,34 @@ func NewOAuth2RefreshToken(id string) *OAuth2RefreshToken {
 }
 
 func NewOAuth2RefreshTokenFromAuthRequest(id string, tokenID string, request op.AuthRequest) *OAuth2RefreshToken {
+	return &OAuth2RefreshToken{
+		ID:            id,
+		AuthTime:      request.GetAuthTime().UnixMicro(),
+		AMR:           request.GetAMR(),
+		Audience:      request.GetAudience(),
+		Subject:       request.GetSubject(),
+		ClientID:      request.GetClientID(),
+		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Scopes:        request.GetScopes(),
+		AccessTokenID: tokenID,
+	}
+}
+
+func NewOAuth2RefreshTokenFromTokenExchangeRequest(id string, tokenID string, request op.TokenExchangeRequest) *OAuth2RefreshToken {
+	return &OAuth2RefreshToken{
+		ID:            id,
+		AuthTime:      request.GetAuthTime().UnixMicro(),
+		AMR:           request.GetAMR(),
+		Audience:      request.GetAudience(),
+		Subject:       request.GetSubject(),
+		ClientID:      request.GetClientID(),
+		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Scopes:        request.GetScopes(),
+		AccessTokenID: tokenID,
+	}
+}
+
+func NewOAuth2RefreshTokenFromRefreshTokenRequest(id string, tokenID string, request op.RefreshTokenRequest) *OAuth2RefreshToken {
 	return &OAuth2RefreshToken{
 		ID:            id,
 		AuthTime:      request.GetAuthTime().UnixMicro(),

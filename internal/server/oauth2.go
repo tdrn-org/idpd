@@ -366,11 +366,9 @@ func (p *OAuth2Provider) CreateAccessAndRefreshTokens(ctx context.Context, reque
 	case *database.OpAuthRequest:
 		return p.createAccessAndRefreshTokenFromOpAuthRequest(ctx, refreshTokenRequest, currentRefreshToken)
 	case op.TokenExchangeRequest:
-		p.logStubCall()
-		return "", "", time.Time{}, nil
+		return p.createAccessAndRefreshTokenFromTokenExchangeRequest(ctx, refreshTokenRequest, currentRefreshToken)
 	case op.RefreshTokenRequest:
-		p.logStubCall()
-		return "", "", time.Time{}, nil
+		return p.createAccessAndRefreshTokenFromRefreshTokenRequest(ctx, refreshTokenRequest, currentRefreshToken)
 	}
 	return "", "", time.Time{}, fmt.Errorf("unexpected refresh token request type: %s", reflect.TypeOf(request))
 }
@@ -382,6 +380,38 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromOpAuthRequest(ctx contex
 	accessToken = database.NewOAuth2TokenFromAuthRequest(opAuthRequest, refreshTokenID)
 	if currentRefreshToken == "" {
 		refreshToken = database.NewOAuth2RefreshTokenFromAuthRequest(refreshTokenID, accessToken.ID, opAuthRequest)
+		err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
+		if err != nil {
+			return "", "", time.Time{}, err
+		}
+	} else {
+		newRefreshToken, err := p.driver.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
+		if err != nil {
+			return "", "", time.Time{}, err
+		}
+		refreshToken = newRefreshToken
+	}
+	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
+}
+
+func (p *OAuth2Provider) createAccessAndRefreshTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest, currentRefreshToken string) (string, string, time.Time, error) {
+	refreshTokenID := database.NewOAuth2RefreshTokenID()
+	accessToken := database.NewOAuth2TokenFromTokenExchangeRequest(tokenExchangeRequest, refreshTokenID)
+	refreshToken := database.NewOAuth2RefreshTokenFromTokenExchangeRequest(refreshTokenID, accessToken.ID, tokenExchangeRequest)
+	err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
+}
+
+func (p *OAuth2Provider) createAccessAndRefreshTokenFromRefreshTokenRequest(ctx context.Context, refreshTokenRequest op.RefreshTokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
+	var accessToken *database.OAuth2Token
+	var refreshToken *database.OAuth2RefreshToken
+	refreshTokenID := database.NewOAuth2RefreshTokenID()
+	accessToken = database.NewOAuth2TokenFromRefreshTokenRequest(refreshTokenRequest, refreshTokenID)
+	if currentRefreshToken == "" {
+		refreshToken = database.NewOAuth2RefreshTokenFromRefreshTokenRequest(refreshTokenID, accessToken.ID, refreshTokenRequest)
 		err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
