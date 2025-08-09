@@ -65,7 +65,7 @@ func NewUserSession(subject string, token *oauth2.Token) *UserSession {
 		TokenType:         token.TokenType,
 		RefreshToken:      token.RefreshToken,
 		TokenExpiration:   token.Expiry.UnixMicro(),
-		SessionExpiration: serverconf.LookupRuntime().SessionLifetime.Microseconds(),
+		SessionExpiration: time.Now().Add(serverconf.LookupRuntime().SessionLifetime).UnixMicro(),
 	}
 }
 
