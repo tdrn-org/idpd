@@ -50,7 +50,6 @@ func (r *UserSessionRequest) Expired() bool {
 type UserSession struct {
 	ID                string
 	Subject           string
-	Remember          bool
 	AccessToken       string
 	TokenType         string
 	RefreshToken      string
@@ -58,11 +57,10 @@ type UserSession struct {
 	SessionExpiration int64
 }
 
-func NewUserSession(token *oauth2.Token, subject string, remember bool) *UserSession {
+func NewUserSession(subject string, token *oauth2.Token) *UserSession {
 	return &UserSession{
 		ID:                uuid.NewString(),
 		Subject:           subject,
-		Remember:          remember,
 		AccessToken:       token.AccessToken,
 		TokenType:         token.TokenType,
 		RefreshToken:      token.RefreshToken,

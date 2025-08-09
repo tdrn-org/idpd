@@ -307,10 +307,11 @@ func (s *Server) initUserStore(config *Config) error {
 }
 
 func (s *Server) initOAuth2Provider(config *Config) error {
-	logger := slog.With(slog.String("issuer", s.oauth2IssuerURL.String()))
+	issuerURL := s.oauth2IssuerURL
+	logger := slog.With(slog.String("issuer", issuerURL.String()))
 	opOpts := make([]op.Option, 0, 2)
 	opOpts = append(opOpts, op.WithLogger(logger))
-	if config.Server.Protocol == ServerProtocolHttp {
+	if ServerProtocol(issuerURL.Scheme) == ServerProtocolHttp {
 		opOpts = append(opOpts, op.WithAllowInsecure())
 	}
 	logger.Info("initializing OAuth2 provider")

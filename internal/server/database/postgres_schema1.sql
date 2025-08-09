@@ -99,7 +99,6 @@ CREATE TABLE user_session_request(
 CREATE TABLE user_session(
     id TEXT PRIMARY KEY,
     subject TEXT,
-    remember BOOLEAN,
     access_token TEXT,
     token_type TEXT,
     refresh_token TEXT,

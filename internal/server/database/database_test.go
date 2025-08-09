@@ -293,9 +293,9 @@ func userSession(t *testing.T, d database.Driver) {
 		RefreshToken: uuid.NewString(),
 		Expiry:       time.Now(),
 	}
-	userSession0, err := d.TransformAndDeleteUserSessionRequest(ctx, userSessionRequest0.State, oauth2Token)
+	userSession0, remember, err := d.TransformAndDeleteUserSessionRequest(ctx, userSessionRequest0.State, oauth2Token)
 	require.NoError(t, err)
-	require.True(t, userSession0.Remember)
+	require.True(t, remember)
 	require.Equal(t, oauth2Token.AccessToken, userSession0.AccessToken)
 	require.Equal(t, oauth2Token.RefreshToken, userSession0.RefreshToken)
 	require.Equal(t, oauth2Token.Expiry.UnixMicro(), userSession0.TokenExpiration)

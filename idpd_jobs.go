@@ -22,11 +22,13 @@ import (
 )
 
 func (s *Server) runJobs() {
-	slog.Debug("running jobs")
 	s.runDeleteExpiredJob()
+	s.runRefreshSessionsJob()
 }
 
 func (s *Server) runDeleteExpiredJob() {
+	slog.Debug("running delete expired job")
+
 	ctx := context.Background()
 
 	// Garbage collect OAuth2 authentication and user session requests
@@ -37,6 +39,12 @@ func (s *Server) runDeleteExpiredJob() {
 	err = s.database.DeleteExpiredUserSessionRequests(ctx)
 	if err != nil {
 		slog.Error("failed to delete expired user session requests", slog.Any("err", err))
+	}
+
+	// Garbage collect user sessions
+	err = s.database.DeleteExpiredUserSessions(ctx)
+	if err != nil {
+		slog.Error("failed to delete expired user sessions", slog.Any("err", err))
 	}
 
 	// Garbage collect OAuth2 tokens (refresh & access)
@@ -58,4 +66,8 @@ func (s *Server) runDeleteExpiredJob() {
 	if err != nil {
 		slog.Error("failed to delete expired user TOTP registration requests", slog.Any("err", err))
 	}
+}
+
+func (s *Server) runRefreshSessionsJob() {
+	slog.Debug("running refresh sesions job")
 }

@@ -64,9 +64,10 @@ type Driver interface {
 	DeleteOAuth2RefreshToken(ctx context.Context, id string) error
 	DeleteExpiredOAuth2RefreshTokens(ctx context.Context) error
 	RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error)
-	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, error)
+	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error)
 	DeleteExpiredUserSessionRequests(ctx context.Context) error
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
+	DeleteExpiredUserSessions(ctx context.Context) error
 	InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error)
 	SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error)
 	GenerateUserTOTPRegistrationRequest(ctx context.Context, subject string, secret string, generateChallengeFunc GenerateChallengeFunc) (*UserTOTPRegistrationRequest, error)
@@ -1126,36 +1127,35 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 	return signingKeys, nil
 }
 
-func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, error) {
+func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error) {
 	d.logger.Debug("transforming user session request", slog.String("state", state))
 	tx, txCtx, err := d.beginTx(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	request, err := d.selectUserSessionRequestByState(tx, txCtx, state)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, false, d.rollbackTx(tx, err)
 	}
 	if request.Expired() {
 		// Transformation failed (functionally)
-		return nil, d.commitTx(tx, ctx == txCtx)
+		return nil, false, d.commitTx(tx, ctx == txCtx)
 	}
-	session := NewUserSession(token, request.Subject, request.Remember)
+	session := NewUserSession(request.Subject, token)
 	args := []any{
 		session.ID,
 		session.Subject,
-		session.Remember,
 		session.AccessToken,
 		session.TokenType,
 		session.RefreshToken,
 		session.TokenExpiration,
 		session.SessionExpiration,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,remember,access_token,token_type,refresh_token,token_expiration,session_expiration) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,access_token,token_type,refresh_token,token_expiration,session_expiration) VALUES($1,$2,$3,$4,$5,$6,$7)", args...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, false, d.rollbackTx(tx, err)
 	}
-	return session, d.commitTx(tx, ctx == txCtx)
+	return session, request.Remember, d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx context.Context, state string) (*UserSessionRequest, error) {
@@ -1204,13 +1204,12 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	session := &UserSession{
 		ID: id,
 	}
-	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,remember,access_token,token_type,refresh_token,token_expiration,session_expiration FROM user_session WHERE id=$1", session.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,access_token,token_type,refresh_token,token_expiration,session_expiration FROM user_session WHERE id=$1", session.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	args := []any{
 		&session.Subject,
-		&session.Remember,
 		&session.AccessToken,
 		&session.TokenType,
 		&session.RefreshToken,
@@ -1223,7 +1222,25 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	} else if err != nil {
 		return nil, d.rollbackTx(tx, fmt.Errorf("select user session failure (cause: %w)", err))
 	}
+	if session.Expired() {
+		// Session no longer available
+		return nil, d.commitTx(tx, ctx == txCtx)
+	}
 	return session, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) DeleteExpiredUserSessions(ctx context.Context) error {
+	d.logger.Debug("deleting expired user sessions")
+	tx, txCtx, err := d.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UnixMicro()
+	err = d.execTx(tx, txCtx, "DELETE FROM user_session WHERE session_expiration < $1", now)
+	if err != nil {
+		return d.rollbackTx(tx, err)
+	}
+	return d.commitTx(tx, ctx == txCtx)
 }
 
 func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error) {

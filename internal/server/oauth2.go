@@ -150,7 +150,6 @@ type OAuth2ProviderConfig struct {
 }
 
 func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
-	logger := slog.With(slog.String("issuer", config.IssuerURL.String()))
 	provider := &OAuth2Provider{
 		issuerURL:           config.IssuerURL,
 		driver:              driver,
@@ -159,7 +158,6 @@ func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend 
 		signingKeyLifetime:  config.SigningKeyLifetime,
 		signingKeyExpiry:    config.SigningKeyExpiry,
 		opClients:           make(map[string]opClient, 0),
-		logger:              logger,
 	}
 	opConfig := &op.Config{
 		CryptoKey:                sha256.Sum256([]byte(rand.Text())),
@@ -167,11 +165,11 @@ func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend 
 		CodeMethodS256:           true,
 		AuthMethodPost:           true,
 		AuthMethodPrivateKeyJWT:  true,
-		GrantTypeRefreshToken:    false,
-		RequestObjectSupported:   false,
+		GrantTypeRefreshToken:    true,
+		RequestObjectSupported:   true,
 		SupportedUILocales:       []language.Tag{language.English},
-		SupportedClaims:          []string{},
-		SupportedScopes:          []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
+		SupportedClaims:          op.DefaultSupportedClaims,
+		SupportedScopes:          op.DefaultSupportedScopes,
 		DeviceAuthorization:      op.DeviceAuthorizationConfig{
 			// TODO
 		},
@@ -195,7 +193,6 @@ type OAuth2Provider struct {
 	signingKeyExpiry    time.Duration
 	opClients           map[string]opClient
 	opProvider          *op.Provider
-	logger              *slog.Logger
 	mutex               sync.RWMutex
 }
 
@@ -221,7 +218,7 @@ const defaultClockSkew = 10 * time.Second
 const defaultIDTokenLifetime = 1 * time.Hour
 
 func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
-	p.logger.Debug("adding OAuth2 client", slog.String("id", client.ID))
+	p.opProvider.Logger().Debug("adding OAuth2 client", slog.String("id", client.ID))
 	opClient := &opClient{
 		id:                             client.ID,
 		secret:                         client.Secret,
@@ -265,7 +262,7 @@ func (p *OAuth2Provider) Mount(handler httpserver.Handler) *OAuth2Provider {
 }
 
 func (p *OAuth2Provider) Close() error {
-	p.logger.Info("closing OAuth2 provider")
+	p.opProvider.Logger().Info("closing OAuth2 provider")
 	// Nothing to do here (yet)
 	return nil
 }
@@ -419,11 +416,11 @@ func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 		}
 		err = p.driver.DeleteOAuth2RefreshToken(ctx, tokenOrTokenID)
 		if err != nil {
-			p.logger.Error("delete OAuth2 refresh token failure", slog.Any("err", err))
+			p.opProvider.Logger().Error("delete OAuth2 refresh token failure", slog.Any("err", err))
 			return oidc.ErrServerError()
 		}
 	} else if !errors.Is(err, database.ErrObjectNotFound) {
-		p.logger.Error("revoke OAuth2 refresh token failure", slog.Any("err", err))
+		p.opProvider.Logger().Error("revoke OAuth2 refresh token failure", slog.Any("err", err))
 		return oidc.ErrServerError()
 	}
 	token, err := p.driver.SelectOAuth2Token(ctx, tokenOrTokenID)
@@ -433,11 +430,11 @@ func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 		}
 		err = p.driver.DeleteOAuth2Token(ctx, tokenOrTokenID)
 		if err != nil {
-			p.logger.Error("delete OAuth2 token failure", slog.Any("err", err))
+			p.opProvider.Logger().Error("delete OAuth2 token failure", slog.Any("err", err))
 			return oidc.ErrServerError()
 		}
 	} else if !errors.Is(err, database.ErrObjectNotFound) {
-		p.logger.Error("revoke OAuth2 token failure", slog.Any("err", err))
+		p.opProvider.Logger().Error("revoke OAuth2 token failure", slog.Any("err", err))
 		return oidc.ErrServerError()
 	}
 	return nil
@@ -596,5 +593,5 @@ func (p *OAuth2Provider) Health(context.Context) error {
 
 func (p *OAuth2Provider) logStubCall() {
 	_, file, line, _ := runtime.Caller(1)
-	p.logger.Warn("stub call", slog.String("location", fmt.Sprintf("%s:%d", file, line)))
+	p.opProvider.Logger().Warn("stub call", slog.String("location", fmt.Sprintf("%s:%d", file, line)))
 }
