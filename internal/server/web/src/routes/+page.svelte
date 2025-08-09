@@ -40,6 +40,7 @@
 						<p>
 							<a
 								href="/session/details"
+								target="_blank"
 								class="font-medium text-blue-600 underline hover:no-underline dark:text-blue-500"
 								>Details</a
 							>

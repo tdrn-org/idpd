@@ -118,6 +118,28 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleSessionDetails(w http.ResponseWriter, r *http.Request) {
+	_, client, err := s.userSessionClient(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	oidcUserInfo, err := s.authFLow.GetUserInfo(client, r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	w.Header().Add("Content-Type", "application/json")
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(true)
+	err = encoder.Encode(oidcUserInfo)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
 func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
 	id, subject, password, verification, remember, err := s.parseAuthenticateForm(r)
 	if err != nil {

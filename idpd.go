@@ -392,6 +392,7 @@ func (s *Server) startServer(config *Config) error {
 		})
 	}
 	s.httpServer.HandleFunc("/session", s.handleSession)
+	s.httpServer.HandleFunc("/session/details", s.handleSessionDetails)
 	s.httpServer.HandleFunc("/session/authenticate", s.handleSessionAuthenticate)
 	s.httpServer.HandleFunc("/session/verify", s.handleSessionVerify)
 	s.httpServer.HandleFunc("/session/terminate", s.handleSessionTerminate)
