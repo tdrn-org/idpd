@@ -84,7 +84,7 @@ func (s *UserSession) OAuth2Token() *oauth2.Token {
 		AccessToken:  s.AccessToken,
 		TokenType:    s.TokenType,
 		RefreshToken: s.RefreshToken,
-		Expiry:       time.UnixMicro(s.SessionExpiration),
+		Expiry:       time.UnixMicro(s.TokenExpiration),
 		ExpiresIn:    expiresIn,
 	}
 }
