@@ -31,15 +31,15 @@ func TestSigningKeyForAlgorithm(t *testing.T) {
 		t.Run(string(algorithm), func(t *testing.T) {
 			now := time.Now()
 			passivation := now.Add(time.Minute).UnixMicro()
-			expiration := now.Add(5 * time.Minute).UnixMicro()
-			signatureKey, err := server.SigningKeyForAlgorithm(algorithm, passivation, expiration)
+			expiry := now.Add(5 * time.Minute).UnixMicro()
+			signatureKey, err := server.SigningKeyForAlgorithm(algorithm, passivation, expiry)
 			require.NoError(t, err)
 			require.NotNil(t, signatureKey)
 			require.NotEmpty(t, signatureKey.ID)
 			require.Equal(t, string(algorithm), signatureKey.Algorithm)
 			require.NotEmpty(t, signatureKey.PrivateKey)
 			require.NotEmpty(t, signatureKey.PublicKey)
-			require.Equal(t, expiration, signatureKey.Expiration)
+			require.Equal(t, expiry, signatureKey.Expiry)
 		})
 	}
 }

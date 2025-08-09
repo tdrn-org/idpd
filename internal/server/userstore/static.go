@@ -17,6 +17,7 @@
 package userstore
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -154,5 +155,9 @@ func (backend *staticBackend) CheckPassword(subject string, password string) err
 	if user.Password != password {
 		return fmt.Errorf("%w (subject: %s)", ErrIncorrectPassword, subject)
 	}
+	return nil
+}
+
+func (backend *staticBackend) Ping(_ context.Context) error {
 	return nil
 }

@@ -62,6 +62,7 @@ func TestPosgres(t *testing.T) {
 }
 
 func testDriver(t *testing.T, d database.Driver) {
+	ping(t, d)
 	schema1Update(t, d)
 	oauth2AuthRequest(t, d)
 	oauth2AuthCode(t, d)
@@ -70,6 +71,11 @@ func testDriver(t *testing.T, d database.Driver) {
 	signingKey(t, d)
 	userSession(t, d)
 	userVerificationLog(t, d)
+}
+
+func ping(t *testing.T, d database.Driver) {
+	err := d.Ping(t.Context())
+	require.NoError(t, err)
 }
 
 func schema1Update(t *testing.T, d database.Driver) {
@@ -88,13 +94,13 @@ func schema1Update(t *testing.T, d database.Driver) {
 
 func generateAndInsertOAuth2AuthRequest(t *testing.T, d database.Driver) *database.OAuth2AuthRequest {
 	authRequest := &database.OAuth2AuthRequest{
-		ID:         uuid.NewString(),
-		ACR:        "acr",
-		AMR:        []string{"amr0", "amr1"},
-		Audience:   []string{"audience0", "audience1"},
-		Expiration: time.Now().Add(time.Hour).UnixMicro(),
-		AuthTime:   time.Time{}.UnixMicro(),
-		ClientID:   "clientID",
+		ID:       uuid.NewString(),
+		ACR:      "acr",
+		AMR:      []string{"amr0", "amr1"},
+		Audience: []string{"audience0", "audience1"},
+		Expiry:   time.Now().Add(time.Hour).UnixMicro(),
+		AuthTime: time.Time{}.UnixMicro(),
+		ClientID: "clientID",
 		CodeChallenge: &oidc.CodeChallenge{
 			Challenge: oidc.NewSHACodeChallenge("code"),
 			Method:    oidc.CodeChallengeMethodS256,
@@ -169,7 +175,7 @@ func generateAndInsertOAuth2Token(t *testing.T, d database.Driver) *database.OAu
 		Subject:        "subject",
 		RefreshTokenID: "refreshTokenId",
 		Audience:       []string{"audience0", "audience1"},
-		Expiration:     time.Now().Add(time.Hour).UnixMicro(),
+		Expiry:         time.Now().Add(time.Hour).UnixMicro(),
 		Scopes:         []string{"scope0", "scope1"},
 	}
 	err := d.InsertOAuth2Token(t.Context(), token)
@@ -199,7 +205,7 @@ func generateAndInsertOAuth2RefreshToken(t *testing.T, d database.Driver) *datab
 		Subject:        "subject",
 		RefreshTokenID: refreshTokenID,
 		Audience:       []string{"audience0", "audience1"},
-		Expiration:     time.Now().Add(time.Hour).UnixMicro(),
+		Expiry:         time.Now().Add(time.Hour).UnixMicro(),
 		Scopes:         []string{"scope0", "scope1"},
 	}
 	refreshToken := &database.OAuth2RefreshToken{
@@ -209,7 +215,7 @@ func generateAndInsertOAuth2RefreshToken(t *testing.T, d database.Driver) *datab
 		Audience:      []string{"audience0", "audience1"},
 		Subject:       "subject",
 		ClientID:      "clientID",
-		Expiration:    time.Now().Add(time.Hour).UnixMicro(),
+		Expiry:        time.Now().Add(time.Hour).UnixMicro(),
 		Scopes:        []string{"scope0", "scope1"},
 		AccessTokenID: token.ID,
 	}
@@ -239,7 +245,7 @@ func oauth2RefreshToken(t *testing.T, d database.Driver) {
 		Subject:        "subject",
 		RefreshTokenID: newRefreshTokenID,
 		Audience:       []string{"audience0", "audience1"},
-		Expiration:     time.Now().UnixMicro(),
+		Expiry:         time.Now().UnixMicro(),
 		Scopes:         []string{"scope0", "scope1"},
 	}
 	newRefreshToken0, err := d.RenewOAuth2RefreshToken(ctx, refreshToken1.ID, newToken)
@@ -264,8 +270,8 @@ func signingKey(t *testing.T, d database.Driver) {
 		publicKey := &privateKey.PublicKey
 		now := time.Now()
 		passivation := now.Add(time.Second).UnixMicro()
-		expiration := now.Add(10 * time.Second).UnixMicro()
-		return database.NewSigningKey(algorithm, privateKey, publicKey, passivation, expiration)
+		expiry := now.Add(10 * time.Second).UnixMicro()
+		return database.NewSigningKey(algorithm, privateKey, publicKey, passivation, expiry)
 	}
 	ctx := t.Context()
 	signingKeys0, err := d.RotateSigningKeys(ctx, string(jose.RS256), generateSigningKey)
@@ -298,7 +304,7 @@ func userSession(t *testing.T, d database.Driver) {
 	require.True(t, remember)
 	require.Equal(t, oauth2Token.AccessToken, userSession0.AccessToken)
 	require.Equal(t, oauth2Token.RefreshToken, userSession0.RefreshToken)
-	require.Equal(t, oauth2Token.Expiry.UnixMicro(), userSession0.TokenExpiration)
+	require.Equal(t, oauth2Token.Expiry.UnixMicro(), userSession0.TokenExpiry)
 }
 
 func userVerificationLog(t *testing.T, d database.Driver) {

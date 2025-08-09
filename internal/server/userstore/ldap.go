@@ -17,6 +17,7 @@
 package userstore
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -449,6 +450,12 @@ func (backend *ldapBackend) CheckPassword(subject string, password string) error
 		return errors.Join(fmt.Errorf("%w (subject: %s)", ErrIncorrectPassword, subject), err)
 	}
 	return nil
+}
+
+func (backend *ldapBackend) Ping(_ context.Context) error {
+	conn, connectAndBindErr := backend.connectAndBind()
+	closeErr := conn.Close()
+	return errors.Join(connectAndBindErr, closeErr)
 }
 
 func (backend *ldapBackend) connectAndBind() (*ldap.Conn, error) {

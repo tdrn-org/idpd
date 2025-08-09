@@ -17,6 +17,7 @@
 package userstore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -136,4 +137,5 @@ type UserEmail struct {
 type Backend interface {
 	LookupUser(subject string) (*User, error)
 	CheckPassword(email string, password string) error
+	Ping(ctx context.Context) error
 }

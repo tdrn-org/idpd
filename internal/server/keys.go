@@ -27,7 +27,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/server/database"
 )
 
-func SigningKeyForAlgorithm(algorithm jose.SignatureAlgorithm, passivation int64, expiration int64) (*database.SigningKey, error) {
+func SigningKeyForAlgorithm(algorithm jose.SignatureAlgorithm, passivation int64, expiry int64) (*database.SigningKey, error) {
 	var privateKey any
 	var publicKey any
 	var err error
@@ -44,7 +44,7 @@ func SigningKeyForAlgorithm(algorithm jose.SignatureAlgorithm, passivation int64
 	if err != nil {
 		return nil, err
 	}
-	signingKey, err := database.NewSigningKey(string(algorithm), privateKey, publicKey, passivation, expiration)
+	signingKey, err := database.NewSigningKey(string(algorithm), privateKey, publicKey, passivation, expiry)
 	if err != nil {
 		return nil, err
 	}

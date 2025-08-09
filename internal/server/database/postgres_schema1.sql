@@ -1,7 +1,7 @@
 CREATE TABLE oauth2_auth_request(
     id TEXT PRIMARY KEY,
 	acr TEXT,
-	expiration BIGINT,
+	expiry BIGINT,
 	auth_time BIGINT,
 	client_id TEXT,
 	nonce TEXT,
@@ -45,7 +45,7 @@ CREATE TABLE oauth2_token(
     client_id TEXT,
     subject TEXT,
     refresh_token_id TEXT,
-    expiration BIGINT
+    expiry BIGINT
 );
 CREATE TABLE oauth2_token_audience(
     audience TEXT,
@@ -62,7 +62,7 @@ CREATE TABLE oauth2_refresh_token(
     auth_time BIGINT,
     subject TEXT,
     client_id TEXT,
-    expiration BIGINT,
+    expiry BIGINT,
     access_token_id TEXT,
     FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)
 );
@@ -87,14 +87,14 @@ CREATE TABLE signing_key(
     private_key BYTEA,
     public_key BYTEA,
     passivation BIGINT,
-    expiration BIGINT
+    expiry BIGINT
 );
 CREATE TABLE user_session_request(
     id TEXT PRIMARY KEY,
     subject TEXT,
     remember BOOLEAN,
     state TEXT,
-    expiration BIGINT
+    expiry BIGINT
 );
 CREATE TABLE user_session(
     id TEXT PRIMARY KEY,
@@ -102,8 +102,8 @@ CREATE TABLE user_session(
     access_token TEXT,
     token_type TEXT,
     refresh_token TEXT,
-    token_expiration BIGINT,
-    session_expiration BIGINT
+    token_expiry BIGINT,
+    session_expiry BIGINT
 );
 CREATE TABLE user_verification_log(
     subject TEXT,
@@ -121,7 +121,7 @@ CREATE TABLE user_totp_registration_request(
     subject TEXT,
     secret TEXT,
     challenge TEXT,
-    expiration BIGINT
+    expiry BIGINT
 );
 CREATE TABLE user_totp_registration(
     subject TEXT,

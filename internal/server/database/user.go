@@ -26,55 +26,55 @@ import (
 )
 
 type UserSessionRequest struct {
-	ID         string
-	Subject    string
-	Remember   bool
-	State      string
-	Expiration int64
+	ID       string
+	Subject  string
+	Remember bool
+	State    string
+	Expiry   int64
 }
 
 func NewUserSessionRequest(subject string, remember bool, state string) *UserSessionRequest {
 	return &UserSessionRequest{
-		ID:         uuid.NewString(),
-		Subject:    subject,
-		Remember:   remember,
-		Expiration: time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
-		State:      state,
+		ID:       uuid.NewString(),
+		Subject:  subject,
+		Remember: remember,
+		Expiry:   time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
+		State:    state,
 	}
 }
 
 func (r *UserSessionRequest) Expired() bool {
-	return r.Expiration < time.Now().UnixMicro()
+	return r.Expiry < time.Now().UnixMicro()
 }
 
 type UserSession struct {
-	ID                string
-	Subject           string
-	AccessToken       string
-	TokenType         string
-	RefreshToken      string
-	TokenExpiration   int64
-	SessionExpiration int64
+	ID            string
+	Subject       string
+	AccessToken   string
+	TokenType     string
+	RefreshToken  string
+	TokenExpiry   int64
+	SessionExpiry int64
 }
 
 func NewUserSession(subject string, token *oauth2.Token) *UserSession {
 	return &UserSession{
-		ID:                uuid.NewString(),
-		Subject:           subject,
-		AccessToken:       token.AccessToken,
-		TokenType:         token.TokenType,
-		RefreshToken:      token.RefreshToken,
-		TokenExpiration:   token.Expiry.UnixMicro(),
-		SessionExpiration: time.Now().Add(serverconf.LookupRuntime().SessionLifetime).UnixMicro(),
+		ID:            uuid.NewString(),
+		Subject:       subject,
+		AccessToken:   token.AccessToken,
+		TokenType:     token.TokenType,
+		RefreshToken:  token.RefreshToken,
+		TokenExpiry:   token.Expiry.UnixMicro(),
+		SessionExpiry: time.Now().Add(serverconf.LookupRuntime().SessionLifetime).UnixMicro(),
 	}
 }
 
 func (s *UserSession) Expired() bool {
-	return s.SessionExpiration < time.Now().UnixMicro()
+	return s.SessionExpiry < time.Now().UnixMicro()
 }
 
 func (s *UserSession) OAuth2Token() *oauth2.Token {
-	expiresIn := s.TokenExpiration - time.Now().UnixMicro()
+	expiresIn := s.TokenExpiry - time.Now().UnixMicro()
 	if expiresIn < 0 {
 		expiresIn = 0
 	}
@@ -82,7 +82,7 @@ func (s *UserSession) OAuth2Token() *oauth2.Token {
 		AccessToken:  s.AccessToken,
 		TokenType:    s.TokenType,
 		RefreshToken: s.RefreshToken,
-		Expiry:       time.UnixMicro(s.TokenExpiration),
+		Expiry:       time.UnixMicro(s.TokenExpiry),
 		ExpiresIn:    expiresIn,
 	}
 }
@@ -122,23 +122,23 @@ func (l *UserVerificationLog) Update(log *UserVerificationLog) {
 }
 
 type UserTOTPRegistrationRequest struct {
-	Subject    string
-	Secret     string
-	Challenge  string
-	Expiration int64
+	Subject   string
+	Secret    string
+	Challenge string
+	Expiry    int64
 }
 
 func NewUserTOTPRegistrationRequest(subject string, secret string, challenge string) *UserTOTPRegistrationRequest {
 	return &UserTOTPRegistrationRequest{
-		Subject:    subject,
-		Secret:     secret,
-		Challenge:  challenge,
-		Expiration: time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
+		Subject:   subject,
+		Secret:    secret,
+		Challenge: challenge,
+		Expiry:    time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 	}
 }
 
 func (r *UserTOTPRegistrationRequest) Expired() bool {
-	return r.Expiration < time.Now().UnixMicro()
+	return r.Expiry < time.Now().UnixMicro()
 }
 
 type UserTOTPRegistration struct {

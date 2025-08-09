@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
@@ -149,11 +150,11 @@ type OAuth2ProviderConfig struct {
 	SigningKeyExpiry         time.Duration
 }
 
-func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
+func (config *OAuth2ProviderConfig) NewProvider(database database.Driver, userStore userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
 	provider := &OAuth2Provider{
 		issuerURL:           config.IssuerURL,
-		driver:              driver,
-		backend:             backend,
+		database:            database,
+		userStore:           userStore,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
 		signingKeyLifetime:  config.SigningKeyLifetime,
 		signingKeyExpiry:    config.SigningKeyExpiry,
@@ -186,8 +187,8 @@ func (config *OAuth2ProviderConfig) NewProvider(driver database.Driver, backend 
 
 type OAuth2Provider struct {
 	issuerURL           *url.URL
-	driver              database.Driver
-	backend             userstore.Backend
+	database            database.Driver
+	userStore           userstore.Backend
 	signingKeyAlgorithm jose.SignatureAlgorithm
 	signingKeyLifetime  time.Duration
 	signingKeyExpiry    time.Duration
@@ -269,7 +270,7 @@ func (p *OAuth2Provider) Close() error {
 
 func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject string, password string, verifyHandler VerifyHandler, remember bool) (string, error) {
 	slog.Info("authenticating OAuth2 user", slog.String("id", id), slog.String("subject", subject), slog.String("verification", string(verifyHandler.Method())))
-	err := p.backend.CheckPassword(subject, password)
+	err := p.userStore.CheckPassword(subject, password)
 	if err != nil {
 		if !errors.Is(err, userstore.ErrInvalidLogin) {
 			return "", err
@@ -277,7 +278,7 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 		slog.Info("invalid OAuth2 user login", slog.String("subject", subject))
 		verifyHandler.Taint()
 	}
-	err = p.driver.AuthenticateOAuth2AuthRequest(ctx, id, subject, verifyHandler.GenerateChallenge, remember)
+	err = p.database.AuthenticateOAuth2AuthRequest(ctx, id, subject, verifyHandler.GenerateChallenge, remember)
 	if err != nil {
 		return "", fmt.Errorf("invalid OAuth2 auth request id: %s (cause: %w)", id, err)
 	}
@@ -289,7 +290,7 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 
 func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, verifyHandler VerifyHandler, response string) (string, error) {
 	slog.Info("verifying OAuth2 user", slog.String("id", id), slog.String("subject", subject), slog.String("verification", string(verifyHandler.Method())))
-	sessionRequest, err := p.driver.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, id, subject, verifyHandler.VerifyResponse, response)
+	sessionRequest, err := p.database.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx, id, subject, verifyHandler.VerifyResponse, response)
 	if err != nil {
 		return "", fmt.Errorf("OAuth2 user verification failure: %s (cause: %w)", id, err)
 	}
@@ -302,7 +303,7 @@ func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, 
 
 func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
 	authRequest := database.NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest, userID)
-	err := p.driver.InsertOAuth2AuthRequest(ctx, authRequest)
+	err := p.database.InsertOAuth2AuthRequest(ctx, authRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +311,7 @@ func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest 
 }
 
 func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
-	authRequest, err := p.driver.SelectOAuth2AuthRequest(ctx, id)
+	authRequest, err := p.database.SelectOAuth2AuthRequest(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +319,7 @@ func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.Aut
 }
 
 func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
-	authRequest, err := p.driver.SelectOAuth2AuthRequestByCode(ctx, code)
+	authRequest, err := p.database.SelectOAuth2AuthRequestByCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -326,11 +327,11 @@ func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op
 }
 
 func (p *OAuth2Provider) SaveAuthCode(ctx context.Context, id string, code string) error {
-	return p.driver.InsertOAuth2AuthCode(ctx, code, id)
+	return p.database.InsertOAuth2AuthCode(ctx, code, id)
 }
 
 func (p *OAuth2Provider) DeleteAuthRequest(ctx context.Context, id string) error {
-	return p.driver.DeleteOAuth2AuthRequest(ctx, id)
+	return p.database.DeleteOAuth2AuthRequest(ctx, id)
 }
 
 func (p *OAuth2Provider) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
@@ -345,20 +346,20 @@ func (p *OAuth2Provider) CreateAccessToken(ctx context.Context, request op.Token
 
 func (p *OAuth2Provider) createAccessTokenFromOpAuthRequest(ctx context.Context, opAuthRequest op.AuthRequest) (string, time.Time, error) {
 	token := database.NewOAuth2TokenFromAuthRequest(opAuthRequest, "")
-	err := p.driver.InsertOAuth2Token(ctx, token)
+	err := p.database.InsertOAuth2Token(ctx, token)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return token.ID, time.UnixMicro(token.Expiration), nil
+	return token.ID, time.UnixMicro(token.Expiry), nil
 }
 
 func (p *OAuth2Provider) createAccessTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest) (string, time.Time, error) {
 	token := database.NewOAuth2TokenFromTokenExchangeRequest(tokenExchangeRequest, "")
-	err := p.driver.InsertOAuth2Token(ctx, token)
+	err := p.database.InsertOAuth2Token(ctx, token)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return token.ID, time.UnixMicro(token.Expiration), nil
+	return token.ID, time.UnixMicro(token.Expiry), nil
 }
 
 func (p *OAuth2Provider) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
@@ -380,29 +381,29 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromOpAuthRequest(ctx contex
 	accessToken = database.NewOAuth2TokenFromAuthRequest(opAuthRequest, refreshTokenID)
 	if currentRefreshToken == "" {
 		refreshToken = database.NewOAuth2RefreshTokenFromAuthRequest(refreshTokenID, accessToken.ID, opAuthRequest)
-		err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
+		err := p.database.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
 	} else {
-		newRefreshToken, err := p.driver.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
+		newRefreshToken, err := p.database.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
 		refreshToken = newRefreshToken
 	}
-	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
+	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiry), nil
 }
 
 func (p *OAuth2Provider) createAccessAndRefreshTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest, currentRefreshToken string) (string, string, time.Time, error) {
 	refreshTokenID := database.NewOAuth2RefreshTokenID()
 	accessToken := database.NewOAuth2TokenFromTokenExchangeRequest(tokenExchangeRequest, refreshTokenID)
 	refreshToken := database.NewOAuth2RefreshTokenFromTokenExchangeRequest(refreshTokenID, accessToken.ID, tokenExchangeRequest)
-	err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
+	err := p.database.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
-	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
+	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiry), nil
 }
 
 func (p *OAuth2Provider) createAccessAndRefreshTokenFromRefreshTokenRequest(ctx context.Context, refreshTokenRequest op.RefreshTokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
@@ -412,22 +413,22 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromRefreshTokenRequest(ctx 
 	accessToken = database.NewOAuth2TokenFromRefreshTokenRequest(refreshTokenRequest, refreshTokenID)
 	if currentRefreshToken == "" {
 		refreshToken = database.NewOAuth2RefreshTokenFromRefreshTokenRequest(refreshTokenID, accessToken.ID, refreshTokenRequest)
-		err := p.driver.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
+		err := p.database.InsertOAuth2RefreshToken(ctx, refreshToken, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
 	} else {
-		newRefreshToken, err := p.driver.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
+		newRefreshToken, err := p.database.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}
 		refreshToken = newRefreshToken
 	}
-	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiration), nil
+	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiry), nil
 }
 
 func (p *OAuth2Provider) TokenRequestByRefreshToken(ctx context.Context, refreshTokenID string) (op.RefreshTokenRequest, error) {
-	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, refreshTokenID)
+	refreshToken, err := p.database.SelectOAuth2RefreshToken(ctx, refreshTokenID)
 	if err != nil {
 		return nil, err
 	}
@@ -435,16 +436,16 @@ func (p *OAuth2Provider) TokenRequestByRefreshToken(ctx context.Context, refresh
 }
 
 func (p *OAuth2Provider) TerminateSession(ctx context.Context, userID string, clientID string) error {
-	return p.driver.DeleteOAuth2TokensBySubject(ctx, clientID, userID)
+	return p.database.DeleteOAuth2TokensBySubject(ctx, clientID, userID)
 }
 
 func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string, userID string, clientID string) *oidc.Error {
-	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, tokenOrTokenID)
+	refreshToken, err := p.database.SelectOAuth2RefreshToken(ctx, tokenOrTokenID)
 	if err == nil {
 		if refreshToken.ClientID != clientID {
 			return oidc.ErrInvalidClient().WithDescription("refresh token was not issued for this client")
 		}
-		err = p.driver.DeleteOAuth2RefreshToken(ctx, tokenOrTokenID)
+		err = p.database.DeleteOAuth2RefreshToken(ctx, tokenOrTokenID)
 		if err != nil {
 			p.opProvider.Logger().Error("delete OAuth2 refresh token failure", slog.Any("err", err))
 			return oidc.ErrServerError()
@@ -453,12 +454,12 @@ func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 		p.opProvider.Logger().Error("revoke OAuth2 refresh token failure", slog.Any("err", err))
 		return oidc.ErrServerError()
 	}
-	token, err := p.driver.SelectOAuth2Token(ctx, tokenOrTokenID)
+	token, err := p.database.SelectOAuth2Token(ctx, tokenOrTokenID)
 	if err == nil {
 		if token.ClientID != clientID {
 			return oidc.ErrInvalidClient().WithDescription("token was not issued for this client")
 		}
-		err = p.driver.DeleteOAuth2Token(ctx, tokenOrTokenID)
+		err = p.database.DeleteOAuth2Token(ctx, tokenOrTokenID)
 		if err != nil {
 			p.opProvider.Logger().Error("delete OAuth2 token failure", slog.Any("err", err))
 			return oidc.ErrServerError()
@@ -471,7 +472,7 @@ func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 }
 
 func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (string, string, error) {
-	refreshToken, err := p.driver.SelectOAuth2RefreshToken(ctx, token)
+	refreshToken, err := p.database.SelectOAuth2RefreshToken(ctx, token)
 	if errors.Is(err, database.ErrObjectNotFound) {
 		return "", "", op.ErrInvalidRefreshToken
 	} else if err != nil {
@@ -485,7 +486,7 @@ func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID strin
 func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
+	signingKeys, err := p.database.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
 	}
@@ -500,12 +501,12 @@ func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 func (p *OAuth2Provider) generateSigningKey(algorithm string) (*database.SigningKey, error) {
 	now := time.Now()
 	passivation := now.Add(p.signingKeyLifetime).UnixMicro()
-	expiration := now.Add(p.signingKeyExpiry).UnixMicro()
-	return SigningKeyForAlgorithm(jose.SignatureAlgorithm(algorithm), passivation, expiration)
+	expiry := now.Add(p.signingKeyExpiry).UnixMicro()
+	return SigningKeyForAlgorithm(jose.SignatureAlgorithm(algorithm), passivation, expiry)
 }
 
 func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
-	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
+	signingKeys, err := p.database.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +522,7 @@ func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.Signat
 }
 
 func (p *OAuth2Provider) KeySet(ctx context.Context) ([]op.Key, error) {
-	signingKeys, err := p.driver.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
+	signingKeys, err := p.database.RotateSigningKeys(ctx, string(p.signingKeyAlgorithm), p.generateSigningKey)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +581,7 @@ func (p *OAuth2Provider) SetUserinfoFromRequest(ctx context.Context, userInfo *o
 }
 
 func (p *OAuth2Provider) setUserInfoFromSubject(_ context.Context, userInfo *oidc.UserInfo, subject string, scopes []string) error {
-	user, err := p.backend.LookupUser(subject)
+	user, err := p.userStore.LookupUser(subject)
 	if err != nil {
 		return err
 	}
@@ -589,7 +590,7 @@ func (p *OAuth2Provider) setUserInfoFromSubject(_ context.Context, userInfo *oid
 }
 
 func (p *OAuth2Provider) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserInfo, tokenID string, subject string, origin string) error {
-	token, err := p.driver.SelectOAuth2Token(ctx, tokenID)
+	token, err := p.database.SelectOAuth2Token(ctx, tokenID)
 	if err != nil {
 		return err
 	}
@@ -616,9 +617,52 @@ func (p *OAuth2Provider) ValidateJWTProfileScopes(ctx context.Context, userID st
 	return nil, nil
 }
 
-func (p *OAuth2Provider) Health(context.Context) error {
+func (p *OAuth2Provider) Health(ctx context.Context) error {
+	logger := p.opProvider.Logger()
+	log.Notice(logger, "starting health check...")
+	databaseErr := p.database.Ping(ctx)
+	if databaseErr != nil {
+		logger.Error("database health: nok", slog.Any("err", databaseErr))
+	} else {
+		log.Notice(logger, "database health: ok")
+	}
+	userStoreErr := p.userStore.Ping(ctx)
+	if userStoreErr != nil {
+		logger.Error("user store health: nok", slog.Any("err", userStoreErr))
+	} else {
+		log.Notice(logger, "user store health: ok")
+	}
+	return errors.Join(databaseErr, userStoreErr)
+}
+
+func (p *OAuth2Provider) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
 	p.logStubCall()
 	return nil
+}
+
+func (p *OAuth2Provider) CreateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
+	p.logStubCall()
+	return nil
+}
+
+func (p *OAuth2Provider) GetPrivateClaimsFromTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) (claims map[string]any, err error) {
+	p.logStubCall()
+	return nil, nil
+}
+
+func (p *OAuth2Provider) SetUserinfoFromTokenExchangeRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.TokenExchangeRequest) error {
+	p.logStubCall()
+	return nil
+}
+
+func (p *OAuth2Provider) StoreDeviceAuthorization(ctx context.Context, clientID, deviceCode, userCode string, expires time.Time, scopes []string) error {
+	p.logStubCall()
+	return nil
+}
+
+func (p *OAuth2Provider) GetDeviceAuthorizatonState(ctx context.Context, clientID, deviceCode string) (*op.DeviceAuthorizationState, error) {
+	p.logStubCall()
+	return nil, nil
 }
 
 func (p *OAuth2Provider) logStubCall() {

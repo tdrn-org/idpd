@@ -75,6 +75,7 @@ type Driver interface {
 	DeleteExpiredUserTOTPRegistrationRequests(ctx context.Context) error
 	VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserTOTPRegistration, error)
 	SelectUserTOTPRegistration(ctx context.Context, subject string) (*UserTOTPRegistration, error)
+	Ping(ctx context.Context) error
 	Close() error
 }
 
@@ -168,7 +169,7 @@ func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authReques
 	args0 := []any{
 		authRequest.ID,
 		authRequest.ACR,
-		authRequest.Expiration,
+		authRequest.Expiry,
 		authRequest.AuthTime,
 		authRequest.ClientID,
 		authRequest.Nonce,
@@ -181,7 +182,7 @@ func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authReques
 		authRequest.Remember,
 		authRequest.Done,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request (id,acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", args0...)
+	err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request (id,acr,expiry,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", args0...)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -243,13 +244,13 @@ func (d *databaseDriver) SelectOAuth2AuthRequest(ctx context.Context, id string)
 
 func (d *databaseDriver) selectOAuth2AuthRequest(tx *sql.Tx, txCtx context.Context, id string) (*OAuth2AuthRequest, error) {
 	authRequest := NewOAuth2AuthRequest(id)
-	row, err := d.queryRowTx(tx, txCtx, "SELECT acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id=$1", authRequest.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT acr,expiry,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id=$1", authRequest.ID)
 	if err != nil {
 		return nil, err
 	}
 	args := []any{
 		&authRequest.ACR,
-		&authRequest.Expiration,
+		&authRequest.Expiry,
 		&authRequest.AuthTime,
 		&authRequest.ClientID,
 		&authRequest.Nonce,
@@ -349,14 +350,14 @@ func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code
 		return nil, err
 	}
 	authRequest := NewOAuth2AuthRequest("")
-	row, err := d.queryRowTx(tx, txCtx, "SELECT id,acr,expiration,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id IN (SELECT auth_request_id FROM oauth2_auth_code WHERE code=$1)", code)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT id,acr,expiry,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id IN (SELECT auth_request_id FROM oauth2_auth_code WHERE code=$1)", code)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
 	args := []any{
 		&authRequest.ID,
 		&authRequest.ACR,
-		&authRequest.Expiration,
+		&authRequest.Expiry,
 		&authRequest.AuthTime,
 		&authRequest.ClientID,
 		&authRequest.Nonce,
@@ -472,9 +473,9 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 		userSessionRequest.Subject,
 		userSessionRequest.Remember,
 		userSessionRequest.State,
-		userSessionRequest.Expiration,
+		userSessionRequest.Expiry,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_session_request (id,subject,remember,state,expiration) VALUES($1,$2,$3,$4,$5)", args1...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_session_request (id,subject,remember,state,expiry) VALUES($1,$2,$3,$4,$5)", args1...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -521,27 +522,27 @@ func (d *databaseDriver) DeleteExpiredOAuth2AuthRequests(ctx context.Context) er
 		return err
 	}
 	now := time.Now().UnixMicro()
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_code WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_code WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_scope WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_scope WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_code_challenge WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_code_challenge WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_audience WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_audience WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_amr WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_amr WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request WHERE expiration < $1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request WHERE expiry < $1", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -584,9 +585,9 @@ func (d *databaseDriver) insertOAuth2Token(tx *sql.Tx, txCtx context.Context, to
 		token.ClientID,
 		token.Subject,
 		token.RefreshTokenID,
-		token.Expiration,
+		token.Expiry,
 	}
-	err := d.execTx(tx, txCtx, "INSERT INTO oauth2_token (id,client_id,subject,refresh_token_id,expiration) VALUES($1,$2,$3,$4,$5)", args0...)
+	err := d.execTx(tx, txCtx, "INSERT INTO oauth2_token (id,client_id,subject,refresh_token_id,expiry) VALUES($1,$2,$3,$4,$5)", args0...)
 	if err != nil {
 		return err
 	}
@@ -612,7 +613,7 @@ func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAu
 		return nil, err
 	}
 	token := NewOAuth2Token(id)
-	row, err := d.queryRowTx(tx, txCtx, "SELECT client_id,subject,refresh_token_id,expiration FROM oauth2_token WHERE id=$1", token.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT client_id,subject,refresh_token_id,expiry FROM oauth2_token WHERE id=$1", token.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -620,7 +621,7 @@ func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAu
 		&token.ClientID,
 		&token.Subject,
 		&token.RefreshTokenID,
-		&token.Expiration,
+		&token.Expiry,
 	}
 	err = row.Scan(args0...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -683,15 +684,15 @@ func (d *databaseDriver) DeleteExpiredOAuth2Tokens(ctx context.Context) error {
 		return err
 	}
 	now := time.Now().UnixMicro()
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token_scope WHERE token_id IN (SELECT id FROM oauth2_token WHERE expiration < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token))", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token_scope WHERE token_id IN (SELECT id FROM oauth2_token WHERE expiry < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token))", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token_audience WHERE token_id IN (SELECT id FROM oauth2_token WHERE expiration < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token))", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token_audience WHERE token_id IN (SELECT id FROM oauth2_token WHERE expiry < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token))", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token WHERE expiration < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token WHERE expiry < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -753,10 +754,10 @@ func (d *databaseDriver) insertOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 		refreshToken.AuthTime,
 		refreshToken.Subject,
 		refreshToken.ClientID,
-		refreshToken.Expiration,
+		refreshToken.Expiry,
 		refreshToken.AccessTokenID,
 	}
-	err := d.execTx(tx, txCtx, "INSERT INTO oauth2_refresh_token (id,auth_time,subject,client_id,expiration,access_token_id) VALUES($1,$2,$3,$4,$5,$6)", args0...)
+	err := d.execTx(tx, txCtx, "INSERT INTO oauth2_refresh_token (id,auth_time,subject,client_id,expiry,access_token_id) VALUES($1,$2,$3,$4,$5,$6)", args0...)
 	if err != nil {
 		return err
 	}
@@ -846,7 +847,7 @@ func (d *databaseDriver) SelectOAuth2RefreshToken(ctx context.Context, id string
 
 func (d *databaseDriver) selectOAuth2RefreshToken(tx *sql.Tx, txCtx context.Context, id string) (*OAuth2RefreshToken, error) {
 	refreshToken := NewOAuth2RefreshToken(id)
-	row, err := d.queryRowTx(tx, txCtx, "SELECT auth_time,subject,client_id,expiration,access_token_id FROM oauth2_refresh_token WHERE id=$1", refreshToken.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT auth_time,subject,client_id,expiry,access_token_id FROM oauth2_refresh_token WHERE id=$1", refreshToken.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -854,7 +855,7 @@ func (d *databaseDriver) selectOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 		&refreshToken.AuthTime,
 		&refreshToken.Subject,
 		&refreshToken.ClientID,
-		&refreshToken.Expiration,
+		&refreshToken.Expiry,
 		&refreshToken.AccessTokenID,
 	}
 	err = row.Scan(args...)
@@ -1026,19 +1027,19 @@ func (d *databaseDriver) DeleteExpiredOAuth2RefreshTokens(ctx context.Context) e
 		return err
 	}
 	now := time.Now().UnixMicro()
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_scope WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_scope WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_audience WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_audience WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_amr WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiration < $1)", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_amr WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiry < $1)", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
-	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token WHERE expiration < $1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token WHERE expiry < $1", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -1053,7 +1054,7 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 	}
 	now := time.Now().UnixMicro()
 	// Delete expired keys
-	err = d.execTx(tx, txCtx, "DELETE FROM signing_key WHERE expiration<$1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM signing_key WHERE expiry<$1", now)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1087,9 +1088,9 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 		newSigningKey.PrivateKey,
 		newSigningKey.PublicKey,
 		newSigningKey.Passivation,
-		newSigningKey.Expiration,
+		newSigningKey.Expiry,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO signing_key (id,algorithm,private_key,public_key,passivation,expiration) VALUES($1,$2,$3,$4,$5,$6)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO signing_key (id,algorithm,private_key,public_key,passivation,expiry) VALUES($1,$2,$3,$4,$5,$6)", args...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1102,7 +1103,7 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 }
 
 func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (SigningKeys, error) {
-	rows, err := d.queryTx(tx, txCtx, "SELECT id,algorithm,private_key,public_key,passivation,expiration FROM signing_key ORDER BY passivation,expiration DESC")
+	rows, err := d.queryTx(tx, txCtx, "SELECT id,algorithm,private_key,public_key,passivation,expiry FROM signing_key ORDER BY passivation,expiry DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -1116,7 +1117,7 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 			&signingKey.PrivateKey,
 			&signingKey.PublicKey,
 			&signingKey.Passivation,
-			&signingKey.Expiration,
+			&signingKey.Expiry,
 		}
 		err = rows.Scan(args...)
 		if err != nil {
@@ -1148,10 +1149,10 @@ func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Contex
 		session.AccessToken,
 		session.TokenType,
 		session.RefreshToken,
-		session.TokenExpiration,
-		session.SessionExpiration,
+		session.TokenExpiry,
+		session.SessionExpiry,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,access_token,token_type,refresh_token,token_expiration,session_expiration) VALUES($1,$2,$3,$4,$5,$6,$7)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,access_token,token_type,refresh_token,token_expiry,session_expiry) VALUES($1,$2,$3,$4,$5,$6,$7)", args...)
 	if err != nil {
 		return nil, false, d.rollbackTx(tx, err)
 	}
@@ -1162,7 +1163,7 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx conte
 	userSessionRequest := &UserSessionRequest{
 		State: state,
 	}
-	row, err := d.queryRowTx(tx, txCtx, "SELECT id,subject,remember,expiration FROM user_session_request WHERE state=$1", userSessionRequest.State)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT id,subject,remember,expiry FROM user_session_request WHERE state=$1", userSessionRequest.State)
 	if err != nil {
 		return nil, err
 	}
@@ -1170,7 +1171,7 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx conte
 		&userSessionRequest.ID,
 		&userSessionRequest.Subject,
 		&userSessionRequest.Remember,
-		&userSessionRequest.Expiration,
+		&userSessionRequest.Expiry,
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1188,7 +1189,7 @@ func (d *databaseDriver) DeleteExpiredUserSessionRequests(ctx context.Context) e
 		return err
 	}
 	now := time.Now().UnixMicro()
-	err = d.execTx(tx, txCtx, "DELETE FROM user_session_request WHERE expiration < $1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM user_session_request WHERE expiry < $1", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -1204,7 +1205,7 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	session := &UserSession{
 		ID: id,
 	}
-	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,access_token,token_type,refresh_token,token_expiration,session_expiration FROM user_session WHERE id=$1", session.ID)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,access_token,token_type,refresh_token,token_expiry,session_expiry FROM user_session WHERE id=$1", session.ID)
 	if err != nil {
 		return nil, d.rollbackTx(tx, err)
 	}
@@ -1213,8 +1214,8 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 		&session.AccessToken,
 		&session.TokenType,
 		&session.RefreshToken,
-		&session.TokenExpiration,
-		&session.SessionExpiration,
+		&session.TokenExpiry,
+		&session.SessionExpiry,
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1236,7 +1237,7 @@ func (d *databaseDriver) DeleteExpiredUserSessions(ctx context.Context) error {
 		return err
 	}
 	now := time.Now().UnixMicro()
-	err = d.execTx(tx, txCtx, "DELETE FROM user_session WHERE session_expiration < $1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM user_session WHERE session_expiry < $1", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -1366,9 +1367,9 @@ func (d *databaseDriver) GenerateUserTOTPRegistrationRequest(ctx context.Context
 		request.Subject,
 		request.Secret,
 		request.Challenge,
-		request.Expiration,
+		request.Expiry,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration_request (subject,secret,challenge,expiration) VALUES($1,$2,$3,$4)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration_request (subject,secret,challenge,expiry) VALUES($1,$2,$3,$4)", args...)
 	if err != nil {
 		return nil, d.rollbackTx(tx, fmt.Errorf("insert user TOTP registration request failure (cause: %w)", err))
 	}
@@ -1392,14 +1393,14 @@ func (d *databaseDriver) selectUserTOTPRegistrationRequest(tx *sql.Tx, txCtx con
 	request := &UserTOTPRegistrationRequest{
 		Subject: subject,
 	}
-	row, err := d.queryRowTx(tx, txCtx, "SELECT secret,challenge,expiration FROM user_totp_registration_request WHERE subject=$1", request.Subject)
+	row, err := d.queryRowTx(tx, txCtx, "SELECT secret,challenge,expiry FROM user_totp_registration_request WHERE subject=$1", request.Subject)
 	if err != nil {
 		return nil, err
 	}
 	args := []any{
 		&request.Secret,
 		&request.Challenge,
-		&request.Expiration,
+		&request.Expiry,
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -1417,7 +1418,7 @@ func (d *databaseDriver) DeleteExpiredUserTOTPRegistrationRequests(ctx context.C
 		return err
 	}
 	now := time.Now().UnixMicro()
-	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE expiration < $1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE expiry < $1", now)
 	if err != nil {
 		return d.rollbackTx(tx, err)
 	}
@@ -1495,6 +1496,10 @@ func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject
 		return nil, fmt.Errorf("select user TOTP registration failure (cause: %w)", err)
 	}
 	return registration, d.commitTx(tx, ctx == txCtx)
+}
+
+func (d *databaseDriver) Ping(ctx context.Context) error {
+	return d.db.PingContext(ctx)
 }
 
 func (d *databaseDriver) Close() error {

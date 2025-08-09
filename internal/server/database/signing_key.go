@@ -31,10 +31,10 @@ type SigningKey struct {
 	PrivateKey  []byte
 	PublicKey   []byte
 	Passivation int64
-	Expiration  int64
+	Expiry      int64
 }
 
-func NewSigningKey(algorithm string, privateKey any, publicKey any, passivation int64, expiration int64) (*SigningKey, error) {
+func NewSigningKey(algorithm string, privateKey any, publicKey any, passivation int64, expiry int64) (*SigningKey, error) {
 	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal private key (cause: %w)", err)
@@ -49,7 +49,7 @@ func NewSigningKey(algorithm string, privateKey any, publicKey any, passivation 
 		PrivateKey:  privateKeyBytes,
 		PublicKey:   publicKeyBytes,
 		Passivation: passivation,
-		Expiration:  expiration,
+		Expiry:      expiry,
 	}, nil
 }
 

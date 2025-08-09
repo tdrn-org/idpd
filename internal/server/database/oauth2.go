@@ -30,7 +30,7 @@ type OAuth2AuthRequest struct {
 	ACR           string
 	AMR           []string
 	Audience      []string
-	Expiration    int64
+	Expiry        int64
 	AuthTime      int64
 	ClientID      string
 	CodeChallenge *oidc.CodeChallenge
@@ -66,9 +66,9 @@ func NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, 
 	return &OAuth2AuthRequest{
 		ID:            uuid.NewString(),
 		ACR:           "",
-		AMR:           []string{"pwd"},
+		AMR:           []string{"mfa"},
 		Audience:      []string{oidcAuthRequest.ClientID},
-		Expiration:    time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
+		Expiry:        time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 		ClientID:      oidcAuthRequest.ClientID,
 		CodeChallenge: codeChallenge,
 		Nonce:         oidcAuthRequest.Nonce,
@@ -83,7 +83,7 @@ func NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest *oidc.AuthRequest, 
 }
 
 func (r *OAuth2AuthRequest) Expired() bool {
-	return r.Expiration < time.Now().UnixMicro()
+	return r.Expiry < time.Now().UnixMicro()
 }
 
 func (r *OAuth2AuthRequest) OpAuthRequest() op.AuthRequest {
@@ -160,7 +160,7 @@ type OAuth2Token struct {
 	Subject        string
 	RefreshTokenID string
 	Audience       []string
-	Expiration     int64
+	Expiry         int64
 	Scopes         []string
 }
 
@@ -179,7 +179,7 @@ func NewOAuth2TokenFromAuthRequest(request op.AuthRequest, refreshTokenID string
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
-		Expiration:     time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
+		Expiry:         time.Now().Add(serverconf.LookupRuntime().RequestLifetime).UnixMicro(),
 		Scopes:         request.GetScopes(),
 	}
 }
@@ -191,7 +191,7 @@ func NewOAuth2TokenFromTokenExchangeRequest(request op.TokenExchangeRequest, ref
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
-		Expiration:     time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Expiry:         time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:         request.GetScopes(),
 	}
 }
@@ -203,13 +203,13 @@ func NewOAuth2TokenFromRefreshTokenRequest(request op.RefreshTokenRequest, refre
 		Subject:        request.GetSubject(),
 		RefreshTokenID: refreshTokenID,
 		Audience:       request.GetAudience(),
-		Expiration:     time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Expiry:         time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:         request.GetScopes(),
 	}
 }
 
 func (t *OAuth2Token) Expired() bool {
-	return t.Expiration < time.Now().UnixMicro()
+	return t.Expiry < time.Now().UnixMicro()
 }
 
 type OAuth2RefreshToken struct {
@@ -219,7 +219,7 @@ type OAuth2RefreshToken struct {
 	Audience      []string
 	Subject       string
 	ClientID      string
-	Expiration    int64
+	Expiry        int64
 	Scopes        []string
 	AccessTokenID string
 }
@@ -245,7 +245,7 @@ func NewOAuth2RefreshTokenFromAuthRequest(id string, tokenID string, request op.
 		Audience:      request.GetAudience(),
 		Subject:       request.GetSubject(),
 		ClientID:      request.GetClientID(),
-		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Expiry:        time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:        request.GetScopes(),
 		AccessTokenID: tokenID,
 	}
@@ -259,7 +259,7 @@ func NewOAuth2RefreshTokenFromTokenExchangeRequest(id string, tokenID string, re
 		Audience:      request.GetAudience(),
 		Subject:       request.GetSubject(),
 		ClientID:      request.GetClientID(),
-		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Expiry:        time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:        request.GetScopes(),
 		AccessTokenID: tokenID,
 	}
@@ -273,7 +273,7 @@ func NewOAuth2RefreshTokenFromRefreshTokenRequest(id string, tokenID string, req
 		Audience:      request.GetAudience(),
 		Subject:       request.GetSubject(),
 		ClientID:      request.GetClientID(),
-		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Expiry:        time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:        request.GetScopes(),
 		AccessTokenID: tokenID,
 	}
@@ -287,14 +287,14 @@ func NewOAuth2RefreshTokenFromRefreshToken(id string, tokenID string, refreshTok
 		Audience:      refreshToken.Audience,
 		Subject:       refreshToken.Subject,
 		ClientID:      refreshToken.ClientID,
-		Expiration:    time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
+		Expiry:        time.Now().Add(serverconf.LookupRuntime().TokenLifetime).UnixMicro(),
 		Scopes:        refreshToken.Scopes,
 		AccessTokenID: tokenID,
 	}
 }
 
 func (t *OAuth2RefreshToken) Expired() bool {
-	return t.Expiration < time.Now().UnixMicro()
+	return t.Expiry < time.Now().UnixMicro()
 }
 
 func (t *OAuth2RefreshToken) OpRefreshToken() op.RefreshTokenRequest {
