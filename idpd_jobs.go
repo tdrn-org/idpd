@@ -57,7 +57,9 @@ func (s *Server) refreshUserSession(ctx context.Context, session *database.UserS
 	}
 	token, err := tokenSource.Token()
 	if err != nil {
-		return trace.RecordError(span, err)
+		trace.RecordError(span, err)
+		slog.Warn("unable to refresh user session token", slog.String("id", session.ID), slog.Any("err", err))
+		return nil
 	}
 	refreshed := session.Refresh(token)
 	if refreshed {
