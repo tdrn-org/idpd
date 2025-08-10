@@ -195,10 +195,16 @@ func (s *Server) initAndStart(config *Config) error {
 }
 
 func (s *Server) initServerConf(config *Config) error {
+	defaultRuntime := serverconf.LookupRuntime()
 	runtime := &serverconf.Runtime{
 		SessionLifetime: config.Server.SessionLifetime.Duration,
 		RequestLifetime: config.Server.RequestLifetime.Duration,
 		TokenLifetime:   config.Server.TokenLifetime.Duration,
+		CryptoSeed:      config.Server.CryptoSeed,
+	}
+	if runtime.CryptoSeed == "" {
+		slog.Warn("using random crypto seed; persisted cookies/tokens will inaccessible after restart")
+		runtime.CryptoSeed = defaultRuntime.CryptoSeed
 	}
 	runtime.Bind()
 	return nil

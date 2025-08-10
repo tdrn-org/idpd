@@ -389,7 +389,13 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	s.sessionCookie.Set(w, userSession.ID, remember)
+	err = s.sessionCookie.Set(w, userSession.ID, remember)
+	if err != nil {
+		trace.RecordError(span, err)
+		slog.Warn("failed to set session cookie", slog.Any("err", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
 }
 

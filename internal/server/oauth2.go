@@ -18,7 +18,6 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -34,6 +33,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd/httpserver"
+	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/trace"
@@ -165,13 +165,8 @@ func (config *OAuth2ProviderConfig) NewProvider(database database.Driver, userSt
 		opClients:           make(map[string]opClient, 0),
 		tracer:              otel.Tracer(reflect.TypeFor[OAuth2Provider]().PkgPath()),
 	}
-	cryptoSeed := config.CryptoSeed
-	if cryptoSeed == "" {
-		slog.Warn("using random crypto seed; stored tokens will inaccessible after restart")
-		cryptoSeed = rand.Text()
-	}
 	opConfig := &op.Config{
-		CryptoKey:                sha256.Sum256([]byte(cryptoSeed)),
+		CryptoKey:                sha256.Sum256([]byte(serverconf.LookupRuntime().CryptoSeed)),
 		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURL.String(),
 		CodeMethodS256:           true,
 		AuthMethodPost:           true,

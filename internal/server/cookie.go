@@ -17,25 +17,33 @@
 package server
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"log/slog"
 	"net/http"
 
+	"github.com/gorilla/securecookie"
 	"github.com/tdrn-org/go-conf"
 	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 )
 
 type CookieHandler struct {
-	name     string
-	path     string
-	secure   bool
-	sameSite http.SameSite
-	maxAge   int
+	name         string
+	path         string
+	secure       bool
+	sameSite     http.SameSite
+	maxAge       int
+	secureCookie *securecookie.SecureCookie
 }
 
 func NewCookieHandler(name string, path string, secure bool, sameSite http.SameSite) *CookieHandler {
+	cryptoSeed := sha256.Sum256([]byte(serverconf.LookupRuntime().CryptoSeed))
+	secureCookie := securecookie.New(cryptoSeed[:], nil)
 	h := &CookieHandler{
-		name:   name,
-		path:   path,
-		secure: secure,
+		name:         name,
+		path:         path,
+		secure:       secure,
+		secureCookie: secureCookie,
 	}
 	serverconf.BindToRuntime(h.applyRuntimeConfig)
 	return h
@@ -45,10 +53,14 @@ func (h *CookieHandler) applyRuntimeConfig(configuration conf.Configuration) {
 	h.maxAge = int(conf.Resolve[*serverconf.Runtime](configuration).SessionLifetime.Seconds())
 }
 
-func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) {
+func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) error {
+	encodedValue, err := h.secureCookie.Encode(h.name, value)
+	if err != nil {
+		return fmt.Errorf("failed to encode cookie (cause: %w)", err)
+	}
 	cookie := &http.Cookie{
 		Name:     h.name,
-		Value:    value,
+		Value:    encodedValue,
 		Path:     h.path,
 		MaxAge:   maxAge,
 		Secure:   h.secure,
@@ -56,14 +68,15 @@ func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) {
 		SameSite: h.sameSite,
 	}
 	http.SetCookie(w, cookie)
+	return nil
 }
 
-func (h *CookieHandler) Set(w http.ResponseWriter, value string, remember bool) {
+func (h *CookieHandler) Set(w http.ResponseWriter, value string, remember bool) error {
 	maxAge := 0
 	if remember {
 		maxAge = h.maxAge
 	}
-	h.set(w, value, maxAge)
+	return h.set(w, value, maxAge)
 }
 
 func (h *CookieHandler) Get(r *http.Request) (string, bool) {
@@ -71,7 +84,13 @@ func (h *CookieHandler) Get(r *http.Request) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return cookie.Value, true
+	var decodedValue string
+	err = h.secureCookie.Decode(h.name, cookie.Value, &decodedValue)
+	if err != nil {
+		slog.Warn("failed to decode cookie; ignoring it", slog.Any("err", err))
+		return "", false
+	}
+	return decodedValue, true
 }
 
 func (h *CookieHandler) Delete(w http.ResponseWriter) {

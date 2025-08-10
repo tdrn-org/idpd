@@ -17,6 +17,7 @@
 package conf
 
 import (
+	"crypto/rand"
 	"reflect"
 	"time"
 
@@ -27,12 +28,14 @@ type Runtime struct {
 	SessionLifetime time.Duration
 	RequestLifetime time.Duration
 	TokenLifetime   time.Duration
+	CryptoSeed      string
 }
 
 var defaultRuntime *Runtime = &Runtime{
 	SessionLifetime: 720 * time.Hour,
 	RequestLifetime: 5 * time.Minute,
 	TokenLifetime:   1 * time.Hour,
+	CryptoSeed:      rand.Text(),
 }
 
 func (c *Runtime) Type() reflect.Type {

@@ -148,7 +148,6 @@ func (d *databaseDriver) UpdateSchema(ctx context.Context) (SchemaVersion, Schem
 		err = d.runScriptTx(tx, txCtx, d.scripts[0])
 	case Schema1:
 		// Nothing to do
-		d.logger.Debug("schema already up-to-date; no update required")
 	default:
 		err = fmt.Errorf("unrecognized database schema version: %s", fromVersion)
 	}
