@@ -27,9 +27,9 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/embedded"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
 type Config struct {
@@ -62,8 +62,9 @@ func (c *Config) Apply() (func(context.Context) error, error) {
 		tracesdk.WithBatchTimeout(c.BatchTimeout),
 		tracesdk.WithExportTimeout(c.BatchTimeout),
 	}
-	provider := tracesdk.NewTracerProvider(tracesdk.WithBatcher(exporter, batcherOpts...))
-	otel.SetTracerProvider(&domainTracerProvider{domain: c.Domain, provider: provider})
+	serviceName := resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName(c.Domain))
+	provider := tracesdk.NewTracerProvider(tracesdk.WithBatcher(exporter, batcherOpts...), tracesdk.WithResource(serviceName))
+	otel.SetTracerProvider(provider)
 	shutdowns := shutdownFuncs{provider.Shutdown, exporter.Shutdown}
 	return shutdowns.Run, nil
 }
@@ -92,16 +93,6 @@ func (c *Config) newGRPCExporter() (*otlptrace.Exporter, error) {
 		return nil, fmt.Errorf("failed to create OTLP/gRPC exporter (cause: %w)", err)
 	}
 	return exporter, nil
-}
-
-type domainTracerProvider struct {
-	embedded.TracerProvider
-	domain   string
-	provider trace.TracerProvider
-}
-
-func (p *domainTracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
-	return p.provider.Tracer(p.domain+"/"+name, opts...)
 }
 
 type shutdownFuncs []func(context.Context) error

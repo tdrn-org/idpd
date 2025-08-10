@@ -17,15 +17,14 @@
 package trace
 
 import (
-	"go.opentelemetry.io/otel/codes"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"path/filepath"
+	"runtime"
+	"strconv"
 )
 
-func RecordError(span oteltrace.Span, err error) error {
-	if err != nil {
-		span.RecordError(err)
-		source := GetCallerSource()
-		span.SetStatus(codes.Error, source+" "+err.Error())
-	}
-	return err
+func GetCallerSource() string {
+	_, file, line, _ := runtime.Caller(2)
+	baseFile := filepath.Base(file)
+	lineNo := strconv.Itoa(line)
+	return baseFile + ":" + lineNo
 }

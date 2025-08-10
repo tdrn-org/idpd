@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/tdrn-org/go-tlsconf/tlsserver"
 	"github.com/tdrn-org/idpd/internal/trace"
+	"go.opentelemetry.io/otel"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -116,7 +118,7 @@ func (s *Instance) prepareServe(schema string) (*cors.Cors, error) {
 	}
 	s.baseURL = baseURL
 	s.logger = slog.With(slog.Any("baseURL", s.baseURL))
-	s.tracer = trace.Tracer("httpserver")
+	s.tracer = otel.Tracer(reflect.TypeFor[Instance]().PkgPath())
 	cors := cors.AllowAll()
 	return cors, nil
 }
