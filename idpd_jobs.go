@@ -56,17 +56,17 @@ func (s *Server) refreshUserSession(ctx context.Context, session *database.UserS
 		return trace.RecordError(span, err)
 	}
 	token, err := tokenSource.Token()
-	var refreshed bool
+	var updateSession bool
 	if err == nil {
-		refreshed = session.Refresh(token)
+		updateSession = session.Refresh(token)
 	} else {
 		trace.RecordError(span, err)
 		slog.Warn("unable to refresh user session token; invalidating session", slog.String("id", session.ID), slog.Any("err", err))
-		session.SessionExpiry = time.Now().UnixMilli()
-		refreshed = true
+		session.Invalidate()
+		updateSession = true
 	}
-	if refreshed {
-		err = s.database.RefreshUserSession(traceCtx, session)
+	if updateSession {
+		err = s.database.UpdateUserSession(traceCtx, session)
 		if err != nil {
 			return trace.RecordError(span, err)
 		}

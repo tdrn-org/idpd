@@ -73,7 +73,7 @@ type Driver interface {
 	DeleteExpiredUserSessionRequests(ctx context.Context) error
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
 	RefreshUserSessions(ctx context.Context, expiry int64, refresh RefreshUserSession) error
-	RefreshUserSession(ctx context.Context, session *UserSession) error
+	UpdateUserSession(ctx context.Context, session *UserSession) error
 	DeleteExpiredUserSessions(ctx context.Context) error
 	InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error)
 	SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error)
@@ -1286,7 +1286,7 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 }
 
 func (d *databaseDriver) RefreshUserSessions(ctx context.Context, expiry int64, refresh RefreshUserSession) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredUserSessions")
+	traceCtx, span := d.tracer.Start(ctx, "RefreshUserSessions")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1321,8 +1321,8 @@ func (d *databaseDriver) RefreshUserSessions(ctx context.Context, expiry int64, 
 	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
-func (d *databaseDriver) RefreshUserSession(ctx context.Context, session *UserSession) error {
-	traceCtx, span := d.tracer.Start(ctx, "RefreshUserSession")
+func (d *databaseDriver) UpdateUserSession(ctx context.Context, session *UserSession) error {
+	traceCtx, span := d.tracer.Start(ctx, "UpdateUserSession")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)

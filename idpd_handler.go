@@ -259,7 +259,14 @@ func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) 
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
-	_, client, err := s.userSessionClient(traceR)
+	session, client, err := s.userSessionClient(traceR)
+	if err == nil {
+		session.Invalidate()
+		err = s.database.UpdateUserSession(traceCtx, session)
+		if err != nil {
+			slog.Warn("failed to invalidate session", slog.String("id", session.ID), slog.Any("err", err))
+		}
+	}
 	alert := AlertNone
 	if err == nil {
 		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())

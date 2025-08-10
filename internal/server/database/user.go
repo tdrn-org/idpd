@@ -80,6 +80,10 @@ func (s *UserSession) Refresh(token *oauth2.Token) bool {
 	return true
 }
 
+func (s *UserSession) Invalidate() {
+	s.SessionExpiry = time.Now().UnixMicro()
+}
+
 func (s *UserSession) Expired() bool {
 	return s.SessionExpiry < time.Now().UnixMicro()
 }
