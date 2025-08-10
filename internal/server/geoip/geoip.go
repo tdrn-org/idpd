@@ -16,7 +16,15 @@
 
 package geoip
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
+
+	"github.com/jellydator/ttlcache/v3"
+)
 
 type Location struct {
 	Host        string
@@ -30,12 +38,13 @@ type Location struct {
 var NoLocation *Location = &Location{}
 
 type Provider interface {
-	Lookup(host string) (*Location, error)
+	Name() string
+	Lookup(host string, addr netip.Addr) (*Location, error)
 	Close() error
 }
 
 type Cache interface {
-	LookupCached(host string) (*Location, bool)
+	LookupCached(host string) *Location
 	UpdateCache(host string, location *Location)
 	Close() error
 }
@@ -43,29 +52,77 @@ type Cache interface {
 type LocationService struct {
 	provider Provider
 	cache    Cache
+	mapping  map[*net.IPNet]string
+	logger   *slog.Logger
 }
 
-func NewLocationService(provider Provider, cache Cache) *LocationService {
+func NoMapping() map[*net.IPNet]string {
+	return make(map[*net.IPNet]string)
+}
+
+func NewLocationService(provider Provider, cache Cache, mapping map[*net.IPNet]string) *LocationService {
+	logger := slog.With("geoip", provider.Name())
 	return &LocationService{
 		provider: provider,
 		cache:    cache,
+		mapping:  mapping,
+		logger:   logger,
 	}
 }
 
 func (s *LocationService) Lookup(host string) (*Location, error) {
-	if s.cache == nil {
-		return s.provider.Lookup(host)
-	}
-	location, cached := s.cache.LookupCached(host)
-	if cached {
+	location := s.cache.LookupCached(host)
+	if location != NoLocation {
 		return location, nil
 	}
-	location, err := s.provider.Lookup(host)
-	if err != nil || location == NoLocation {
-		return NoLocation, err
+	hostAddrs, err := net.LookupHost(host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup host '%s' (cause: %w)", host, err)
 	}
-	s.cache.UpdateCache(host, location)
-	return location, nil
+	for _, hostAddr := range hostAddrs {
+		addr, err := netip.ParseAddr(hostAddr)
+		if err != nil {
+			s.logger.Warn("ignoring host address", slog.String("addr", hostAddr), slog.Any("err", err))
+			continue
+		}
+		mappedAddrs := s.mapAddr(addr)
+		for _, mappedAddr := range mappedAddrs {
+			location, err := s.provider.Lookup(host, mappedAddr)
+			if err != nil || location == NoLocation {
+				continue
+			}
+			s.cache.UpdateCache(host, location)
+			return location, nil
+		}
+	}
+	return NoLocation, nil
+}
+
+func (s *LocationService) mapAddr(addr netip.Addr) []netip.Addr {
+	ip := net.IP(addr.AsSlice())
+	for network, host := range s.mapping {
+		if network.Contains(ip) {
+			mappedHostAddrs, err := net.LookupHost(host)
+			if err != nil {
+				s.logger.Warn("failed to lookup mapped host; ignoring mapping", slog.String("host", host), slog.Any("err", err))
+				return []netip.Addr{addr}
+			}
+			mappedAddrs := make([]netip.Addr, 0, len(mappedHostAddrs))
+			for _, mappedHostAddr := range mappedHostAddrs {
+				mappedAddr, err := netip.ParseAddr(mappedHostAddr)
+				if err != nil {
+					s.logger.Warn("ignoring mapped host address", slog.String("addr", mappedHostAddr), slog.Any("err", err))
+					continue
+				}
+				mappedAddrs = append(mappedAddrs, mappedAddr)
+			}
+			if len(mappedAddrs) == 0 {
+				return []netip.Addr{addr}
+			}
+			return mappedAddrs
+		}
+	}
+	return []netip.Addr{addr}
 }
 
 func (s *LocationService) Close() error {
@@ -81,10 +138,48 @@ func DummyProvider() Provider {
 
 type dummyProvider struct{}
 
-func (p *dummyProvider) Lookup(_ string) (*Location, error) {
+func (p *dummyProvider) Name() string {
+	return "disabled"
+}
+
+func (p *dummyProvider) Lookup(_ string, _ netip.Addr) (*Location, error) {
 	return NoLocation, nil
 }
 
 func (p *dummyProvider) Close() error {
+	return nil
+}
+
+const defaultCacheCapacity uint64 = 128
+
+func DefaultCache() Cache {
+	cacheOpts := []ttlcache.Option[string, *Location]{
+		ttlcache.WithCapacity[string, *Location](defaultCacheCapacity),
+		ttlcache.WithTTL[string, *Location](ttlcache.NoTTL),
+	}
+	cache := ttlcache.New(cacheOpts...)
+	return &ttlCache{
+		cache: cache,
+	}
+}
+
+type ttlCache struct {
+	cache *ttlcache.Cache[string, *Location]
+}
+
+func (c *ttlCache) LookupCached(host string) *Location {
+	entry := c.cache.Get(host)
+	if entry == nil {
+		return NoLocation
+	}
+	return entry.Value()
+}
+
+func (c *ttlCache) UpdateCache(host string, location *Location) {
+	c.cache.Set(host, location, ttlcache.DefaultTTL)
+}
+
+func (c *ttlCache) Close() error {
+	c.cache.DeleteAll()
 	return nil
 }

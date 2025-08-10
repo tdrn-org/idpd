@@ -30,17 +30,19 @@ import (
 )
 
 func TestMaxMindDBProvider(t *testing.T) {
-	host, path := initHostDB(t)
+	host, hostAddrs, path := initHostDB(t)
 	provider, err := geoip.OpenMaxMindDB(path)
 	require.NoError(t, err)
 
-	location, err := provider.Lookup(host)
-	require.NoError(t, err)
-	require.NotNil(t, location)
-	require.NotEmpty(t, location.Country)
-	require.NotEmpty(t, location.CountryCode)
+	for _, hostAddr := range hostAddrs {
+		location, err := provider.Lookup(host, hostAddr)
+		require.NoError(t, err)
+		require.NotNil(t, location)
+		require.NotEmpty(t, location.Country)
+		require.NotEmpty(t, location.CountryCode)
+	}
 
-	location, err = provider.Lookup("localhost")
+	location, err := provider.Lookup("localhost", netip.IPv6Loopback())
 	require.NoError(t, err)
 	require.Equal(t, geoip.NoLocation, location)
 
@@ -49,50 +51,61 @@ func TestMaxMindDBProvider(t *testing.T) {
 }
 
 func TestMaxMindDBService(t *testing.T) {
-	host, path := initHostDB(t)
+	host, _, path := initHostDB(t)
 	provider, err := geoip.OpenMaxMindDB(path)
 	require.NoError(t, err)
-	service := geoip.NewLocationService(provider, nil)
 
-	location, err := service.Lookup(host)
-	require.NoError(t, err)
-	require.NotNil(t, location)
-	require.NotEmpty(t, location.Country)
-	require.NotEmpty(t, location.CountryCode)
-	require.NotEmpty(t, location.City)
+	mapping := map[*net.IPNet]string{
+		&net.IPNet{IP: net.IPv4(127, 0, 0, 1), Mask: net.IPv4Mask(255, 255, 255, 255)}: host,
+	}
+	service := geoip.NewLocationService(provider, geoip.DefaultCache(), mapping)
 
-	location, err = service.Lookup("localhost")
+	hostLocation, err := service.Lookup(host)
 	require.NoError(t, err)
-	require.Equal(t, geoip.NoLocation, location)
+	require.NotNil(t, hostLocation)
+	require.NotEmpty(t, hostLocation.Country)
+	require.NotEmpty(t, hostLocation.CountryCode)
+	require.NotEmpty(t, hostLocation.City)
+
+	localhostLocation, err := service.Lookup("localhost")
+	require.NoError(t, err)
+	require.Equal(t, localhostLocation.Host, "localhost")
+	require.Equal(t, hostLocation.Country, localhostLocation.Country)
+	require.Equal(t, hostLocation.CountryCode, localhostLocation.CountryCode)
+	require.Equal(t, hostLocation.City, localhostLocation.City)
+	require.Equal(t, hostLocation.Lat, localhostLocation.Lat)
+	require.Equal(t, hostLocation.Lon, localhostLocation.Lon)
 
 	err = service.Close()
 	require.NoError(t, err)
 }
 
-func initHostDB(t *testing.T) (string, string) {
+func initHostDB(t *testing.T) (string, []netip.Addr, string) {
 	dir := t.TempDir()
 	file, err := os.Create(filepath.Join(dir, "test.mmdb"))
 	require.NoError(t, err)
 	defer file.Close()
 	host, err := os.Hostname()
 	require.NoError(t, err)
-	hostAddrs, err := net.LookupHost(host)
+	addrs, err := net.LookupHost(host)
 	require.NoError(t, err)
 	writer, err := mmdbwriter.New(mmdbwriter.Options{
 		DatabaseType:            "test",
 		IncludeReservedNetworks: true,
 	})
 	require.NoError(t, err)
-	for _, hostAddr := range hostAddrs {
-		addr, err := netip.ParseAddr(hostAddr)
+	hostAddrs := make([]netip.Addr, 0, len(addrs))
+	for _, addr := range addrs {
+		hostAddr, err := netip.ParseAddr(addr)
 		require.NoError(t, err)
+		hostAddrs = append(hostAddrs, hostAddr)
 		var cidrSuffix string
-		if addr.Is4() {
+		if hostAddr.Is4() {
 			cidrSuffix = "/24"
 		} else {
 			cidrSuffix = "/128"
 		}
-		_, network, err := net.ParseCIDR(hostAddr + cidrSuffix)
+		_, network, err := net.ParseCIDR(addr + cidrSuffix)
 		require.NoError(t, err)
 		record := mmdbtype.Map{
 			"country": mmdbtype.Map{
@@ -115,5 +128,5 @@ func initHostDB(t *testing.T) (string, string) {
 	}
 	_, err = writer.WriteTo(file)
 	require.NoError(t, err)
-	return host, file.Name()
+	return host, hostAddrs, file.Name()
 }

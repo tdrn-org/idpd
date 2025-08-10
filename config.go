@@ -20,6 +20,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"time"
 
@@ -70,7 +71,11 @@ type Config struct {
 		Issuer string `toml:"issuer"`
 	} `toml:"totp"`
 	GeoIP struct {
-		CityDB string `toml:"city_db"`
+		CityDB   string `toml:"city_db"`
+		Mappings []struct {
+			Networks []NetworkSpec `toml:"networks"`
+			Host     string        `toml:"host"`
+		} `toml:"mapping"`
 	} `toml:"geoip"`
 	Database struct {
 		Type   DatabaseType `toml:"type"`
@@ -616,5 +621,30 @@ func (url *URLSpec) UnmarshalTOML(value any) error {
 		return fmt.Errorf("invalid URL: '%s' (cause: %w)", urlString, err)
 	}
 	url.URL = *parsedURL
+	return nil
+}
+
+type NetworkSpec struct {
+	net.IPNet
+}
+
+func (network *NetworkSpec) Value() string {
+	return network.String()
+}
+
+func (network *NetworkSpec) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + network.String() + `"`), nil
+}
+
+func (network *NetworkSpec) UnmarshalTOML(value any) error {
+	networkString, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	_, parsedNetwork, err := net.ParseCIDR(networkString)
+	if err != nil {
+		return fmt.Errorf("invalid network: '%s' (cause: %w)", networkString, err)
+	}
+	network.IPNet = *parsedNetwork
 	return nil
 }

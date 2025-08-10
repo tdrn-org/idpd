@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -236,9 +237,16 @@ func (s *Server) initTOTP(config *Config) error {
 }
 
 func (s *Server) initGeoIP(config *Config) error {
+	cache := geoip.DefaultCache()
+	mapping := make(map[*net.IPNet]string)
+	for _, configMapping := range config.GeoIP.Mappings {
+		for _, network := range configMapping.Networks {
+			mapping[&network.IPNet] = configMapping.Host
+		}
+	}
 	_, err := os.Stat(config.GeoIP.CityDB)
 	if err != nil {
-		s.locationService = geoip.NewLocationService(geoip.DummyProvider(), nil)
+		s.locationService = geoip.NewLocationService(geoip.DummyProvider(), cache, mapping)
 		return nil
 	}
 	slog.Info("intializing GeoIP provider", slog.String("db", config.GeoIP.CityDB))
@@ -246,7 +254,7 @@ func (s *Server) initGeoIP(config *Config) error {
 	if err != nil {
 		return err
 	}
-	s.locationService = geoip.NewLocationService(provider, nil)
+	s.locationService = geoip.NewLocationService(provider, cache, mapping)
 	return nil
 }
 

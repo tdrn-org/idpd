@@ -22,7 +22,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.2 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-webauthn/x v0.1.23 // indirect
+	github.com/go-webauthn/x v0.1.24 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/google/go-tpm v0.9.5 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -56,6 +56,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.11
 	github.com/go-webauthn/webauthn v0.13.4
 	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/mattn/go-sqlite3 v1.14.30
 	github.com/maxmind/mmdbwriter v1.0.0
 	github.com/mocktools/go-smtp-mock/v2 v2.5.1

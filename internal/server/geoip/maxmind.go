@@ -19,7 +19,6 @@ package geoip
 import (
 	"fmt"
 	"log/slog"
-	"net"
 	"net/netip"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -60,48 +59,37 @@ func (l *MaxMindDBLocation) toLookupResult(host string) (*Location, error) {
 
 type MaxMindDBProvider struct {
 	reader *maxminddb.Reader
-	logger *slog.Logger
 }
 
+const maxMindDBProviderName string = "MaxMindDb"
+
 func OpenMaxMindDB(path string) (*MaxMindDBProvider, error) {
-	logger := slog.With(slog.String("provider", "MaxMindB"), slog.String("path", path))
-	logger.Debug("opening location database...")
+	slog.Debug("opening location database...", slog.String("provider", maxMindDBProviderName), slog.String("path", path))
 	reader, err := maxminddb.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open location database '%s' (cause: %w)", path, err)
 	}
 	provider := &MaxMindDBProvider{
 		reader: reader,
-		logger: logger,
 	}
 	return provider, nil
 }
 
-func (p *MaxMindDBProvider) Lookup(host string) (*Location, error) {
-	p.logger.Debug("looking up host location", slog.String("host", host))
-	addrs, err := net.LookupHost(host)
+func (p *MaxMindDBProvider) Name() string {
+	return maxMindDBProviderName
+}
+
+func (p *MaxMindDBProvider) Lookup(host string, addr netip.Addr) (*Location, error) {
+	result := p.reader.Lookup(addr)
+	if !result.Found() {
+		return NoLocation, nil
+	}
+	location := &MaxMindDBLocation{}
+	err := result.Decode(location)
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup host '%s' (cause: %w)", host, err)
+		return NoLocation, fmt.Errorf("failed to decode lookup result for addr: %s (cause: %w)", addr.String(), err)
 	}
-	for _, addr := range addrs {
-		lookupAddr, err := netip.ParseAddr(addr)
-		if err != nil {
-			p.logger.Warn("ignoring host address", slog.String("addr", addr), slog.Any("err", err))
-			continue
-		}
-		result := p.reader.Lookup(lookupAddr)
-		if !result.Found() {
-			continue
-		}
-		location := &MaxMindDBLocation{}
-		err = result.Decode(location)
-		if err != nil {
-			p.logger.Warn("ignoring addr decode failure", slog.String("addr", addr), slog.Any("err", err))
-			continue
-		}
-		return location.toLookupResult(host)
-	}
-	return NoLocation, nil
+	return location.toLookupResult(host)
 }
 
 func (p *MaxMindDBProvider) Close() error {

@@ -418,7 +418,7 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromRefreshTokenRequest(ctx 
 			return "", "", time.Time{}, err
 		}
 	} else {
-		newRefreshToken, err := p.database.RenewOAuth2RefreshToken(ctx, refreshTokenID, accessToken)
+		newRefreshToken, err := p.database.RenewOAuth2RefreshToken(ctx, currentRefreshToken, accessToken)
 		if err != nil {
 			return "", "", time.Time{}, err
 		}

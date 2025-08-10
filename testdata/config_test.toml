@@ -24,6 +24,16 @@ password = "mailpassword"
 from_address = "no-reply@example.org"
 from_name = "example.org"
 
+[totp]
+issuer = "TOTP issuer"
+
+[geoip]
+city_db = "CityDB.mmdb"
+
+[[geoip.mapping]]
+networks = [ "127.0.0.1/32", "::1/128" ]
+host = "host.example.org"
+
 [database]
 type = "sqlite"
 

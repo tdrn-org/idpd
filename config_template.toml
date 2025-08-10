@@ -57,6 +57,10 @@
 [geoip]
 #city_db = "GeoLite2-City.mmdb"
 
+#[[geoip.mapping]]
+#networks = [ "127.0.0.1/32", "::1/128" ]
+#host = "host.example.org"
+
 [database]
 # memory|sqlite|postgres
 #type = "memory"
