@@ -31,8 +31,42 @@ func (s *Server) runJobs() {
 	traceCtx, span := s.tracer.Start(context.Background(), "runJobs")
 	defer span.End()
 
-	s.runDeleteExpiredJob(traceCtx)
+	// Run refresh jobs first, to avoid race conditions
 	s.runRefreshSessionsJob(traceCtx)
+	s.runDeleteExpiredJob(traceCtx)
+}
+
+func (s *Server) runRefreshSessionsJob(ctx context.Context) {
+	traceCtx, span := s.tracer.Start(ctx, "runDeleteExpiredJob")
+	defer span.End()
+
+	expiry := time.Now().Add(2 * serverJobTickerSchedule).UnixMicro()
+	err := s.database.RefreshUserSessions(traceCtx, expiry, s.refreshUserSession)
+	if err != nil {
+		slog.Error("failed to refresh user sessions", slog.Any("err", err))
+	}
+}
+
+func (s *Server) refreshUserSession(ctx context.Context, session *database.UserSession) error {
+	traceCtx, span := s.tracer.Start(ctx, "refreshUserSession")
+	defer span.End()
+
+	tokenSource, err := s.authFLow.TokenSource(traceCtx, session.OAuth2Token())
+	if err != nil {
+		return trace.RecordError(span, err)
+	}
+	token, err := tokenSource.Token()
+	if err != nil {
+		return trace.RecordError(span, err)
+	}
+	refreshed := session.Refresh(token)
+	if refreshed {
+		err = s.database.RefreshUserSession(traceCtx, session)
+		if err != nil {
+			return trace.RecordError(span, err)
+		}
+	}
+	return nil
 }
 
 func (s *Server) runDeleteExpiredJob(ctx context.Context) {
@@ -74,37 +108,4 @@ func (s *Server) runDeleteExpiredJob(ctx context.Context) {
 	if err != nil {
 		slog.Error("failed to delete expired user TOTP registration requests", slog.Any("err", err))
 	}
-}
-
-func (s *Server) runRefreshSessionsJob(ctx context.Context) {
-	traceCtx, span := s.tracer.Start(ctx, "runDeleteExpiredJob")
-	defer span.End()
-
-	expiry := time.Now().Add(2 * serverJobTickerSchedule).UnixMicro()
-	err := s.database.RefreshUserSessions(traceCtx, expiry, s.refreshUserSession)
-	if err != nil {
-		slog.Error("failed to refresh user sessions", slog.Any("err", err))
-	}
-}
-
-func (s *Server) refreshUserSession(ctx context.Context, session *database.UserSession) error {
-	traceCtx, span := s.tracer.Start(ctx, "refreshUserSession")
-	defer span.End()
-
-	tokenSource, err := s.authFLow.TokenSource(traceCtx, session.OAuth2Token())
-	if err != nil {
-		return trace.RecordError(span, err)
-	}
-	token, err := tokenSource.Token()
-	if err != nil {
-		return trace.RecordError(span, err)
-	}
-	refreshed := session.Refresh(token)
-	if refreshed {
-		err = s.database.RefreshUserSession(traceCtx, session)
-		if err != nil {
-			return trace.RecordError(span, err)
-		}
-	}
-	return nil
 }
