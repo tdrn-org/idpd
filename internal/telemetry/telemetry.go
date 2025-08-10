@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"time"
 
@@ -45,6 +46,7 @@ func (c *Config) Apply() (func(context.Context) error, error) {
 	if !c.Enabled {
 		return shutdownFuncs{}.Run, nil
 	}
+	slog.Info("initializing tracing", slog.String("endpoint", c.EndpointURL.String()))
 	var exporter *otlptrace.Exporter
 	var err error
 	switch c.Protocol {

@@ -152,6 +152,14 @@ func (flow *AuthorizationCodeFlow[C]) Authenticate() error {
 	}
 }
 
+func (flow *AuthorizationCodeFlow[C]) TokenSource(ctx context.Context, token *oauth2.Token) (oauth2.TokenSource, error) {
+	provider, err := flow.providerFunc()
+	if err != nil {
+		return nil, err
+	}
+	return provider.OAuthConfig().TokenSource(ctx, token), nil
+}
+
 func (flow *AuthorizationCodeFlow[C]) Client(ctx context.Context, token *oauth2.Token) (*http.Client, error) {
 	provider, err := flow.providerFunc()
 	if err != nil {

@@ -45,6 +45,7 @@ const WebAuthnKey string = "webauthn"
 type GenerateChallengeFunc func(ctx context.Context, subject string) (string, error)
 type VerifyChallengeResponseFunc func(ctx context.Context, subject string, challenge string, response string) (bool, error)
 type GenerateSigningKeyFunc func(algorithm string) (*SigningKey, error)
+type RefreshUserSession func(ctx context.Context, session *UserSession) error
 
 type Driver interface {
 	Name() string
@@ -71,6 +72,8 @@ type Driver interface {
 	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error)
 	DeleteExpiredUserSessionRequests(ctx context.Context) error
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
+	RefreshUserSessions(ctx context.Context, expiry int64, refresh RefreshUserSession) error
+	RefreshUserSession(ctx context.Context, session *UserSession) error
 	DeleteExpiredUserSessions(ctx context.Context) error
 	InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error)
 	SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error)
@@ -1280,6 +1283,65 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 		return nil, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	return session, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
+}
+
+func (d *databaseDriver) RefreshUserSessions(ctx context.Context, expiry int64, refresh RefreshUserSession) error {
+	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredUserSessions")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
+	if err != nil {
+		return trace.RecordError(span, err)
+	}
+	rows, err := d.queryTx(tx, txCtx, "SELECT id,subject,access_token,token_type,refresh_token,token_expiry,session_expiry FROM user_session WHERE token_expiry < $1", expiry)
+	if err != nil {
+		return trace.RecordError(span, d.rollbackTx(tx, err))
+	}
+	defer rows.Close()
+	for rows.Next() {
+		session := &UserSession{}
+		args := []any{
+			&session.ID,
+			&session.Subject,
+			&session.AccessToken,
+			&session.TokenType,
+			&session.RefreshToken,
+			&session.TokenExpiry,
+			&session.SessionExpiry,
+		}
+		err = rows.Scan(args...)
+		if err != nil {
+			return trace.RecordError(span, d.rollbackTx(tx, err))
+		}
+		err = refresh(ctx, session)
+		if err != nil {
+			return trace.RecordError(span, d.rollbackTx(tx, err))
+		}
+	}
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
+}
+
+func (d *databaseDriver) RefreshUserSession(ctx context.Context, session *UserSession) error {
+	traceCtx, span := d.tracer.Start(ctx, "RefreshUserSession")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
+	if err != nil {
+		return trace.RecordError(span, err)
+	}
+	args := []any{
+		session.AccessToken,
+		session.TokenType,
+		session.RefreshToken,
+		session.TokenExpiry,
+		session.SessionExpiry,
+		session.ID,
+	}
+	err = d.execTx(tx, txCtx, "UPDATE user_session SET access_token=$1,token_type=$2,refresh_token=$3,token_expiry=$4,session_expiry=$5 WHERE id = $6", args...)
+	if err != nil {
+		return trace.RecordError(span, d.rollbackTx(tx, err))
+	}
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) DeleteExpiredUserSessions(ctx context.Context) error {

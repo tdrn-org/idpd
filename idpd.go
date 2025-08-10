@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"reflect"
 	"sync"
 	"time"
 
@@ -42,6 +43,8 @@ import (
 	"github.com/tdrn-org/idpd/oauth2client"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
+	"go.opentelemetry.io/otel"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 const shutdownTimeout time.Duration = 5 * time.Second
@@ -99,6 +102,7 @@ type Server struct {
 	httpServer        *httpserver.Instance
 	sessionCookie     *server.CookieHandler
 	shutdownTelemetry func(context.Context) error
+	tracer            oteltrace.Tracer
 	mailer            *mail.Mailer
 	totpProvider      *server.TOTPProvider
 	locationService   *geoip.LocationService
@@ -234,6 +238,7 @@ func (s *Server) initTelemetry(config *Config) error {
 		return err
 	}
 	s.shutdownTelemetry = shutdown
+	s.tracer = otel.Tracer(reflect.TypeFor[Server]().PkgPath())
 	return nil
 }
 
@@ -384,7 +389,7 @@ func (s *Server) initOAuth2AuthFlow(config *Config) error {
 }
 
 func (s *Server) startJobTicker(config *Config) error {
-	schedule := 5 * time.Minute
+	schedule := serverJobTickerSchedule
 	s.jobTicker = time.NewTicker(schedule)
 	s.jobTickerStopped = make(chan bool)
 	slog.Info("starting job ticker", slog.String("schedule", schedule.String()))

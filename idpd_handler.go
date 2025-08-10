@@ -66,13 +66,18 @@ func (l *UserVerificationLog) update(log *database.UserVerificationLog) {
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	_, client, err := s.userSessionClient(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSession")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	_, client, err := s.userSessionClient(traceR)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	oidcUserInfo, err := s.authFLow.GetUserInfo(client, r.Context())
+	oidcUserInfo, err := s.authFLow.GetUserInfo(client, traceCtx)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to get user info", slog.Any("err", err))
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -90,8 +95,9 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 			Host:     r.RemoteAddr,
 		},
 	}
-	logs, err := s.database.SelectUserVerificationLogs(r.Context(), userInfo.Subject)
+	logs, err := s.database.SelectUserVerificationLogs(traceCtx, userInfo.Subject)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to read user verification logs", slog.String("subject", userInfo.Subject), slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -112,6 +118,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	err = json.NewEncoder(w).Encode(userInfo)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to encode session response", slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -119,13 +126,19 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionDetails(w http.ResponseWriter, r *http.Request) {
-	_, client, err := s.userSessionClient(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionDetails")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	_, client, err := s.userSessionClient(traceR)
 	if err != nil {
+		trace.RecordError(span, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	oidcUserInfo, err := s.authFLow.GetUserInfo(client, r.Context())
+	oidcUserInfo, err := s.authFLow.GetUserInfo(client, traceCtx)
 	if err != nil {
+		trace.RecordError(span, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -135,21 +148,28 @@ func (s *Server) handleSessionDetails(w http.ResponseWriter, r *http.Request) {
 	encoder.SetEscapeHTML(true)
 	err = encoder.Encode(oidcUserInfo)
 	if err != nil {
+		trace.RecordError(span, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
 func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
-	id, subject, password, verification, remember, err := s.parseAuthenticateForm(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionAuthenticate")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	id, subject, password, verification, remember, err := s.parseAuthenticateForm(traceR)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to process authenticate session request", slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
-	redirectURL, err := s.oauth2Provider.Authenticate(r.Context(), id, subject, password, verifyHandler, remember)
+	redirectURL, err := s.oauth2Provider.Authenticate(traceCtx, id, subject, password, verifyHandler, remember)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to authenticate OAuth2 session", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
@@ -192,17 +212,23 @@ func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string,
 }
 
 func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
-	remoteIP := trace.GetHttpRequestRemoteIP(r)
-	id, subject, verification, response, err := s.parseVerifyForm(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionVerify")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
+	id, subject, verification, response, err := s.parseVerifyForm(traceR)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to process verify session request", slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
-	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), subject, verifyHandler, remoteIP)
+	userVerificationCtx := s.contextWithUserVerificationLog(traceCtx, subject, verifyHandler, remoteIP)
 	redirectURL, err := s.oauth2Provider.Verify(userVerificationCtx, id, subject, verifyHandler, response)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to verify OAuth2 session", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
@@ -229,7 +255,11 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
-	_, client, err := s.userSessionClient(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	_, client, err := s.userSessionClient(traceR)
 	alert := AlertNone
 	if err == nil {
 		endSessionResponse, err := client.Get(s.authFLow.GetEndSessionEndpoint())
@@ -250,20 +280,27 @@ type UserTOTPRegistrationRequest struct {
 }
 
 func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Request) {
-	session, err := s.userSession(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	session, err := s.userSession(traceR)
 	if err != nil {
+		trace.RecordError(span, err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	secret, qrCode, otpURL, err := s.totpProvider.GenerateRegistrationRequest(session.Subject, 256, 256)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to generate TOTP registration request", slog.String("subject", session.Subject), slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
-	_, err = s.database.GenerateUserTOTPRegistrationRequest(r.Context(), session.Subject, secret, verifyHandler.GenerateChallenge)
+	_, err = s.database.GenerateUserTOTPRegistrationRequest(traceCtx, session.Subject, secret, verifyHandler.GenerateChallenge)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to generate user TOTP registration request", slog.String("subject", session.Subject), slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -274,6 +311,7 @@ func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Reques
 	}
 	err = json.NewEncoder(w).Encode(registrationInfo)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to encode session TOTP register response", slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -281,22 +319,29 @@ func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request) {
-	session, err := s.userSession(r)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	session, err := s.userSession(traceR)
 	if err != nil {
+		trace.RecordError(span, err)
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
-	response, err := s.parseVerifyTOTPForm(r)
+	response, err := s.parseVerifyTOTPForm(traceR)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to process verify TOTP request", slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
 	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
-	remoteIP := trace.GetHttpRequestRemoteIP(r)
-	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), session.Subject, verifyHandler, remoteIP)
+	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
+	userVerificationCtx := s.contextWithUserVerificationLog(traceCtx, session.Subject, verifyHandler, remoteIP)
 	registration, err := s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, response)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to verify/transform user TOTP registration", slog.String("subject", session.Subject), slog.Any("err", err))
 		s.redirectAlert(w, r, AlertVerifyFailure)
 	}
@@ -323,9 +368,12 @@ func (s *Server) parseVerifyTOTPForm(r *http.Request) (string, error) {
 }
 
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
-	ctx := r.Context()
-	userSession, remember, err := s.database.TransformAndDeleteUserSessionRequest(ctx, state, tokens.Token)
+	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	defer span.End()
+
+	userSession, remember, err := s.database.TransformAndDeleteUserSessionRequest(traceCtx, state, tokens.Token)
 	if err != nil {
+		trace.RecordError(span, err)
 		slog.Warn("failed to transform user session request", slog.Any("err", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return

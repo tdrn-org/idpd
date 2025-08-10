@@ -69,6 +69,17 @@ func NewUserSession(subject string, token *oauth2.Token) *UserSession {
 	}
 }
 
+func (s *UserSession) Refresh(token *oauth2.Token) bool {
+	if s.AccessToken == token.AccessToken && s.TokenType == token.TokenType && s.RefreshToken == token.RefreshToken {
+		return false
+	}
+	s.AccessToken = token.AccessToken
+	s.TokenType = token.TokenType
+	s.RefreshToken = token.RefreshToken
+	s.TokenExpiry = token.Expiry.UnixMicro()
+	return true
+}
+
 func (s *UserSession) Expired() bool {
 	return s.SessionExpiry < time.Now().UnixMicro()
 }

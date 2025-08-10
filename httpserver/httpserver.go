@@ -182,8 +182,8 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	traceCtx, span := s.tracer.Start(r.Context(), r.URL.Path)
 	defer span.End()
-
 	traceR := r.WithContext(traceCtx)
+
 	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 	if !s.AccessLog {
 		s.mux.ServeHTTP(w, traceR)
