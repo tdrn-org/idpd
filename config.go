@@ -32,6 +32,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/mail"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
+	"github.com/tdrn-org/idpd/internal/telemetry"
 )
 
 const DefaultConfig string = "/etc/idpd/idpd.toml"
@@ -189,6 +190,13 @@ type Config struct {
 		Password string `toml:"password"`
 		Rembemer bool   `toml:"remember"`
 	} `toml:"mock"`
+	Tracing struct {
+		Enabled       bool            `toml:"enabled"`
+		EndpointURL   URLSpec         `toml:"endpoint_url"`
+		Protocol      TracingProtocol `toml:"protocol"`
+		BatchTimeout  DurationSpec    `toml:"batch_timeout"`
+		ExportTimeout DurationSpec    `toml:"export_timeout"`
+	} `toml:"tracing"`
 }
 
 type OAuth2Client struct {
@@ -370,7 +378,7 @@ func (c *Config) toStaticUsers() []userstore.StaticUser {
 	return users
 }
 
-func (c *Config) oauth2IssuerURL(httpServer *httpserver.Instance) (*url.URL, error) {
+func (c *Config) issuerURL(httpServer *httpserver.Instance) (*url.URL, error) {
 	rawIssuerURL := c.Server.PublicURL.String()
 	if rawIssuerURL == "" {
 		rawIssuerURL = string(c.Server.Protocol) + "://" + httpServer.ListenerAddr()
@@ -382,8 +390,24 @@ func (c *Config) oauth2IssuerURL(httpServer *httpserver.Instance) (*url.URL, err
 	return issuerURL, nil
 }
 
+func (c *Config) toTelemetryConfig(httpServer *httpserver.Instance) (*telemetry.Config, error) {
+	issuerURL, err := c.issuerURL(httpServer)
+	if err != nil {
+		return nil, err
+	}
+	telemetryConfig := &telemetry.Config{
+		Enabled:       c.Tracing.Enabled,
+		Domain:        issuerURL.Host,
+		EndpointURL:   &c.Tracing.EndpointURL.URL,
+		Protocol:      c.Tracing.Protocol.Value(),
+		BatchTimeout:  c.Tracing.BatchTimeout.Duration,
+		ExportTimeout: c.Tracing.ExportTimeout.Duration,
+	}
+	return telemetryConfig, nil
+}
+
 func (c *Config) toOAuth2ProviderConfig(httpServer *httpserver.Instance) (*server.OAuth2ProviderConfig, error) {
-	issuerURL, err := c.oauth2IssuerURL(httpServer)
+	issuerURL, err := c.issuerURL(httpServer)
 	if err != nil {
 		return nil, err
 	}
@@ -570,6 +594,37 @@ func (a *SigningKeyAlgorithm) UnmarshalTOML(value any) error {
 		*a = SigningKeyAlgorithmPS256
 	default:
 		return fmt.Errorf("unknown signing key algorithm: '%s'", algorithm)
+	}
+	return nil
+}
+
+type TracingProtocol string
+
+const (
+	TracingProtocolHttp TracingProtocol = "http"
+	TracingProtocolGRPC TracingProtocol = "gRPC"
+)
+
+func (p *TracingProtocol) Value() string {
+	return string(*p)
+}
+
+func (p *TracingProtocol) MarshalTOML() ([]byte, error) {
+	return []byte(`"` + p.Value() + `"`), nil
+}
+
+func (p *TracingProtocol) UnmarshalTOML(value any) error {
+	protocol, ok := value.(string)
+	if !ok {
+		return notAStringErr(value)
+	}
+	switch protocol {
+	case string(TracingProtocolHttp):
+		*p = TracingProtocolHttp
+	case string(TracingProtocolGRPC):
+		*p = TracingProtocolGRPC
+	default:
+		return fmt.Errorf("unknown tracing protocol: '%s'", protocol)
 	}
 	return nil
 }

@@ -25,10 +25,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tdrn-org/idpd/internal/access"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/geoip"
+	"github.com/tdrn-org/idpd/internal/trace"
 	"github.com/tdrn-org/idpd/oauth2client"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
@@ -192,7 +192,7 @@ func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string,
 }
 
 func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
-	remoteIP := access.GetHttpRequestRemoteIP(r)
+	remoteIP := trace.GetHttpRequestRemoteIP(r)
 	id, subject, verification, response, err := s.parseVerifyForm(r)
 	if err != nil {
 		slog.Warn("failed to process verify session request", slog.Any("err", err))
@@ -293,7 +293,7 @@ func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
-	remoteIP := access.GetHttpRequestRemoteIP(r)
+	remoteIP := trace.GetHttpRequestRemoteIP(r)
 	userVerificationCtx := s.contextWithUserVerificationLog(r.Context(), session.Subject, verifyHandler, remoteIP)
 	registration, err := s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, response)
 	if err != nil {

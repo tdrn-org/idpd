@@ -29,7 +29,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tdrn-org/idpd/internal/trace"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/oauth2"
 )
 
@@ -91,12 +93,16 @@ func openDatabase(name string, driverName string, dsn string, logger *slog.Logge
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s database (cause: %w)", name, err)
 	}
+	databaseTracer := trace.Tracer("database")
+	sqlTracer := trace.Tracer("database/sql")
 	d := &databaseDriver{
-		name:    name,
-		db:      db,
-		stmts:   make(map[string]*sql.Stmt),
-		logger:  logger,
-		scripts: scripts,
+		name:           name,
+		db:             db,
+		stmts:          make(map[string]*sql.Stmt),
+		logger:         logger,
+		databaseTracer: databaseTracer,
+		sqlTracer:      sqlTracer,
+		scripts:        scripts,
 	}
 	return d, nil
 }
@@ -104,12 +110,14 @@ func openDatabase(name string, driverName string, dsn string, logger *slog.Logge
 var ErrObjectNotFound = errors.New("object not found")
 
 type databaseDriver struct {
-	name    string
-	db      *sql.DB
-	stmts   map[string]*sql.Stmt
-	logger  *slog.Logger
-	scripts [][]byte
-	mutex   sync.RWMutex
+	name           string
+	db             *sql.DB
+	stmts          map[string]*sql.Stmt
+	logger         *slog.Logger
+	databaseTracer oteltrace.Tracer
+	sqlTracer      oteltrace.Tracer
+	scripts        [][]byte
+	mutex          sync.RWMutex
 }
 
 func (d *databaseDriver) Name() string {
@@ -117,15 +125,21 @@ func (d *databaseDriver) Name() string {
 }
 
 func (d *databaseDriver) UpdateSchema(ctx context.Context) (SchemaVersion, SchemaVersion, error) {
+	traceCtx, span := d.databaseTracer.Start(ctx, "UpdateSchema")
+	defer span.End()
+
 	// Run schema version query inside separate TX, as some drivers will fail due the
 	// errors encountered while detecting the version on an empty database.
-	fromVersion, err := d.querySchemaVersion(ctx)
-	if err != nil {
-		return SchemaNone, SchemaNone, err
-	}
 	tx, txCtx, err := d.beginTx(ctx)
 	if err != nil {
-		return SchemaNone, SchemaNone, err
+		return SchemaNone, SchemaNone, trace.RecordError(span, err)
+	}
+	fromVersion, _ := d.querySchemaVersion(tx, txCtx)
+	d.rollbackTx(tx, nil)
+
+	tx, txCtx, err = d.beginTx(traceCtx)
+	if err != nil {
+		return SchemaNone, SchemaNone, trace.RecordError(span, err)
 	}
 	switch fromVersion {
 	case SchemaNone:
@@ -138,33 +152,31 @@ func (d *databaseDriver) UpdateSchema(ctx context.Context) (SchemaVersion, Schem
 		err = fmt.Errorf("unrecognized database schema version: %s", fromVersion)
 	}
 	if err != nil {
-		return SchemaNone, SchemaNone, d.rollbackTx(tx, err)
+		return SchemaNone, SchemaNone, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return fromVersion, Schema1, d.commitTx(tx, ctx == txCtx)
+	return fromVersion, Schema1, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
-func (d *databaseDriver) querySchemaVersion(ctx context.Context) (SchemaVersion, error) {
-	tx, txCtx, err := d.beginTx(ctx)
-	if err != nil {
-		return SchemaNone, err
-	}
+func (d *databaseDriver) querySchemaVersion(tx *sql.Tx, txCtx context.Context) (SchemaVersion, error) {
 	row, err := d.queryRowTx(tx, txCtx, "SELECT schema FROM version")
 	if err != nil {
-		return SchemaNone, d.rollbackTx(tx, nil)
+		return SchemaNone, err
 	}
 	var schema SchemaVersion
 	err = row.Scan(&schema)
 	if err != nil {
-		return SchemaNone, d.rollbackTx(tx, nil)
+		return SchemaNone, err
 	}
-	return schema, d.commitTx(tx, ctx == txCtx)
+	return schema, nil
 }
 
 func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authRequest *OAuth2AuthRequest) error {
-	d.logger.Debug("inserting OAuth2 auth request", slog.String("id", authRequest.ID))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "InsertOAuth2AuthRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	args0 := []any{
 		authRequest.ID,
@@ -184,62 +196,64 @@ func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authReques
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request (id,acr,expiry,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)", args0...)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	for _, amr := range authRequest.AMR {
 		err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request_amr (amr,auth_request_id) VALUES($1,$2)", amr, authRequest.ID)
 		if err != nil {
-			return d.rollbackTx(tx, err)
+			return trace.RecordError(span, d.rollbackTx(tx, err))
 		}
 	}
 	for _, audience := range authRequest.Audience {
 		err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request_audience (audience,auth_request_id) VALUES($1,$2)", audience, authRequest.ID)
 		if err != nil {
-			return d.rollbackTx(tx, err)
+			return trace.RecordError(span, d.rollbackTx(tx, err))
 		}
 	}
 	if authRequest.CodeChallenge != nil {
 		err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request_code_challenge (challenge,method,auth_request_id) VALUES($1,$2,$3)", authRequest.CodeChallenge.Challenge, authRequest.CodeChallenge.Method, authRequest.ID)
 		if err != nil {
-			return d.rollbackTx(tx, err)
+			return trace.RecordError(span, d.rollbackTx(tx, err))
 		}
 	}
 	for _, scope := range authRequest.Scopes {
 		err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_request_scope (scope,auth_request_id) VALUES($1,$2)", scope, authRequest.ID)
 		if err != nil {
-			return d.rollbackTx(tx, err)
+			return trace.RecordError(span, d.rollbackTx(tx, err))
 		}
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) SelectOAuth2AuthRequest(ctx context.Context, id string) (*OAuth2AuthRequest, error) {
-	d.logger.Debug("selecting OAuth2 auth request", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectOAuth2AuthRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	authRequest, err := d.selectOAuth2AuthRequest(tx, txCtx, id)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestAMRs(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestAudiences(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestCodeChallenge(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestScopes(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return authRequest, d.commitTx(tx, ctx == txCtx)
+	return authRequest, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) selectOAuth2AuthRequest(tx *sql.Tx, txCtx context.Context, id string) (*OAuth2AuthRequest, error) {
@@ -344,15 +358,17 @@ func (d *databaseDriver) selectOAuth2AuthRequestScopes(tx *sql.Tx, txCtx context
 }
 
 func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code string) (*OAuth2AuthRequest, error) {
-	d.logger.Debug("selecting OAuth2 auth request id by auth code", slog.String("code", code))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectOAuth2AuthRequestByCode")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	authRequest := NewOAuth2AuthRequest("")
 	row, err := d.queryRowTx(tx, txCtx, "SELECT id,acr,expiry,auth_time,client_id,nonce,redirect_url,response_type,response_mode,state,subject,challenge,remember,done FROM oauth2_auth_request WHERE id IN (SELECT auth_request_id FROM oauth2_auth_code WHERE code=$1)", code)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	args := []any{
 		&authRequest.ID,
@@ -372,48 +388,50 @@ func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 code request: %s)", ErrObjectNotFound, code))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 code request: %s)", ErrObjectNotFound, code)))
 	} else if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 auth request by code failure (cause: %w)", err))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select OAuth2 auth request by code failure (cause: %w)", err)))
 	}
 	err = d.selectOAuth2AuthRequestAMRs(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestAudiences(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestCodeChallenge(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.selectOAuth2AuthRequestScopes(tx, txCtx, authRequest)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return authRequest, d.commitTx(tx, ctx == txCtx)
+	return authRequest, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) AuthenticateOAuth2AuthRequest(ctx context.Context, id string, subject string, generateChallenge GenerateChallengeFunc, remember bool) error {
-	d.logger.Debug("authenticating OAuth2 auth request", slog.String("id", id), slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "AuthenticateOAuth2AuthRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	authRequest, err := d.selectOAuth2AuthRequest(tx, txCtx, id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	if authRequest.Subject != "" && authRequest.Subject != subject {
-		return d.rollbackTx(tx, fmt.Errorf("non-matching OAuth auth request: %s != %s", authRequest.Subject, subject))
+		return trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("non-matching OAuth auth request: %s != %s", authRequest.Subject, subject)))
 	}
 	if authRequest.Challenge != "" {
-		return d.rollbackTx(tx, fmt.Errorf("invalid OAuth2 auth request state: %s", authRequest.Challenge))
+		return trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("invalid OAuth2 auth request state: %s", authRequest.Challenge)))
 	}
 	challenge, err := generateChallenge(ctx, subject)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	authRequest.Subject = subject
 	authRequest.Challenge = challenge
@@ -426,35 +444,37 @@ func (d *databaseDriver) AuthenticateOAuth2AuthRequest(ctx context.Context, id s
 	}
 	err = d.execTx(tx, txCtx, "UPDATE oauth2_auth_request SET subject=$1,challenge=$2,remember=$3 WHERE id=$4", args0...)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx context.Context, id string, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserSessionRequest, error) {
-	d.logger.Debug("verifying and transforming OAuth2 auth request to user session request", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "VerifyAndTransformOAuth2AuthRequestToUserSessionRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	authRequest, err := d.selectOAuth2AuthRequest(tx, txCtx, id)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	if authRequest.Subject != subject {
-		return nil, d.rollbackTx(tx, fmt.Errorf("non-matching OAuth auth request: %s != %s", authRequest.Subject, subject))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("non-matching OAuth auth request: %s != %s", authRequest.Subject, subject)))
 	}
 	if authRequest.Expired() {
 		// Verification failed (functionally)
-		return nil, d.commitTx(tx, ctx == txCtx)
+		return nil, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	verified, err := verifyChallengeResponse(txCtx, authRequest.Subject, authRequest.Challenge, response)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	if !verified {
 		// Verification failed (functionally)
-		return nil, d.commitTx(tx, ctx == txCtx)
+		return nil, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	authRequest.AuthTime = time.Now().UnixMicro()
 	authRequest.Done = true
@@ -465,7 +485,7 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 	}
 	err = d.execTx(tx, txCtx, "UPDATE oauth2_auth_request SET auth_time=$1,done=$2 WHERE id=$3", args0...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	userSessionRequest := NewUserSessionRequest(authRequest.Subject, authRequest.Remember, authRequest.State)
 	args1 := []any{
@@ -477,83 +497,89 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO user_session_request (id,subject,remember,state,expiry) VALUES($1,$2,$3,$4,$5)", args1...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return userSessionRequest, d.commitTx(tx, ctx == txCtx)
+	return userSessionRequest, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) DeleteOAuth2AuthRequest(ctx context.Context, id string) error {
-	d.logger.Debug("deleting OAuth2 auth request", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteOAuth2AuthRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_code WHERE auth_request_id=$1", id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_scope WHERE auth_request_id=$1", id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_code_challenge WHERE auth_request_id=$1", id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_audience WHERE auth_request_id=$1", id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_amr WHERE auth_request_id=$1", id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request WHERE id=$1", id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) DeleteExpiredOAuth2AuthRequests(ctx context.Context) error {
-	d.logger.Debug("deleting expired OAuth2 auth requests")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteExpiredOAuth2AuthRequests")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_code WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_scope WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_code_challenge WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_audience WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request_amr WHERE auth_request_id IN (SELECT id FROM oauth2_auth_request WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_auth_request WHERE expiry < $1", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) InsertOAuth2AuthCode(ctx context.Context, code string, id string) error {
-	d.logger.Debug("inserting OAuth2 auth code", slog.String("code", code))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "InsertOAuth2AuthCode")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	args := []any{
 		code,
@@ -561,22 +587,24 @@ func (d *databaseDriver) InsertOAuth2AuthCode(ctx context.Context, code string, 
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO oauth2_auth_code (code,auth_request_id) VALUES($1,$2)", args...)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) InsertOAuth2Token(ctx context.Context, token *OAuth2Token) error {
-	d.logger.Debug("inserting OAuth2 token", slog.String("id", token.ID))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "InsertOAuth2Token")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	err = d.insertOAuth2Token(tx, txCtx, token)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) insertOAuth2Token(tx *sql.Tx, txCtx context.Context, token *OAuth2Token) error {
@@ -607,15 +635,17 @@ func (d *databaseDriver) insertOAuth2Token(tx *sql.Tx, txCtx context.Context, to
 }
 
 func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAuth2Token, error) {
-	d.logger.Debug("selecting OAuth2 token", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectOAuth2Token")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	token := NewOAuth2Token(id)
 	row, err := d.queryRowTx(tx, txCtx, "SELECT client_id,subject,refresh_token_id,expiry FROM oauth2_token WHERE id=$1", token.ID)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	args0 := []any{
 		&token.ClientID,
@@ -625,78 +655,82 @@ func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAu
 	}
 	err = row.Scan(args0...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 token: %s)", ErrObjectNotFound, token.ID))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("%w (unknown OAuth2 token: %s)", ErrObjectNotFound, token.ID)))
 	} else if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token failure (cause: %w)", err))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token failure (cause: %w)", err)))
 	}
 	rows1, err := d.queryTx(tx, txCtx, "SELECT audience FROM oauth2_token_audience WHERE token_id=$1", token.ID)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	defer rows1.Close()
 	for rows1.Next() {
 		var audience string
 		err = rows1.Scan(&audience)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token audience failure (cause: %w)", err))
+			return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token audience failure (cause: %w)", err)))
 		}
 		token.Audience = append(token.Audience, audience)
 	}
 	rows1.Close()
 	rows2, err := d.queryTx(tx, txCtx, "SELECT scope FROM oauth2_token_scope WHERE token_id=$1", token.ID)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	defer rows2.Close()
 	for rows2.Next() {
 		var scope string
 		err = rows2.Scan(&scope)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token scope failure (cause: %w)", err))
+			return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select OAuth2 token scope failure (cause: %w)", err)))
 		}
 		token.Scopes = append(token.Scopes, scope)
 	}
 	rows2.Close()
-	return token, d.commitTx(tx, ctx == txCtx)
+	return token, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) DeleteOAuth2Token(ctx context.Context, id string) error {
-	d.logger.Debug("deleting OAuth2 token", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteOAuth2Token")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	err = d.deleteOAuth2RefreshTokensByTokenID(tx, txCtx, id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.deleteOAuth2Token(tx, txCtx, id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) DeleteExpiredOAuth2Tokens(ctx context.Context) error {
-	d.logger.Debug("deleting expired OAuth2 tokens")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteExpiredOAuth2Tokens")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token_scope WHERE token_id IN (SELECT id FROM oauth2_token WHERE expiry < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token))", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token_audience WHERE token_id IN (SELECT id FROM oauth2_token WHERE expiry < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token))", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_token WHERE expiry < $1 AND id NOT IN (SELECT access_token_id FROM oauth2_refresh_token)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) deleteOAuth2Token(tx *sql.Tx, txCtx context.Context, id string) error {
@@ -732,20 +766,22 @@ func (d *databaseDriver) deleteOAuth2TokenByRefreshTokenID(tx *sql.Tx, txCtx con
 }
 
 func (d *databaseDriver) InsertOAuth2RefreshToken(ctx context.Context, refreshToken *OAuth2RefreshToken, token *OAuth2Token) error {
-	d.logger.Debug("inserting OAuth2 refresh token", slog.String("id", refreshToken.ID))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "InsertOAuth2RefreshToken")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	err = d.insertOAuth2Token(tx, txCtx, token)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.insertOAuth2RefreshToken(tx, txCtx, refreshToken)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) insertOAuth2RefreshToken(tx *sql.Tx, txCtx context.Context, refreshToken *OAuth2RefreshToken) error {
@@ -783,33 +819,35 @@ func (d *databaseDriver) insertOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 }
 
 func (d *databaseDriver) RenewOAuth2RefreshToken(ctx context.Context, id string, newToken *OAuth2Token) (*OAuth2RefreshToken, error) {
-	d.logger.Debug("renewing OAuth2 refresh token", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "RenewOAuth2RefreshToken")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	oldRefreshToken, err := d.selectOAuth2RefreshToken(tx, txCtx, id)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	newRefreshToken := NewOAuth2RefreshTokenFromRefreshToken(newToken.RefreshTokenID, newToken.ID, oldRefreshToken)
 	err = d.deleteOAuth2RefreshToken(tx, txCtx, oldRefreshToken.ID)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.deleteOAuth2Token(tx, txCtx, oldRefreshToken.AccessTokenID)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.insertOAuth2Token(tx, txCtx, newToken)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.insertOAuth2RefreshToken(tx, txCtx, newRefreshToken)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return newRefreshToken, d.commitTx(tx, ctx == txCtx)
+	return newRefreshToken, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) deleteOAuth2RefreshToken(tx *sql.Tx, txCtx context.Context, id string) error {
@@ -833,16 +871,18 @@ func (d *databaseDriver) deleteOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 }
 
 func (d *databaseDriver) SelectOAuth2RefreshToken(ctx context.Context, id string) (*OAuth2RefreshToken, error) {
-	d.logger.Debug("selecting OAuth2 refresh token", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectOAuth2RefreshToken")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	refreshToken, err := d.selectOAuth2RefreshToken(tx, txCtx, id)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return refreshToken, d.commitTx(tx, ctx == txCtx)
+	return refreshToken, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) selectOAuth2RefreshToken(tx *sql.Tx, txCtx context.Context, id string) (*OAuth2RefreshToken, error) {
@@ -931,20 +971,22 @@ func (d *databaseDriver) selectOAuth2RefreshTokenScopes(tx *sql.Tx, txCtx contex
 }
 
 func (d *databaseDriver) DeleteOAuth2TokensBySubject(ctx context.Context, applicationID string, subject string) error {
-	d.logger.Debug("deleting OAuth2 tokens by subject", slog.String("applicationID", applicationID), slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteOAuth2TokensBySubject")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	err = d.deleteOAuth2RefreshTokensByTokenSubject(tx, txCtx, applicationID, subject)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.deleteOAuth2TokensBySubject(tx, txCtx, applicationID, subject)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) deleteOAuth2RefreshTokensByTokenSubject(tx *sql.Tx, txCtx context.Context, applicationID string, subject string) error {
@@ -984,20 +1026,22 @@ func (d *databaseDriver) deleteOAuth2TokensBySubject(tx *sql.Tx, txCtx context.C
 }
 
 func (d *databaseDriver) DeleteOAuth2RefreshToken(ctx context.Context, id string) error {
-	d.logger.Debug("deleting OAuth2 refresh token", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteOAuth2RefreshToken")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	err = d.deleteOAuth2RefreshToken(tx, txCtx, id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.deleteOAuth2TokenByRefreshTokenID(tx, txCtx, id)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) deleteOAuth2RefreshTokensByTokenID(tx *sql.Tx, txCtx context.Context, tokenID string) error {
@@ -1021,47 +1065,51 @@ func (d *databaseDriver) deleteOAuth2RefreshTokensByTokenID(tx *sql.Tx, txCtx co
 }
 
 func (d *databaseDriver) DeleteExpiredOAuth2RefreshTokens(ctx context.Context) error {
-	d.logger.Debug("deleting expired OAuth2 refresh tokens")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteExpiredOAuth2RefreshTokens")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_scope WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_audience WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token_amr WHERE refresh_token_id IN (SELECT id FROM oauth2_refresh_token WHERE expiry < $1)", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM oauth2_refresh_token WHERE expiry < $1", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error) {
-	d.logger.Debug("rotating signing keys")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "RotateSigningKeys")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	// Delete expired keys
 	err = d.execTx(tx, txCtx, "DELETE FROM signing_key WHERE expiry<$1", now)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	// Select current keys and check for current key
 	signingKeys, err := d.selectSigningKeys(tx, ctx)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	var activeSigningKey *SigningKey
 	for _, signingKey := range signingKeys {
@@ -1075,12 +1123,12 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 	}
 	// Finished, if active signing key is in place
 	if activeSigningKey != nil {
-		return signingKeys, d.commitTx(tx, ctx == txCtx)
+		return signingKeys, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	// Generate and insert new key
 	newSigningKey, err := generateSigningKey(algorithm)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	args := []any{
 		newSigningKey.ID,
@@ -1092,14 +1140,14 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO signing_key (id,algorithm,private_key,public_key,passivation,expiry) VALUES($1,$2,$3,$4,$5,$6)", args...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	// Re-select all keys
 	signingKeys, err = d.selectSigningKeys(tx, ctx)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return signingKeys, d.commitTx(tx, ctx == txCtx)
+	return signingKeys, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (SigningKeys, error) {
@@ -1129,18 +1177,20 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 }
 
 func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error) {
-	d.logger.Debug("transforming user session request", slog.String("state", state))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "TransformAndDeleteUserSessionRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, false, err
+		return nil, false, trace.RecordError(span, err)
 	}
 	request, err := d.selectUserSessionRequestByState(tx, txCtx, state)
 	if err != nil {
-		return nil, false, d.rollbackTx(tx, err)
+		return nil, false, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	if request.Expired() {
 		// Transformation failed (functionally)
-		return nil, false, d.commitTx(tx, ctx == txCtx)
+		return nil, false, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	session := NewUserSession(request.Subject, token)
 	args := []any{
@@ -1154,9 +1204,9 @@ func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Contex
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO user_session (id,subject,access_token,token_type,refresh_token,token_expiry,session_expiry) VALUES($1,$2,$3,$4,$5,$6,$7)", args...)
 	if err != nil {
-		return nil, false, d.rollbackTx(tx, err)
+		return nil, false, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return session, request.Remember, d.commitTx(tx, ctx == txCtx)
+	return session, request.Remember, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx context.Context, state string) (*UserSessionRequest, error) {
@@ -1183,31 +1233,35 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx conte
 }
 
 func (d *databaseDriver) DeleteExpiredUserSessionRequests(ctx context.Context) error {
-	d.logger.Debug("deleting expired user session requests")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteExpiredUserSessionRequests")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	err = d.execTx(tx, txCtx, "DELETE FROM user_session_request WHERE expiry < $1", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*UserSession, error) {
-	d.logger.Debug("selecting user session", slog.String("id", id))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectUserSession")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	session := &UserSession{
 		ID: id,
 	}
 	row, err := d.queryRowTx(tx, txCtx, "SELECT subject,access_token,token_type,refresh_token,token_expiry,session_expiry FROM user_session WHERE id=$1", session.ID)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	args := []any{
 		&session.Subject,
@@ -1219,36 +1273,40 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, d.rollbackTx(tx, fmt.Errorf("%w (unknown user session: %s)", ErrObjectNotFound, session.ID))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("%w (unknown user session: %s)", ErrObjectNotFound, session.ID)))
 	} else if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select user session failure (cause: %w)", err))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select user session failure (cause: %w)", err)))
 	}
 	if session.Expired() {
 		// Session no longer available
-		return nil, d.commitTx(tx, ctx == txCtx)
+		return nil, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
-	return session, d.commitTx(tx, ctx == txCtx)
+	return session, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) DeleteExpiredUserSessions(ctx context.Context) error {
-	d.logger.Debug("deleting expired user sessions")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteExpiredUserSessions")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	err = d.execTx(tx, txCtx, "DELETE FROM user_session WHERE session_expiry < $1", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error) {
-	d.logger.Debug("inserting/updating user verification log", slog.String("subject", log.Subject), slog.String("method", log.Method))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "InsertOrUpdateUserVerificationLog")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	updatedLog := &UserVerificationLog{
 		Subject: log.Subject,
@@ -1256,7 +1314,7 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 	}
 	row, err := d.queryRowTx(tx, txCtx, "SELECT first_used FROM user_verification_log WHERE subject=$1 AND method=$2", updatedLog.Subject, updatedLog.Method)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	args0 := []any{
 		&updatedLog.FirstUsed,
@@ -1278,10 +1336,10 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 		}
 		err = d.execTx(tx, txCtx, "INSERT INTO user_verification_log (subject,method,first_used,last_used,host,country,country_code,city,lat,lon) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", args1...)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("insert user verification log failure (cause: %w)", err))
+			return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("insert user verification log failure (cause: %w)", err)))
 		}
 	} else if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("select user verification log failure (cause: %w)", err))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select user verification log failure (cause: %w)", err)))
 	} else {
 		updatedLog.Update(log)
 		args2 := []any{
@@ -1298,21 +1356,23 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 		}
 		err = d.execTx(tx, txCtx, "UPDATE user_verification_log SET first_used=$1,last_used=$2,host=$3,country=$4,country_code=$5,city=$6,lat=$7,lon=$8 WHERE subject=$9 AND method=$10", args2...)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("update user verification log failure (cause: %w)", err))
+			return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("update user verification log failure (cause: %w)", err)))
 		}
 	}
-	return log, d.commitTx(tx, ctx == txCtx)
+	return log, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error) {
-	d.logger.Debug("selecting user verification logs", slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectUserVerificationLogs")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	rows, err := d.queryTx(tx, txCtx, "SELECT method,first_used,last_used,host,country,country_code,city,lat,lon FROM user_verification_log WHERE subject=$1", subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	defer rows.Close()
 	logs := make([]*UserVerificationLog, 0, 4)
@@ -1333,11 +1393,11 @@ func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject
 		}
 		err = rows.Scan(args...)
 		if err != nil {
-			return nil, d.rollbackTx(tx, fmt.Errorf("select user verification log failure (cause: %w)", err))
+			return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select user verification log failure (cause: %w)", err)))
 		}
 		logs = append(logs, log)
 	}
-	return logs, d.commitTx(tx, ctx == txCtx)
+	return logs, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) deleteUserVerificationLog(tx *sql.Tx, txCtx context.Context, subject string, method string) error {
@@ -1349,18 +1409,20 @@ func (d *databaseDriver) deleteUserVerificationLog(tx *sql.Tx, txCtx context.Con
 }
 
 func (d *databaseDriver) GenerateUserTOTPRegistrationRequest(ctx context.Context, subject string, secret string, generateChallengeFunc GenerateChallengeFunc) (*UserTOTPRegistrationRequest, error) {
-	d.logger.Debug("generating user TOTP registration request", slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "GenerateUserTOTPRegistrationRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE subject=$1", subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	challenge, err := generateChallengeFunc(txCtx, subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	request := NewUserTOTPRegistrationRequest(subject, secret, challenge)
 	args := []any{
@@ -1371,22 +1433,24 @@ func (d *databaseDriver) GenerateUserTOTPRegistrationRequest(ctx context.Context
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration_request (subject,secret,challenge,expiry) VALUES($1,$2,$3,$4)", args...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, fmt.Errorf("insert user TOTP registration request failure (cause: %w)", err))
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("insert user TOTP registration request failure (cause: %w)", err)))
 	}
-	return request, d.commitTx(tx, ctx == txCtx)
+	return request, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) SelectUserTOTPRegistrationRequest(ctx context.Context, subject string) (*UserTOTPRegistrationRequest, error) {
-	d.logger.Debug("selecting user TOTP registration request", slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectUserTOTPRegistrationRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	request, err := d.selectUserTOTPRegistrationRequest(tx, txCtx, subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return request, d.commitTx(tx, ctx == txCtx)
+	return request, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) selectUserTOTPRegistrationRequest(tx *sql.Tx, txCtx context.Context, subject string) (*UserTOTPRegistrationRequest, error) {
@@ -1412,48 +1476,52 @@ func (d *databaseDriver) selectUserTOTPRegistrationRequest(tx *sql.Tx, txCtx con
 }
 
 func (d *databaseDriver) DeleteExpiredUserTOTPRegistrationRequests(ctx context.Context) error {
-	d.logger.Debug("deleting expired user TOTP registration requests")
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "DeleteExpiredUserTOTPRegistrationRequests")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 	now := time.Now().UnixMicro()
 	err = d.execTx(tx, txCtx, "DELETE FROM user_totp_registration_request WHERE expiry < $1", now)
 	if err != nil {
-		return d.rollbackTx(tx, err)
+		return trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return d.commitTx(tx, ctx == txCtx)
+	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserTOTPRegistration, error) {
-	d.logger.Debug("verifying and transforming user TOTP registration request", slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "VerifyAndTransformUserTOTPRegistrationRequestToRegistration")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	request, err := d.selectUserTOTPRegistrationRequest(tx, txCtx, subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	if request.Expired() {
 		// Verification failed (functionally)
-		return nil, d.commitTx(tx, ctx == txCtx)
+		return nil, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	err = d.deleteUserVerificationLog(tx, txCtx, subject, TOTPKey)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	verified, err := verifyChallengeResponse(txCtx, subject, request.Challenge, response)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	if !verified {
 		// Verification failed (functionally)
-		return nil, d.commitTx(tx, ctx == txCtx)
+		return nil, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
 	err = d.deleteUserTOTPRegistration(tx, txCtx, subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	registration := NewUserTOTPRegistrationFromRequest(request)
 	args := []any{
@@ -1463,9 +1531,9 @@ func (d *databaseDriver) VerifyAndTransformUserTOTPRegistrationRequestToRegistra
 	}
 	err = d.execTx(tx, txCtx, "INSERT INTO user_totp_registration (subject,secret,create_time) VALUES($1,$2,$3)", args...)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	return registration, d.commitTx(tx, ctx == txCtx)
+	return registration, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) deleteUserTOTPRegistration(tx *sql.Tx, txCtx context.Context, subject string) error {
@@ -1473,17 +1541,19 @@ func (d *databaseDriver) deleteUserTOTPRegistration(tx *sql.Tx, txCtx context.Co
 }
 
 func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject string) (*UserTOTPRegistration, error) {
-	d.logger.Debug("selecting user TOTP registration", slog.String("subject", subject))
-	tx, txCtx, err := d.beginTx(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "SelectUserTOTPRegistration")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 	registration := &UserTOTPRegistration{
 		Subject: subject,
 	}
 	row, err := d.queryRowTx(tx, txCtx, "SELECT secret,create_time FROM user_totp_registration WHERE subject=$1", registration.Subject)
 	if err != nil {
-		return nil, d.rollbackTx(tx, err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	args := []any{
 		&registration.Secret,
@@ -1491,15 +1561,18 @@ func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject
 	}
 	err = row.Scan(args...)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w (unknown user TOTP registration: %s)", ErrObjectNotFound, registration.Subject)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("%w (unknown user TOTP registration: %s)", ErrObjectNotFound, registration.Subject)))
 	} else if err != nil {
-		return nil, fmt.Errorf("select user TOTP registration failure (cause: %w)", err)
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("select user TOTP registration failure (cause: %w)", err)))
 	}
-	return registration, d.commitTx(tx, ctx == txCtx)
+	return registration, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
 func (d *databaseDriver) Ping(ctx context.Context) error {
-	return d.db.PingContext(ctx)
+	traceCtx, span := d.databaseTracer.Start(ctx, "Ping")
+	defer span.End()
+
+	return trace.RecordError(span, d.db.PingContext(traceCtx))
 }
 
 func (d *databaseDriver) Close() error {
@@ -1547,43 +1620,49 @@ func (d *databaseDriver) commitTx(tx *sql.Tx, nestedTx bool) error {
 }
 
 func (d *databaseDriver) execTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) error {
-	d.logger.Debug("sql exec", slog.String("query", query))
-	stmt, err := d.prepareStmt(txCtx, query)
+	traceCtx, span := d.sqlTracer.Start(txCtx, query)
+	defer span.End()
+
+	stmt, err := d.prepareStmt(traceCtx, query)
 	if err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
-	txStmt := tx.StmtContext(txCtx, stmt)
-	result, err := txStmt.ExecContext(txCtx, args...)
+	txStmt := tx.StmtContext(traceCtx, stmt)
+	result, err := txStmt.ExecContext(traceCtx, args...)
 	if err != nil {
-		return fmt.Errorf("sql exec failure (cause: %w)", err)
+		return trace.RecordError(span, fmt.Errorf("sql exec failure: '%s' (cause: %w)", query, err))
 	}
 	rows, err := result.RowsAffected()
 	if err == nil {
-		d.logger.Debug("sql exec complete", slog.Int64("rows", rows))
+		d.logger.Debug("sql exec complete", slog.String("query", query), slog.Int64("rows", rows))
 	}
 	return nil
 }
 
 func (d *databaseDriver) queryRowTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) (*sql.Row, error) {
-	d.logger.Debug("sql query", slog.String("query", query))
-	stmt, err := d.prepareStmt(txCtx, query)
+	traceCtx, span := d.sqlTracer.Start(txCtx, query)
+	defer span.End()
+
+	stmt, err := d.prepareStmt(traceCtx, query)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
-	txStmt := tx.StmtContext(txCtx, stmt)
-	return txStmt.QueryRowContext(txCtx, args...), nil
+	txStmt := tx.StmtContext(traceCtx, stmt)
+	return txStmt.QueryRowContext(traceCtx, args...), nil
 }
 
 func (d *databaseDriver) queryTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) (*sql.Rows, error) {
-	d.logger.Debug("sql query", slog.String("query", query))
-	stmt, err := d.prepareStmt(txCtx, query)
+	traceCtx, span := d.sqlTracer.Start(txCtx, query)
+	defer span.End()
+
+	stmt, err := d.prepareStmt(traceCtx, query)
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
-	txStmt := tx.StmtContext(txCtx, stmt)
-	rows, err := txStmt.QueryContext(txCtx, args...)
+	txStmt := tx.StmtContext(traceCtx, stmt)
+	rows, err := txStmt.QueryContext(traceCtx, args...)
 	if err != nil {
-		return nil, fmt.Errorf("sql query failure (cause: %w)", err)
+		return nil, trace.RecordError(span, fmt.Errorf("sql query failure: '%s' (cause: %w)", query, err))
 	}
 	return rows, nil
 }

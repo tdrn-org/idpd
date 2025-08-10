@@ -14,36 +14,22 @@
  * limitations under the License.
  */
 
-package access
+package trace
 
 import (
-	"net"
-	"net/http"
-	"strings"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-func GetHttpRequestRemoteIP(r *http.Request) string {
-	remoteIPHeaders := []string{
-		"True-Client-IP",
-		"X-Real-IP",
-		"X-Forwarded-For",
-	}
-	for _, remoteIPHeader := range remoteIPHeaders {
-		remoteIP := r.Header.Get(remoteIPHeader)
-		if remoteIP != "" {
-			i := strings.Index(remoteIP, ",")
-			if i >= 0 {
-				remoteIP = remoteIP[:i]
-			}
-			if remoteIP != "" {
-				return remoteIP
-			}
-		}
-	}
-	remoteAddr := r.RemoteAddr
-	remoteIP, _, err := net.SplitHostPort(remoteAddr)
+func Tracer(name string) oteltrace.Tracer {
+	return otel.GetTracerProvider().Tracer(name)
+}
+
+func RecordError(span oteltrace.Span, err error) error {
 	if err != nil {
-		remoteIP = remoteAddr
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 	}
-	return remoteIP
+	return err
 }

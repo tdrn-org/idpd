@@ -14,4 +14,36 @@
  * limitations under the License.
  */
 
-package access
+package trace
+
+import (
+	"net"
+	"net/http"
+	"strings"
+)
+
+func GetHttpRequestRemoteIP(r *http.Request) string {
+	remoteIPHeaders := []string{
+		"True-Client-IP",
+		"X-Real-IP",
+		"X-Forwarded-For",
+	}
+	for _, remoteIPHeader := range remoteIPHeaders {
+		remoteIP := r.Header.Get(remoteIPHeader)
+		if remoteIP != "" {
+			i := strings.Index(remoteIP, ",")
+			if i >= 0 {
+				remoteIP = remoteIP[:i]
+			}
+			if remoteIP != "" {
+				return remoteIP
+			}
+		}
+	}
+	remoteAddr := r.RemoteAddr
+	remoteIP, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		remoteIP = remoteAddr
+	}
+	return remoteIP
+}

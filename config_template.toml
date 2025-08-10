@@ -168,3 +168,10 @@ group.members = "member"
 #id = "client 1"
 #secret = "verysecretphrase"
 #redirect_urls = [ "http://localhost:9124/authorized" ]
+
+[tracing]
+#enabled = false
+#endpoint_url = "http://localhost:4318"
+#protocol = "http"
+#batch_timeout = "5s"
+#export_timeout = "30s"

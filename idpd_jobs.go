@@ -69,5 +69,5 @@ func (s *Server) runDeleteExpiredJob() {
 }
 
 func (s *Server) runRefreshSessionsJob() {
-	slog.Debug("running refresh sesions job")
+	slog.Debug("running refresh sessions job")
 }

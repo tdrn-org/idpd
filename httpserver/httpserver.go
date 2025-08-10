@@ -32,7 +32,8 @@ import (
 
 	"github.com/rs/cors"
 	"github.com/tdrn-org/go-tlsconf/tlsserver"
-	"github.com/tdrn-org/idpd/internal/access"
+	"github.com/tdrn-org/idpd/internal/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type Handler interface {
@@ -49,6 +50,7 @@ type Instance struct {
 	mux          *http.ServeMux
 	baseURL      *url.URL
 	logger       *slog.Logger
+	tracer       oteltrace.Tracer
 	httpServer   *http.Server
 	stoppedWG    sync.WaitGroup
 }
@@ -100,53 +102,59 @@ func (s *Instance) BaseURL() *url.URL {
 	return s.baseURL
 }
 
-func (s *Instance) Serve() error {
+func (s *Instance) prepareServe(schema string) (*cors.Cors, error) {
 	err := s.Listen()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if s.mux == nil {
 		s.mux = http.NewServeMux()
 	}
-	baseURL, err := url.Parse("http://" + s.listenerAddr)
+	baseURL, err := url.Parse(schema + "://" + s.listenerAddr)
 	if err != nil {
-		return fmt.Errorf("failed to parse base URL (cause: %w)", err)
+		return nil, fmt.Errorf("failed to parse base URL (cause: %w)", err)
 	}
 	s.baseURL = baseURL
 	s.logger = slog.With(slog.Any("baseURL", s.baseURL))
+	s.tracer = trace.Tracer("httpserver")
 	cors := cors.AllowAll()
-	s.httpServer = &http.Server{
-		Addr:    s.Addr,
-		Handler: cors.Handler(s),
-	}
+	return cors, nil
+}
+
+func (s *Instance) runServe(serve func() error) {
 	s.stoppedWG.Add(1)
 	go func() {
 		defer s.stoppedWG.Done()
 		s.logger.Info("http server started")
-		err := s.httpServer.Serve(s.listener)
+		err := serve()
 		if !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Error(serverFailureMessage, slog.Any("err", err))
 		} else {
 			s.logger.Info("http server stopped")
 		}
 	}()
+}
+
+func (s *Instance) Serve() error {
+	cors, err := s.prepareServe("http")
+	if err != nil {
+		return err
+	}
+	s.httpServer = &http.Server{
+		Addr:    s.Addr,
+		Handler: cors.Handler(s),
+	}
+	s.runServe(func() error {
+		return s.httpServer.Serve(s.listener)
+	})
 	return nil
 }
 
 func (s *Instance) ServeTLS(certFile string, keyFile string) error {
-	err := s.Listen()
+	cors, err := s.prepareServe("https")
 	if err != nil {
 		return err
 	}
-	if s.mux == nil {
-		s.mux = http.NewServeMux()
-	}
-	baseURL, err := url.Parse("https://" + s.listenerAddr)
-	if err != nil {
-		return fmt.Errorf("failed to parse base URL (cause: %w)", err)
-	}
-	s.baseURL = baseURL
-	s.logger = slog.With(slog.Any("baseURL", s.baseURL))
 	var certificates []tls.Certificate
 	if certFile == "" && keyFile == "" {
 		s.logger.Info("using ephemeral certificate")
@@ -156,7 +164,6 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 		}
 		certificates = append(certificates, *certificate)
 	}
-	cors := cors.AllowAll()
 	s.httpServer = &http.Server{
 		Addr:    s.Addr,
 		Handler: cors.Handler(s),
@@ -164,32 +171,27 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 			Certificates: certificates,
 		},
 	}
-	s.stoppedWG.Add(1)
-	go func() {
-		defer s.stoppedWG.Done()
-		s.logger.Info("http server started")
-		err := s.httpServer.ServeTLS(s.listener, certFile, keyFile)
-		if !errors.Is(err, http.ErrServerClosed) {
-			s.logger.Error(serverFailureMessage, slog.Any("err", err))
-		} else {
-			s.logger.Info("http server stopped")
-		}
-	}()
+	s.runServe(func() error {
+		return s.httpServer.ServeTLS(s.listener, certFile, keyFile)
+	})
 	return nil
 }
 
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.logger.Debug("http server request", slog.String(r.Method, r.RequestURI))
-	remoteIP := access.GetHttpRequestRemoteIP(r)
+	traceCtx, span := s.tracer.Start(r.Context(), r.URL.Path)
+	defer span.End()
+
+	traceR := r.WithContext(traceCtx)
+	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 	if !s.AccessLog {
-		s.mux.ServeHTTP(w, r)
+		s.mux.ServeHTTP(w, traceR)
 	} else {
 		log := &logBuilder{}
 		log.appendHost(remoteIP)
 		log.appendTime()
-		log.appendRequest(r.Method, r.URL.EscapedPath(), r.Proto)
+		log.appendRequest(r.Method, r.URL.Path, r.Proto)
 		wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
-		s.mux.ServeHTTP(wrappedW, r)
+		s.mux.ServeHTTP(wrappedW, traceR)
 		log.appendStatus(wrappedW.statusCode, wrappedW.written)
 		s.logger.Info(log.String())
 	}

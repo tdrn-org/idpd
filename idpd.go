@@ -96,20 +96,21 @@ func startConfig(ctx context.Context, config *Config) (*Server, error) {
 const sessionCookiePath = "/session"
 
 type Server struct {
-	httpServer       *httpserver.Instance
-	sessionCookie    *server.CookieHandler
-	mailer           *mail.Mailer
-	totpProvider     *server.TOTPProvider
-	locationService  *geoip.LocationService
-	database         database.Driver
-	userStore        userstore.Backend
-	oauth2IssuerURL  *url.URL
-	oauth2Provider   *server.OAuth2Provider
-	oauth2Client     *server.OAuth2Client
-	authFLow         *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
-	jobTicker        *time.Ticker
-	jobTickerStopped chan bool
-	stoppedWG        sync.WaitGroup
+	httpServer        *httpserver.Instance
+	sessionCookie     *server.CookieHandler
+	shutdownTelemetry func(context.Context) error
+	mailer            *mail.Mailer
+	totpProvider      *server.TOTPProvider
+	locationService   *geoip.LocationService
+	database          database.Driver
+	userStore         userstore.Backend
+	oauth2IssuerURL   *url.URL
+	oauth2Provider    *server.OAuth2Provider
+	oauth2Client      *server.OAuth2Client
+	authFLow          *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
+	jobTicker         *time.Ticker
+	jobTickerStopped  chan bool
+	stoppedWG         sync.WaitGroup
 }
 
 func (s *Server) OAuth2IssuerURL() *url.URL {
@@ -156,8 +157,8 @@ func (s *Server) shutdown(ctx context.Context) error {
 	// Stop background job processing
 	s.jobTicker.Stop()
 	s.jobTickerStopped <- true
-	// Stop/Close running services
-	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close(), s.locationService.Close())
+	// Stop/Close/Shutdown running services
+	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close(), s.locationService.Close(), s.shutdownTelemetry(shutdownCtx))
 	if err != nil {
 		return err
 	}
@@ -169,6 +170,7 @@ func (s *Server) initAndStart(config *Config) error {
 	inits := []func(*Config) error{
 		s.initServerConf,
 		s.initHttpServer,
+		s.initTelemetry,
 		s.initMailer,
 		s.initTOTP,
 		s.initGeoIP,
@@ -207,7 +209,7 @@ func (s *Server) initHttpServer(config *Config) error {
 	if err != nil {
 		return err
 	}
-	issuerURL, err := config.oauth2IssuerURL(httpServer)
+	issuerURL, err := config.issuerURL(httpServer)
 	if err != nil {
 		return err
 	}
@@ -219,6 +221,19 @@ func (s *Server) initHttpServer(config *Config) error {
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	s.oauth2IssuerURL = issuerURL
+	return nil
+}
+
+func (s *Server) initTelemetry(config *Config) error {
+	telemetryConfig, err := config.toTelemetryConfig(s.httpServer)
+	if err != nil {
+		return err
+	}
+	shutdown, err := telemetryConfig.Apply()
+	if err != nil {
+		return err
+	}
+	s.shutdownTelemetry = shutdown
 	return nil
 }
 
