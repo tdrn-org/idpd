@@ -37,7 +37,7 @@ func (s *Server) runJobs() {
 }
 
 func (s *Server) runRefreshSessionsJob(ctx context.Context) {
-	traceCtx, span := s.tracer.Start(ctx, "runDeleteExpiredJob")
+	traceCtx, span := s.tracer.Start(ctx, "runRefreshSessionsJob")
 	defer span.End()
 
 	expiry := time.Now().Add(2 * serverJobTickerSchedule).UnixMicro()
@@ -56,12 +56,15 @@ func (s *Server) refreshUserSession(ctx context.Context, session *database.UserS
 		return trace.RecordError(span, err)
 	}
 	token, err := tokenSource.Token()
-	if err != nil {
+	var refreshed bool
+	if err == nil {
+		refreshed = session.Refresh(token)
+	} else {
 		trace.RecordError(span, err)
-		slog.Warn("unable to refresh user session token", slog.String("id", session.ID), slog.Any("err", err))
-		return nil
+		slog.Warn("unable to refresh user session token; invalidating session", slog.String("id", session.ID), slog.Any("err", err))
+		session.SessionExpiry = time.Now().UnixMilli()
+		refreshed = true
 	}
-	refreshed := session.Refresh(token)
 	if refreshed {
 		err = s.database.RefreshUserSession(traceCtx, session)
 		if err != nil {
