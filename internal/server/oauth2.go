@@ -151,6 +151,7 @@ type OAuth2ProviderConfig struct {
 	SigningKeyAlgorithm      jose.SignatureAlgorithm
 	SigningKeyLifetime       time.Duration
 	SigningKeyExpiry         time.Duration
+	CryptoSeed               string
 }
 
 func (config *OAuth2ProviderConfig) NewProvider(database database.Driver, userStore userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
@@ -164,8 +165,13 @@ func (config *OAuth2ProviderConfig) NewProvider(database database.Driver, userSt
 		opClients:           make(map[string]opClient, 0),
 		tracer:              otel.Tracer(reflect.TypeFor[OAuth2Provider]().PkgPath()),
 	}
+	cryptoSeed := config.CryptoSeed
+	if cryptoSeed == "" {
+		slog.Warn("using random crypto seed; stored tokens will inaccessible after restart")
+		cryptoSeed = rand.Text()
+	}
 	opConfig := &op.Config{
-		CryptoKey:                sha256.Sum256([]byte(rand.Text())),
+		CryptoKey:                sha256.Sum256([]byte(cryptoSeed)),
 		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURL.String(),
 		CodeMethodS256:           true,
 		AuthMethodPost:           true,
@@ -437,7 +443,7 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromOpAuthRequest(ctx contex
 	return accessToken.ID, refreshToken.ID, time.UnixMicro(accessToken.Expiry), nil
 }
 
-func (p *OAuth2Provider) createAccessAndRefreshTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest, currentRefreshToken string) (string, string, time.Time, error) {
+func (p *OAuth2Provider) createAccessAndRefreshTokenFromTokenExchangeRequest(ctx context.Context, tokenExchangeRequest op.TokenExchangeRequest, _ string) (string, string, time.Time, error) {
 	refreshTokenID := database.NewOAuth2RefreshTokenID()
 	accessToken := database.NewOAuth2TokenFromTokenExchangeRequest(tokenExchangeRequest, refreshTokenID)
 	refreshToken := database.NewOAuth2RefreshTokenFromTokenExchangeRequest(refreshTokenID, accessToken.ID, tokenExchangeRequest)
