@@ -26,6 +26,8 @@ func RecordError(span oteltrace.Span, err error) error {
 		span.RecordError(err)
 		source := GetCallerSource()
 		span.SetStatus(codes.Error, source+" "+err.Error())
+	} else {
+		span.SetStatus(codes.Ok, "")
 	}
 	return err
 }
