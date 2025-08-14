@@ -86,8 +86,15 @@ CREATE TABLE signing_key(
     algorithm TEXT,
     private_key BLOB,
     public_key BLOB,
-    passivation INTEGER,
-    expiry INTEGER
+    create_time INTEGER
+);
+CREATE TABLE encryption_key(
+    id TEXT PRIMARY KEY,
+    key_group TEXT,
+    key_type TEXT,
+    hash_key BLOB,
+    block_key BLOB,
+    create_time INTEGER
 );
 CREATE TABLE user_session_request(
     id TEXT PRIMARY KEY,

@@ -30,6 +30,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
+	servercrypto "github.com/tdrn-org/idpd/internal/server/crypto"
 	"github.com/tdrn-org/idpd/internal/trace"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"go.opentelemetry.io/otel"
@@ -44,7 +47,8 @@ const WebAuthnKey string = "webauthn"
 
 type GenerateChallengeFunc func(ctx context.Context, subject string) (string, error)
 type VerifyChallengeResponseFunc func(ctx context.Context, subject string, challenge string, response string) (bool, error)
-type GenerateSigningKeyFunc func(algorithm string) (*SigningKey, error)
+type GenerateSigningKeyFunc func(algorithm jose.SignatureAlgorithm) (*SigningKey, error)
+type GenerateEncryptionKeyFunc func(keyType servercrypto.SymetricKeyType, keyGroup string) (*EncryptionKey, error)
 type RefreshUserSession func(ctx context.Context, session *UserSession) error
 
 type Driver interface {
@@ -68,7 +72,8 @@ type Driver interface {
 	DeleteOAuth2TokensBySubject(ctx context.Context, applicationID string, subject string) error
 	DeleteOAuth2RefreshToken(ctx context.Context, id string) error
 	DeleteExpiredOAuth2RefreshTokens(ctx context.Context) error
-	RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error)
+	RotateSigningKeys(ctx context.Context, algorithm jose.SignatureAlgorithm, now int64, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error)
+	InstanciateEncryptionKey(ctx context.Context, keyGroup string, keyType servercrypto.SymetricKeyType, generateEncryptionKey GenerateEncryptionKeyFunc) (*EncryptionKey, error)
 	TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error)
 	DeleteExpiredUserSessionRequests(ctx context.Context) error
 	SelectUserSession(ctx context.Context, id string) (*UserSession, error)
@@ -1092,7 +1097,7 @@ func (d *databaseDriver) DeleteExpiredOAuth2RefreshTokens(ctx context.Context) e
 	return trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 }
 
-func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error) {
+func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm jose.SignatureAlgorithm, now int64, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error) {
 	traceCtx, span := d.tracer.Start(ctx, "RotateSigningKeys")
 	defer span.End()
 
@@ -1100,23 +1105,23 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 	if err != nil {
 		return nil, trace.RecordError(span, err)
 	}
-	now := time.Now().UnixMicro()
+	expiryCreateTime := time.UnixMicro(now).Add(-1 * serverconf.LookupRuntime().SigningKeyExpiry).UnixMicro()
 	// Delete expired keys
-	err = d.execTx(tx, txCtx, "DELETE FROM signing_key WHERE expiry<$1", now)
+	err = d.execTx(tx, txCtx, "DELETE FROM signing_key WHERE create_time < $1", expiryCreateTime)
 	if err != nil {
 		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
-	// Select current keys and check for current key
+	// Select available keys and identify the active one
 	signingKeys, err := d.selectSigningKeys(tx, ctx)
 	if err != nil {
 		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
 	var activeSigningKey *SigningKey
 	for _, signingKey := range signingKeys {
-		if signingKey.Algorithm != algorithm {
+		if signingKey.Algorithm != string(algorithm) {
 			continue
 		}
-		if now <= signingKey.Passivation {
+		if signingKey.IsActive(now) {
 			activeSigningKey = signingKey
 		}
 		break
@@ -1125,7 +1130,7 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 	if activeSigningKey != nil {
 		return signingKeys, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
 	}
-	// Generate and insert new key
+	// Generate and insert new key otherwise
 	newSigningKey, err := generateSigningKey(algorithm)
 	if err != nil {
 		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
@@ -1135,10 +1140,9 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 		newSigningKey.Algorithm,
 		newSigningKey.PrivateKey,
 		newSigningKey.PublicKey,
-		newSigningKey.Passivation,
-		newSigningKey.Expiry,
+		newSigningKey.CreateTime,
 	}
-	err = d.execTx(tx, txCtx, "INSERT INTO signing_key (id,algorithm,private_key,public_key,passivation,expiry) VALUES($1,$2,$3,$4,$5,$6)", args...)
+	err = d.execTx(tx, txCtx, "INSERT INTO signing_key (id,algorithm,private_key,public_key,create_time) VALUES($1,$2,$3,$4,$5)", args...)
 	if err != nil {
 		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
 	}
@@ -1151,12 +1155,12 @@ func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm string
 }
 
 func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (SigningKeys, error) {
-	rows, err := d.queryTx(tx, txCtx, "SELECT id,algorithm,private_key,public_key,passivation,expiry FROM signing_key ORDER BY passivation,expiry DESC")
+	rows, err := d.queryTx(tx, txCtx, "SELECT id,algorithm,private_key,public_key,create_time FROM signing_key ORDER BY create_time DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	signingKeys := SigningKeys(make([]*SigningKey, 0))
+	signingKeys := SigningKeys(make(SigningKeys, 0))
 	for rows.Next() {
 		signingKey := &SigningKey{}
 		args := []any{
@@ -1164,8 +1168,7 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 			&signingKey.Algorithm,
 			&signingKey.PrivateKey,
 			&signingKey.PublicKey,
-			&signingKey.Passivation,
-			&signingKey.Expiry,
+			&signingKey.CreateTime,
 		}
 		err = rows.Scan(args...)
 		if err != nil {
@@ -1174,6 +1177,75 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 		signingKeys = append(signingKeys, signingKey)
 	}
 	return signingKeys, nil
+}
+
+func (d *databaseDriver) InstanciateEncryptionKey(ctx context.Context, keyGroup string, keyType servercrypto.SymetricKeyType, generateEncryptionKey GenerateEncryptionKeyFunc) (*EncryptionKey, error) {
+	traceCtx, span := d.tracer.Start(ctx, "TransformAndDeleteUserSessionRequest")
+	defer span.End()
+
+	tx, txCtx, err := d.beginTx(traceCtx)
+	if err != nil {
+		return nil, trace.RecordError(span, err)
+	}
+	encryptionKeys, err := d.selectEncryptionKeys(tx, txCtx, keyGroup)
+	if err != nil {
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
+	}
+	switch len(encryptionKeys) {
+	case 0:
+	case 1:
+		return encryptionKeys[0], trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
+	default:
+		return nil, trace.RecordError(span, d.rollbackTx(tx, fmt.Errorf("non-unique key group: %s", keyGroup)))
+	}
+	encryptionKey, err := generateEncryptionKey(keyType, keyGroup)
+	if err != nil {
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
+	}
+	err = d.insertEncryptionKey(tx, txCtx, encryptionKey)
+	if err != nil {
+		return nil, trace.RecordError(span, d.rollbackTx(tx, err))
+	}
+	return encryptionKey, trace.RecordError(span, d.commitTx(tx, traceCtx == txCtx))
+}
+
+func (d *databaseDriver) selectEncryptionKeys(tx *sql.Tx, txCtx context.Context, keyGroup string) (EncryptionKeys, error) {
+	rows, err := d.queryTx(tx, txCtx, "SELECT id,key_type,hash_key,block_key,create_time FROM encryption_key WHERE key_group=$1 ORDER BY create_time DESC", keyGroup)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	encryptionKeys := EncryptionKeys(make(EncryptionKeys, 0))
+	for rows.Next() {
+		encryptionKey := &EncryptionKey{
+			KeyGroup: keyGroup,
+		}
+		args := []any{
+			&encryptionKey.ID,
+			&encryptionKey.KeyType,
+			&encryptionKey.HashKey,
+			&encryptionKey.BlockKey,
+			&encryptionKey.CreateTime,
+		}
+		err = rows.Scan(args...)
+		if err != nil {
+			return nil, fmt.Errorf("select encryption key failure (cause: %w)", err)
+		}
+		encryptionKeys = append(encryptionKeys, encryptionKey)
+	}
+	return encryptionKeys, nil
+}
+
+func (d *databaseDriver) insertEncryptionKey(tx *sql.Tx, txCtx context.Context, encryptionKey *EncryptionKey) error {
+	args := []any{
+		encryptionKey.ID,
+		encryptionKey.KeyGroup,
+		encryptionKey.KeyType,
+		encryptionKey.HashKey,
+		encryptionKey.BlockKey,
+		encryptionKey.CreateTime,
+	}
+	return d.execTx(tx, txCtx, "INSERT INTO encryption_key (id,key_group,key_type,hash_key,block_key,create_time) VALUES($1,$2,$3,$4,$5,$6)", args...)
 }
 
 func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error) {

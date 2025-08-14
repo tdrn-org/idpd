@@ -35,6 +35,7 @@ import (
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server"
 	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
+	servercrypto "github.com/tdrn-org/idpd/internal/server/crypto"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/geoip"
 	"github.com/tdrn-org/idpd/internal/server/mail"
@@ -96,7 +97,7 @@ func startConfig(ctx context.Context, config *Config) (*Server, error) {
 	return s, nil
 }
 
-const sessionCookiePath = "/session"
+const sessionCookiePath string = "/session"
 
 type Server struct {
 	httpServer        *httpserver.Instance
@@ -195,16 +196,12 @@ func (s *Server) initAndStart(config *Config) error {
 }
 
 func (s *Server) initServerConf(config *Config) error {
-	defaultRuntime := serverconf.LookupRuntime()
 	runtime := &serverconf.Runtime{
-		SessionLifetime: config.Server.SessionLifetime.Duration,
-		RequestLifetime: config.Server.RequestLifetime.Duration,
-		TokenLifetime:   config.Server.TokenLifetime.Duration,
-		CryptoSeed:      config.Server.CryptoSeed,
-	}
-	if runtime.CryptoSeed == "" {
-		slog.Warn("using random crypto seed; persisted cookies/tokens will inaccessible after restart")
-		runtime.CryptoSeed = defaultRuntime.CryptoSeed
+		SessionLifetime:    config.Server.SessionLifetime.Duration,
+		RequestLifetime:    config.Server.RequestLifetime.Duration,
+		TokenLifetime:      config.Server.TokenLifetime.Duration,
+		SigningKeyLifetime: config.OAuth2.SigningKeyLifetime.Duration,
+		SigningKeyExpiry:   config.OAuth2.SigningKeyExpiry.Duration,
 	}
 	runtime.Bind()
 	return nil
@@ -343,8 +340,17 @@ func (s *Server) initUserStore(config *Config) error {
 func (s *Server) initOAuth2Provider(config *Config) error {
 	issuerURL := s.oauth2IssuerURL
 	logger := slog.With(slog.String("issuer", issuerURL.String()))
-	opOpts := make([]op.Option, 0, 2)
+	opOpts := make([]op.Option, 0, 3)
 	opOpts = append(opOpts, op.WithLogger(logger))
+	cryptoKey, err := s.database.InstanciateEncryptionKey(context.Background(), "oauth2CryptoKey", servercrypto.SymetricKeyTypeAES256SHA256, database.NewEncryptionKey)
+	if err != nil {
+		return err
+	}
+	opCrypto, err := cryptoKey.OpCrypto()
+	if err != nil {
+		return err
+	}
+	opOpts = append(opOpts, op.WithCrypto(opCrypto))
 	if ServerProtocol(issuerURL.Scheme) == ServerProtocolHttp {
 		opOpts = append(opOpts, op.WithAllowInsecure())
 	}

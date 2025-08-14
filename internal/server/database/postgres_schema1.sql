@@ -86,8 +86,15 @@ CREATE TABLE signing_key(
     algorithm TEXT,
     private_key BYTEA,
     public_key BYTEA,
-    passivation BIGINT,
-    expiry BIGINT
+    create_time BIGINT
+);
+CREATE TABLE encryption_key(
+    id TEXT PRIMARY KEY,
+    key_group TEXT,
+    key_type TEXT,
+    hash_key BYTEA,
+    block_key BYTEA,
+    create_time BIGINT
 );
 CREATE TABLE user_session_request(
     id TEXT PRIMARY KEY,

@@ -18,8 +18,6 @@ package database_test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"log/slog"
 	"path/filepath"
 	"testing"
@@ -264,20 +262,13 @@ func oauth2RefreshToken(t *testing.T, d database.Driver) {
 }
 
 func signingKey(t *testing.T, d database.Driver) {
-	generateSigningKey := func(algorithm string) (*database.SigningKey, error) {
-		privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		require.NoError(t, err)
-		publicKey := &privateKey.PublicKey
-		now := time.Now()
-		passivation := now.Add(time.Second).UnixMicro()
-		expiry := now.Add(10 * time.Second).UnixMicro()
-		return database.NewSigningKey(algorithm, privateKey, publicKey, passivation, expiry)
-	}
 	ctx := t.Context()
-	signingKeys0, err := d.RotateSigningKeys(ctx, string(jose.RS256), generateSigningKey)
+
+	now := time.Now().UnixMicro()
+	signingKeys0, err := d.RotateSigningKeys(ctx, jose.RS256, now, database.NewSigningKeyForAlgorithm)
 	require.NoError(t, err)
 	require.Len(t, signingKeys0, 1)
-	signingKeys1, err := d.RotateSigningKeys(ctx, string(jose.PS256), generateSigningKey)
+	signingKeys1, err := d.RotateSigningKeys(ctx, jose.PS256, now, database.NewSigningKeyForAlgorithm)
 	require.NoError(t, err)
 	require.Len(t, signingKeys1, 2)
 }

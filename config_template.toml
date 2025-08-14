@@ -43,7 +43,6 @@
 #request_lifetime = "5m"
 # token lifetime
 #token_lifetime = "60m"
-#crypto_seed = ""
 
 [mail]
 #address = "localhost:587"

@@ -18,7 +18,6 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -33,7 +32,6 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd/httpserver"
-	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/trace"
@@ -149,24 +147,20 @@ type OAuth2ProviderConfig struct {
 	IssuerURL                *url.URL
 	DefaultLogoutRedirectURL *url.URL
 	SigningKeyAlgorithm      jose.SignatureAlgorithm
-	SigningKeyLifetime       time.Duration
-	SigningKeyExpiry         time.Duration
-	CryptoSeed               string
+	CryptoKey                [32]byte
 }
 
-func (config *OAuth2ProviderConfig) NewProvider(database database.Driver, userStore userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
+func (config *OAuth2ProviderConfig) NewProvider(databaseDriver database.Driver, userStore userstore.Backend, opOpts ...op.Option) (*OAuth2Provider, error) {
 	provider := &OAuth2Provider{
 		issuerURL:           config.IssuerURL,
-		database:            database,
+		database:            databaseDriver,
 		userStore:           userStore,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
-		signingKeyLifetime:  config.SigningKeyLifetime,
-		signingKeyExpiry:    config.SigningKeyExpiry,
 		opClients:           make(map[string]opClient, 0),
 		tracer:              otel.Tracer(reflect.TypeFor[OAuth2Provider]().PkgPath()),
 	}
 	opConfig := &op.Config{
-		CryptoKey:                sha256.Sum256([]byte(serverconf.LookupRuntime().CryptoSeed)),
+		CryptoKey:                config.CryptoKey,
 		DefaultLogoutRedirectURI: config.DefaultLogoutRedirectURL.String(),
 		CodeMethodS256:           true,
 		AuthMethodPost:           true,
@@ -195,8 +189,6 @@ type OAuth2Provider struct {
 	database            database.Driver
 	userStore           userstore.Backend
 	signingKeyAlgorithm jose.SignatureAlgorithm
-	signingKeyLifetime  time.Duration
-	signingKeyExpiry    time.Duration
 	opClients           map[string]opClient
 	opProvider          *op.Provider
 	tracer              oteltrace.Tracer
@@ -545,9 +537,8 @@ func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 	traceCtx, span := p.tracer.Start(ctx, "SigningKey")
 	defer span.End()
 
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-	signingKeys, err := p.database.RotateSigningKeys(traceCtx, string(p.signingKeyAlgorithm), p.generateSigningKey)
+	now := time.Now().UnixMicro()
+	signingKeys, err := p.database.RotateSigningKeys(traceCtx, p.signingKeyAlgorithm, now, database.NewSigningKeyForAlgorithm)
 	if err != nil {
 		return nil, trace.RecordError(span, err)
 	}
@@ -559,22 +550,15 @@ func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 	return nil, trace.RecordError(span, ErrNoSigningKey)
 }
 
-func (p *OAuth2Provider) generateSigningKey(algorithm string) (*database.SigningKey, error) {
-	now := time.Now()
-	passivation := now.Add(p.signingKeyLifetime).UnixMicro()
-	expiry := now.Add(p.signingKeyExpiry).UnixMicro()
-	return SigningKeyForAlgorithm(jose.SignatureAlgorithm(algorithm), passivation, expiry)
-}
-
 func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
 	traceCtx, span := p.tracer.Start(ctx, "SignatureAlgorithms")
 	defer span.End()
 
-	signingKeys, err := p.database.RotateSigningKeys(traceCtx, string(p.signingKeyAlgorithm), p.generateSigningKey)
+	now := time.Now().UnixMicro()
+	signingKeys, err := p.database.RotateSigningKeys(traceCtx, p.signingKeyAlgorithm, now, database.NewSigningKeyForAlgorithm)
 	if err != nil {
 		return nil, trace.RecordError(span, err)
 	}
-	now := time.Now().UnixMicro()
 	algorithms := make(map[string]jose.SignatureAlgorithm, 0)
 	for _, signingKey := range signingKeys {
 		if !signingKey.IsActive(now) {
@@ -589,7 +573,8 @@ func (p *OAuth2Provider) KeySet(ctx context.Context) ([]op.Key, error) {
 	traceCtx, span := p.tracer.Start(ctx, "KeySet")
 	defer span.End()
 
-	signingKeys, err := p.database.RotateSigningKeys(traceCtx, string(p.signingKeyAlgorithm), p.generateSigningKey)
+	now := time.Now().UnixMicro()
+	signingKeys, err := p.database.RotateSigningKeys(traceCtx, p.signingKeyAlgorithm, now, database.NewSigningKeyForAlgorithm)
 	if err != nil {
 		return nil, trace.RecordError(span, err)
 	}

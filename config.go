@@ -60,7 +60,6 @@ type Config struct {
 		SessionLifetime DurationSpec   `toml:"session_lifetime"`
 		RequestLifetime DurationSpec   `toml:"request_lifetime"`
 		TokenLifetime   DurationSpec   `toml:"token_lifetime"`
-		CryptoSeed      string         `toml:"crypto_seed"`
 	} `toml:"server"`
 	Mail struct {
 		Address     string `toml:"address"`
@@ -425,9 +424,6 @@ func (c *Config) toOAuth2ProviderConfig(httpServer *httpserver.Instance) (*serve
 		IssuerURL:                issuerURL,
 		DefaultLogoutRedirectURL: defaultLogoutRedirectURL,
 		SigningKeyAlgorithm:      jose.SignatureAlgorithm(c.OAuth2.SigningKeyAlgorithm),
-		SigningKeyLifetime:       c.OAuth2.SigningKeyLifetime.Duration,
-		SigningKeyExpiry:         c.OAuth2.SigningKeyExpiry.Duration,
-		CryptoSeed:               c.Server.CryptoSeed,
 	}
 	return oauth2ProviderConfig, nil
 }

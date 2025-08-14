@@ -16,7 +16,6 @@ session_cookie = "idpd_session"
 session_lifetime = "1h"
 request_lifetime = "30m"
 token_lifetime = "2h"
-crypto_seed = "a-very-random-and-secret-text-phrase"
 
 [mail]
 address = "smtp.example.org:25"

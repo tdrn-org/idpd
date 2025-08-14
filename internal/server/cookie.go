@@ -17,33 +17,25 @@
 package server
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"log/slog"
 	"net/http"
 
-	"github.com/gorilla/securecookie"
 	"github.com/tdrn-org/go-conf"
 	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
 )
 
 type CookieHandler struct {
-	name         string
-	path         string
-	secure       bool
-	sameSite     http.SameSite
-	maxAge       int
-	secureCookie *securecookie.SecureCookie
+	name     string
+	path     string
+	secure   bool
+	sameSite http.SameSite
+	maxAge   int
 }
 
 func NewCookieHandler(name string, path string, secure bool, sameSite http.SameSite) *CookieHandler {
-	cryptoSeed := sha256.Sum256([]byte(serverconf.LookupRuntime().CryptoSeed))
-	secureCookie := securecookie.New(cryptoSeed[:], nil)
 	h := &CookieHandler{
-		name:         name,
-		path:         path,
-		secure:       secure,
-		secureCookie: secureCookie,
+		name:   name,
+		path:   path,
+		secure: secure,
 	}
 	serverconf.BindToRuntime(h.applyRuntimeConfig)
 	return h
@@ -54,13 +46,9 @@ func (h *CookieHandler) applyRuntimeConfig(configuration conf.Configuration) {
 }
 
 func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) error {
-	encodedValue, err := h.secureCookie.Encode(h.name, value)
-	if err != nil {
-		return fmt.Errorf("failed to encode cookie (cause: %w)", err)
-	}
 	cookie := &http.Cookie{
 		Name:     h.name,
-		Value:    encodedValue,
+		Value:    value,
 		Path:     h.path,
 		MaxAge:   maxAge,
 		Secure:   h.secure,
@@ -84,13 +72,7 @@ func (h *CookieHandler) Get(r *http.Request) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	var decodedValue string
-	err = h.secureCookie.Decode(h.name, cookie.Value, &decodedValue)
-	if err != nil {
-		slog.Warn("failed to decode cookie; ignoring it", slog.Any("err", err))
-		return "", false
-	}
-	return decodedValue, true
+	return cookie.Value, true
 }
 
 func (h *CookieHandler) Delete(w http.ResponseWriter) {

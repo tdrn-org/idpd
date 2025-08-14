@@ -20,7 +20,6 @@ session_cookie = "idpd_session"
 session_lifetime = "720h"
 request_lifetime = "5m"
 token_lifetime = "60m"
-crypto_seed = ""
 
 [mail]
 address = "localhost:587"
