@@ -651,12 +651,9 @@ func (p *OAuth2Provider) SetUserinfoFromRequest(ctx context.Context, userInfo *o
 }
 
 func (p *OAuth2Provider) setUserInfoFromSubject(ctx context.Context, userInfo *oidc.UserInfo, subject string, scopes []string) error {
-	_, span := p.tracer.Start(ctx, "setUserInfoFromSubject")
-	defer span.End()
-
 	user, err := p.userStore.LookupUser(subject)
 	if err != nil {
-		return trace.RecordError(span, err)
+		return err
 	}
 	user.SetUserInfo(userInfo, scopes)
 	return nil

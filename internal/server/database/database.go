@@ -1180,7 +1180,7 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 }
 
 func (d *databaseDriver) InstanciateEncryptionKey(ctx context.Context, keyGroup string, keyType servercrypto.SymetricKeyType, generateEncryptionKey GenerateEncryptionKeyFunc) (*EncryptionKey, error) {
-	traceCtx, span := d.tracer.Start(ctx, "TransformAndDeleteUserSessionRequest")
+	traceCtx, span := d.tracer.Start(ctx, "InstanciateEncryptionKey")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
