@@ -175,3 +175,6 @@ group.members = "member"
 #protocol = "http"
 #batch_timeout = "5s"
 #export_timeout = "30s"
+
+[tracing.headers]
+#X-Scope-OrgID = "tenant id"

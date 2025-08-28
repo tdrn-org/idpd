@@ -133,3 +133,6 @@ endpoint_url = "http://collector.example.org:4318"
 protocol = "gRPC"
 batch_timeout = "1s"
 export_timeout = "10s"
+[tracing.headers]
+header_a = "value a"
+header_b = "value b"

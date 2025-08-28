@@ -135,5 +135,6 @@ signing_key_expiry = "24h"
 enabled = false
 endpoint_url = "http://localhost:4318"
 protocol = "http"
+
 batch_timeout = "5s"
 export_timeout = "30s"

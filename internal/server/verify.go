@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/tdrn-org/idpd/internal/server/database"
+	"github.com/tdrn-org/idpd/internal/server/geoip"
 )
 
 type VerifyMethod string
@@ -40,6 +41,14 @@ type VerifyHandler interface {
 	Tainted() bool
 	GenerateChallenge(ctx context.Context, subject string) (string, error)
 	VerifyResponse(ctx context.Context, subject string, challenge string, response string) (bool, error)
+}
+
+func VerifyHandlerContext(ctx context.Context, handler VerifyHandler, location *geoip.Location) context.Context {
+	return context.WithValue(ctx, handler, location)
+}
+
+func VerifyHandlerContextValue(ctx context.Context, handler VerifyHandler) *geoip.Location {
+	return ctx.Value(handler).(*geoip.Location)
 }
 
 func NoneVerifyHandler() VerifyHandler {

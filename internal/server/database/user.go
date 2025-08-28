@@ -22,6 +22,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
+	"github.com/tdrn-org/idpd/internal/server/geoip"
 	"golang.org/x/oauth2"
 )
 
@@ -115,14 +116,19 @@ type UserVerificationLog struct {
 	Lon         float64
 }
 
-func NewUserVerificationLog(subject string, method string, host string) *UserVerificationLog {
+func NewUserVerificationLog(subject string, method string, location *geoip.Location) *UserVerificationLog {
 	now := time.Now().UnixMicro()
 	return &UserVerificationLog{
-		Subject:   subject,
-		Method:    method,
-		FirstUsed: now,
-		LastUsed:  now,
-		Host:      host,
+		Subject:     subject,
+		Method:      method,
+		FirstUsed:   now,
+		LastUsed:    now,
+		Host:        location.Host,
+		Country:     location.Country,
+		CountryCode: location.CountryCode,
+		City:        location.City,
+		Lon:         location.Lon,
+		Lat:         location.Lat,
 	}
 }
 
@@ -132,8 +138,8 @@ func (l *UserVerificationLog) Update(log *UserVerificationLog) {
 	l.Country = log.Country
 	l.CountryCode = log.CountryCode
 	l.City = log.City
-	l.Lat = log.Lat
 	l.Lon = log.Lon
+	l.Lat = log.Lat
 }
 
 type UserTOTPRegistrationRequest struct {

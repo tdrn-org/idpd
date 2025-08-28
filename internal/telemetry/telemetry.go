@@ -40,6 +40,7 @@ type Config struct {
 	Protocol      string
 	BatchTimeout  time.Duration
 	ExportTimeout time.Duration
+	Headers       map[string]string
 }
 
 func (c *Config) Apply() (func(context.Context) error, error) {
@@ -72,10 +73,13 @@ func (c *Config) Apply() (func(context.Context) error, error) {
 }
 
 func (c *Config) newHttpExporter() (*otlptrace.Exporter, error) {
-	opts := make([]otlptracehttp.Option, 0, 2)
+	opts := make([]otlptracehttp.Option, 0, 3)
 	opts = append(opts, otlptracehttp.WithEndpointURL(c.EndpointURL.String()))
 	if c.EndpointURL.Scheme == "http" {
 		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+	if len(c.Headers) > 0 {
+		opts = append(opts, otlptracehttp.WithHeaders(c.Headers))
 	}
 	exporter, err := otlptracehttp.New(context.Background(), opts...)
 	if err != nil {
@@ -89,6 +93,9 @@ func (c *Config) newGRPCExporter() (*otlptrace.Exporter, error) {
 	opts = append(opts, otlptracegrpc.WithEndpointURL(c.EndpointURL.String()))
 	if c.EndpointURL.Scheme == "http" {
 		opts = append(opts, otlptracegrpc.WithInsecure())
+	}
+	if len(c.Headers) > 0 {
+		opts = append(opts, otlptracegrpc.WithHeaders(c.Headers))
 	}
 	exporter, err := otlptracegrpc.New(context.Background(), opts...)
 	if err != nil {

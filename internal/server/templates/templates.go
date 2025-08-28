@@ -24,5 +24,11 @@ var FS embed.FS
 const VerficationCodeTemplate = "verification_code.tmpl"
 
 type VerificationCodeData struct {
-	Code string
+	Code        string
+	Host        string
+	Country     string
+	CountryCode string
+	City        string
+	Lon         string
+	Lat         string
 }

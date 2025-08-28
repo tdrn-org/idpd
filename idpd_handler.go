@@ -163,18 +163,19 @@ func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		trace.RecordError(span, err)
 		slog.Warn("failed to process authenticate session request", slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
+		s.redirectAlert(w, traceR, AlertLoginFailure)
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
-	redirectURL, err := s.oauth2Provider.Authenticate(traceCtx, id, subject, password, verifyHandler, remember)
+	verifyHandlerCtx := s.verifyHandlerContext(traceCtx, verifyHandler, r)
+	redirectURL, err := s.oauth2Provider.Authenticate(verifyHandlerCtx, id, subject, password, verifyHandler, remember)
 	if err != nil {
 		trace.RecordError(span, err)
 		slog.Warn("failed to authenticate OAuth2 session", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
+		s.redirectAlert(w, traceR, AlertLoginFailure)
 		return
 	}
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+	http.Redirect(w, traceR, redirectURL, http.StatusFound)
 }
 
 func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
@@ -216,24 +217,23 @@ func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
-	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 	id, subject, verification, response, err := s.parseVerifyForm(traceR)
 	if err != nil {
 		trace.RecordError(span, err)
 		slog.Warn("failed to process verify session request", slog.Any("err", err))
-		s.redirectAlert(w, r, AlertLoginFailure)
+		s.redirectAlert(w, traceR, AlertLoginFailure)
 		return
 	}
 	verifyHandler := s.getVerifyHandler(verification)
-	userVerificationCtx := s.contextWithUserVerificationLog(traceCtx, subject, verifyHandler, remoteIP)
-	redirectURL, err := s.oauth2Provider.Verify(userVerificationCtx, id, subject, verifyHandler, response)
+	verifyHandlerCtx := s.verifyHandlerContext(traceCtx, verifyHandler, r)
+	redirectURL, err := s.oauth2Provider.Verify(verifyHandlerCtx, id, subject, verifyHandler, response)
 	if err != nil {
 		trace.RecordError(span, err)
 		slog.Warn("failed to verify OAuth2 session", slog.String("id", id), slog.String("subject", subject), slog.Any("err", err))
 		s.redirectAlert(w, r, AlertLoginFailure)
 		return
 	}
-	http.Redirect(w, r, redirectURL, http.StatusFound)
+	http.Redirect(w, traceR, redirectURL, http.StatusFound)
 }
 
 func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, string, error) {
@@ -344,9 +344,8 @@ func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	verifyHandler := server.NewTOTPVerifyHandler(s.totpProvider, s.database, true)
-	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
-	userVerificationCtx := s.contextWithUserVerificationLog(traceCtx, session.Subject, verifyHandler, remoteIP)
-	registration, err := s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(userVerificationCtx, session.Subject, verifyHandler.VerifyResponse, response)
+	verifyHandlerCtx := s.verifyHandlerContext(traceCtx, verifyHandler, r)
+	registration, err := s.database.VerifyAndTransformUserTOTPRegistrationRequestToRegistration(verifyHandlerCtx, session.Subject, verifyHandler.VerifyResponse, response)
 	if err != nil {
 		trace.RecordError(span, err)
 		slog.Warn("failed to verify/transform user TOTP registration", slog.String("subject", session.Subject), slog.Any("err", err))
@@ -427,19 +426,16 @@ func (s *Server) userSessionClient(r *http.Request) (*database.UserSession, *htt
 	return session, client, nil
 }
 
-func (s *Server) contextWithUserVerificationLog(ctx context.Context, subject string, verifyHandler server.VerifyHandler, remoteIP string) context.Context {
-	userVerificationLog := database.NewUserVerificationLog(subject, string(verifyHandler.Method()), remoteIP)
+func (s *Server) verifyHandlerContext(ctx context.Context, verifyHandler server.VerifyHandler, r *http.Request) context.Context {
+	remoteIP := trace.GetHttpRequestRemoteIP(r)
 	remoteLocation, err := s.locationService.Lookup(remoteIP)
 	if err != nil {
 		slog.Error("failed to lookup location info", slog.String("remoteIP", remoteIP), slog.Any("err", err))
-	} else if remoteLocation != geoip.NoLocation {
-		userVerificationLog.Country = remoteLocation.Country
-		userVerificationLog.CountryCode = remoteLocation.CountryCode
-		userVerificationLog.City = remoteLocation.City
-		userVerificationLog.Lat = remoteLocation.Lat
-		userVerificationLog.Lon = remoteLocation.Lon
+		remoteLocation = &geoip.Location{
+			Host: remoteIP,
+		}
 	}
-	return context.WithValue(ctx, verifyHandler, userVerificationLog)
+	return server.VerifyHandlerContext(ctx, verifyHandler, remoteLocation)
 }
 
 type Alert string

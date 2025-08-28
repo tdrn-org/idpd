@@ -17,6 +17,7 @@
 package mail
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -29,25 +30,32 @@ import (
 
 	"github.com/tdrn-org/go-conf"
 	"github.com/tdrn-org/go-tlsconf/tlsclient"
-	gomail "gopkg.in/gomail.v2"
+	"github.com/wneessen/go-mail"
 )
 
 type MailConfig struct {
-	Address     string
-	User        string
-	Password    string
-	FromAddress string
-	FromName    string
+	Address          string
+	User             string
+	Password         string
+	FromAddress      string
+	FromName         string
+	OpportunisticTLS bool
 }
 
 func (c *MailConfig) NewMailer() (*Mailer, error) {
 	host, portString, err := net.SplitHostPort(c.Address)
+	port := 0
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse SMTP server address '%s' (cause: %w)", c.Address, err)
+		host = c.Address
+	} else {
+		port, err = strconv.Atoi(portString)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse Mail server port '%s' (cause: %w)", portString, err)
+		}
 	}
-	port, err := strconv.Atoi(portString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse SMTP server port '%s' (cause: %w)", portString, err)
+	tlsPolicy := mail.TLSMandatory
+	if c.OpportunisticTLS {
+		tlsPolicy = mail.TLSOpportunistic
 	}
 	logger := slog.With("address", c.Address)
 	mailer := &Mailer{
@@ -57,9 +65,9 @@ func (c *MailConfig) NewMailer() (*Mailer, error) {
 		password:    c.Password,
 		fromAddress: c.FromAddress,
 		fromName:    c.FromName,
+		tlsPolicy:   tlsPolicy,
 		logger:      logger,
 	}
-	mailer.dialerPool.New = mailer.newDialer
 	return mailer, nil
 }
 
@@ -70,70 +78,121 @@ type Mailer struct {
 	password    string
 	fromAddress string
 	fromName    string
-	dialerPool  sync.Pool
+	tlsPolicy   mail.TLSPolicy
 	logger      *slog.Logger
+	client      *mail.Client
+	mutex       sync.Mutex
+}
+
+func (m *Mailer) getClient(reset bool) (*mail.Client, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if !reset && m.client != nil {
+		return m.client, nil
+	}
+	client, err := m.newClient()
+	if err != nil {
+		return nil, err
+	}
+	m.client = client
+	return m.client, nil
+}
+
+func (m *Mailer) newClient() (*mail.Client, error) {
+	clientTLSConfig, _ := conf.LookupConfiguration[*tlsclient.Config]()
+	options := make([]mail.Option, 0, 6)
+	if m.user != "" || m.password != "" {
+		options = append(options, mail.WithUsername(m.user), mail.WithPassword(m.password), mail.WithSMTPAuth(mail.SMTPAuthAutoDiscover))
+	}
+	tlsConfig := clientTLSConfig.Config.Clone()
+	tlsConfig.ServerName = m.host
+	options = append(options, mail.WithTLSConfig(tlsConfig), mail.WithTLSPolicy(m.tlsPolicy))
+	if m.port != 0 {
+		options = append(options, mail.WithPort(m.port))
+	}
+	client, err := mail.NewClient(m.host, options...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new Mail client (cause: %w)", err)
+	}
+	return client, nil
+}
+
+func (m *Mailer) Close() error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.client != nil {
+		return m.client.Close()
+	}
+	return nil
 }
 
 func (m *Mailer) Ping() error {
-	dialer := m.getDialer()
-	defer m.releaseDialer(dialer)
-	closer, err := dialer.Dial()
+	client, err := m.getClient(false)
 	if err != nil {
-		return fmt.Errorf("failed to connect to mail server (cause: %w)", err)
+		return err
 	}
-	closer.Close()
+	err = client.DialWithContext(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to connect to Mail server (cause: %w)", err)
+	}
 	return nil
 }
 
 func (m *Mailer) NewMessage() *MessageBuilder {
-	message := gomail.NewMessage()
-	message.SetAddressHeader("From", m.fromAddress, m.fromName)
-	return &MessageBuilder{
+	message := mail.NewMsg()
+	builder := &MessageBuilder{
 		mailer:  m,
 		message: message,
 		errs:    make([]error, 0),
 	}
+	var err error
+	if m.fromName != "" {
+		err = message.FromFormat(m.fromName, m.fromAddress)
+	} else {
+		err = message.From(m.fromAddress)
+	}
+	if err != nil {
+		builder.errs = append(builder.errs, fmt.Errorf("failed to set FROM header (cause: %w)", err))
+	}
+	return builder
 }
 
-func (m *Mailer) sendMessage(message *gomail.Message) error {
-	dialer := m.getDialer()
-	defer m.releaseDialer(dialer)
-	err := dialer.DialAndSend(message)
+func (m *Mailer) sendMessage(message *mail.Msg) error {
+	client, err := m.getClient(false)
 	if err != nil {
-		return fmt.Errorf("failed to send mail (cause: %w)", err)
+		return err
+	}
+	sendErr := client.DialAndSend(message)
+	if sendErr == nil {
+		return nil
+	}
+	resetErr := client.Reset()
+	if resetErr != nil {
+		client, err = m.getClient(true)
+	}
+	if err != nil {
+		return err
+	}
+	resendErr := client.DialAndSend(message)
+	if resendErr != nil {
+		return fmt.Errorf("failed to send mail (cause: %w)", errors.Join(sendErr, resendErr))
 	}
 	return err
 }
 
-func (m *Mailer) newDialer() any {
-	dialer := gomail.NewDialer(m.host, m.port, m.user, m.password)
-	clientTLSConfig, _ := conf.LookupConfiguration[*tlsclient.Config]()
-	dialer.TLSConfig = clientTLSConfig.Config.Clone()
-	dialer.TLSConfig.ServerName = m.host
-	return dialer
-}
-
-func (m *Mailer) getDialer() *gomail.Dialer {
-	return m.dialerPool.Get().(*gomail.Dialer)
-}
-
-func (m *Mailer) releaseDialer(dialer *gomail.Dialer) {
-	m.dialerPool.Put(dialer)
-}
-
 type MessageBuilder struct {
 	mailer  *Mailer
-	message *gomail.Message
+	message *mail.Msg
 	errs    []error
 }
 
 func (m *MessageBuilder) Subject(subject string) *MessageBuilder {
-	m.message.SetHeader("Subject", subject)
+	m.message.Subject(subject)
 	return m
 }
 
-func (m *MessageBuilder) Body(contentType string, body string) *MessageBuilder {
-	m.message.SetBody(contentType, body)
+func (m *MessageBuilder) Body(contentType mail.ContentType, body string) *MessageBuilder {
+	m.message.SetBodyString(contentType, body)
 	return m
 }
 
@@ -149,13 +208,16 @@ func (m *MessageBuilder) BodyFromHTMLTemplate(fs fs.FS, file string, data any) *
 		m.errs = append(m.errs, err)
 		return m
 	}
-	return m.Body("text/html", buffer.String())
+	return m.Body(mail.TypeTextHTML, buffer.String())
 }
 
 func (m *MessageBuilder) SendTo(address string, name string) error {
+	err := m.message.AddToFormat(name, address)
+	if err != nil {
+		m.errs = append(m.errs, err)
+	}
 	if len(m.errs) > 0 {
 		return fmt.Errorf("failed to build mail message (cause: %w)", errors.Join(m.errs...))
 	}
-	m.message.SetAddressHeader("To", address, name)
 	return m.mailer.sendMessage(m.message)
 }

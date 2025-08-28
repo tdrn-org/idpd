@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/mail"
@@ -55,7 +56,7 @@ func (h *EmailVerifyHandler) Tainted() bool {
 	return h.tainted
 }
 
-func (h *EmailVerifyHandler) GenerateChallenge(_ context.Context, subject string) (string, error) {
+func (h *EmailVerifyHandler) GenerateChallenge(ctx context.Context, subject string) (string, error) {
 	if h.tainted {
 		return taintedChallenge, nil
 	}
@@ -73,11 +74,32 @@ func (h *EmailVerifyHandler) GenerateChallenge(_ context.Context, subject string
 		return "", fmt.Errorf("no email defined for user (subject: %s)", subject)
 	}
 	userName := user.Profile.Name
-	err = h.mailer.NewMessage().Subject("Verify your login").BodyFromHTMLTemplate(templates.FS, templates.VerficationCodeTemplate, &templates.VerificationCodeData{Code: code}).SendTo(userEmail, userName)
+	templateData := h.templateData(ctx, code)
+	err = h.mailer.NewMessage().Subject("Verify your login").BodyFromHTMLTemplate(templates.FS, templates.VerficationCodeTemplate, templateData).SendTo(userEmail, userName)
 	if err != nil {
 		return "", err
 	}
 	return h.challenge(code), nil
+}
+
+func (h *EmailVerifyHandler) templateData(ctx context.Context, code string) *templates.VerificationCodeData {
+	remoteLocation := VerifyHandlerContextValue(ctx, h)
+	ns := func(s string) string {
+		if s != "" {
+			return s
+		}
+		return "-"
+	}
+	templateData := &templates.VerificationCodeData{
+		Code:        code,
+		Host:        remoteLocation.Host,
+		Country:     ns(remoteLocation.Country),
+		CountryCode: ns(remoteLocation.CountryCode),
+		City:        ns(remoteLocation.City),
+		Lon:         strconv.FormatFloat(remoteLocation.Lon, 'f', 6, 64),
+		Lat:         strconv.FormatFloat(remoteLocation.Lat, 'f', 6, 64),
+	}
+	return templateData
 }
 
 func (h *EmailVerifyHandler) VerifyResponse(ctx context.Context, subject string, challenge string, response string) (bool, error) {
@@ -88,7 +110,8 @@ func (h *EmailVerifyHandler) VerifyResponse(ctx context.Context, subject string,
 	if challenge != h.challenge(response) {
 		return false, nil
 	}
-	userVerificationLog := ctx.Value(h).(*database.UserVerificationLog)
+	remoteLocation := VerifyHandlerContextValue(ctx, h)
+	userVerificationLog := database.NewUserVerificationLog(subject, string(h.Method()), remoteLocation)
 	_, err := h.database.InsertOrUpdateUserVerificationLog(ctx, userVerificationLog)
 	return true, err
 }

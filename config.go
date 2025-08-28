@@ -191,11 +191,12 @@ type Config struct {
 		Rembemer bool   `toml:"remember"`
 	} `toml:"mock"`
 	Tracing struct {
-		Enabled       bool            `toml:"enabled"`
-		EndpointURL   URLSpec         `toml:"endpoint_url"`
-		Protocol      TracingProtocol `toml:"protocol"`
-		BatchTimeout  DurationSpec    `toml:"batch_timeout"`
-		ExportTimeout DurationSpec    `toml:"export_timeout"`
+		Enabled       bool              `toml:"enabled"`
+		EndpointURL   URLSpec           `toml:"endpoint_url"`
+		Protocol      TracingProtocol   `toml:"protocol"`
+		Headers       map[string]string `toml:"headers"`
+		BatchTimeout  DurationSpec      `toml:"batch_timeout"`
+		ExportTimeout DurationSpec      `toml:"export_timeout"`
 	} `toml:"tracing"`
 }
 
@@ -402,6 +403,7 @@ func (c *Config) toTelemetryConfig(httpServer *httpserver.Instance) (*telemetry.
 		Protocol:      c.Tracing.Protocol.Value(),
 		BatchTimeout:  c.Tracing.BatchTimeout.Duration,
 		ExportTimeout: c.Tracing.ExportTimeout.Duration,
+		Headers:       c.Tracing.Headers,
 	}
 	return telemetryConfig, nil
 }

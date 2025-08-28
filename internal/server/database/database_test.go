@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd/internal/server/database"
+	"github.com/tdrn-org/idpd/internal/server/geoip"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"golang.org/x/oauth2"
 )
@@ -301,7 +302,7 @@ func userSession(t *testing.T, d database.Driver) {
 func userVerificationLog(t *testing.T, d database.Driver) {
 	ctx := t.Context()
 
-	log0 := database.NewUserVerificationLog("subject", "method", "host")
+	log0 := database.NewUserVerificationLog("subject", "method", geoip.NoLocation)
 	log1, err := d.InsertOrUpdateUserVerificationLog(ctx, log0)
 	require.NoError(t, err)
 	require.Equal(t, log0, log1)

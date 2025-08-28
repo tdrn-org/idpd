@@ -82,7 +82,8 @@ func (h *TOTPVerifyHandler) VerifyResponse(ctx context.Context, subject string, 
 	if !verified {
 		return false, nil
 	}
-	userVerificationLog := ctx.Value(h).(*database.UserVerificationLog)
+	remoteLocation := VerifyHandlerContextValue(ctx, h)
+	userVerificationLog := database.NewUserVerificationLog(subject, string(h.Method()), remoteLocation)
 	_, err := h.database.InsertOrUpdateUserVerificationLog(ctx, userVerificationLog)
 	return true, err
 }

@@ -44,11 +44,10 @@ func TestMailer(t *testing.T) {
 	defer smtpMock.Stop()
 
 	config := &mail.MailConfig{
-		Address:     fmt.Sprintf("localhost:%d", smtpMock.PortNumber()),
-		User:        "smtpuser",
-		Password:    "smtppassword",
-		FromAddress: "test@example.org",
-		FromName:    "Test",
+		Address:          fmt.Sprintf("localhost:%d", smtpMock.PortNumber()),
+		FromAddress:      "test@example.org",
+		FromName:         "Test",
+		OpportunisticTLS: true,
 	}
 	mailer, err := config.NewMailer()
 	require.NoError(t, err)
