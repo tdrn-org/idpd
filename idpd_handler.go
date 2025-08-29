@@ -398,6 +398,10 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
 }
 
+func (s *Server) allowOrigin(r *http.Request, origin string) (bool, []string) {
+	return origin == s.oauth2IssuerURL.String(), []string{}
+}
+
 func (s *Server) userSession(r *http.Request) (*database.UserSession, error) {
 	sessionID, exists := s.sessionCookie.Get(r)
 	if !exists {

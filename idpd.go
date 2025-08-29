@@ -209,8 +209,9 @@ func (s *Server) initServerConf(config *Config) error {
 
 func (s *Server) initHttpServer(config *Config) error {
 	httpServer := &httpserver.Instance{
-		Addr:      config.Server.Address,
-		AccessLog: config.Server.AccessLog,
+		Addr:            config.Server.Address,
+		AccessLog:       config.Server.AccessLog,
+		AllowOriginFunc: s.allowOrigin,
 	}
 	err := httpServer.Listen()
 	if err != nil {

@@ -45,16 +45,18 @@ type Handler interface {
 const serverFailureMessage = "http server failure"
 
 type Instance struct {
-	Addr         string
-	AccessLog    bool
-	listener     net.Listener
-	listenerAddr string
-	mux          *http.ServeMux
-	baseURL      *url.URL
-	logger       *slog.Logger
-	tracer       oteltrace.Tracer
-	httpServer   *http.Server
-	stoppedWG    sync.WaitGroup
+	Addr            string
+	AccessLog       bool
+	AllowOriginFunc func(*http.Request, string) (bool, []string)
+	AllowedMethods  []string
+	listener        net.Listener
+	listenerAddr    string
+	mux             *http.ServeMux
+	baseURL         *url.URL
+	logger          *slog.Logger
+	tracer          oteltrace.Tracer
+	httpServer      *http.Server
+	stoppedWG       sync.WaitGroup
 }
 
 func (s *Instance) Listen() error {
@@ -119,7 +121,11 @@ func (s *Instance) prepareServe(schema string) (*cors.Cors, error) {
 	s.baseURL = baseURL
 	s.logger = slog.With(slog.Any("baseURL", s.baseURL))
 	s.tracer = otel.Tracer(reflect.TypeFor[Instance]().PkgPath())
-	cors := cors.AllowAll()
+	corsOptions := cors.Options{
+		AllowOriginVaryRequestFunc: s.AllowOriginFunc,
+		AllowedMethods:             s.AllowedMethods,
+	}
+	cors := cors.New(corsOptions)
 	return cors, nil
 }
 
@@ -184,11 +190,11 @@ func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
-	remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 	if !s.AccessLog {
 		s.mux.ServeHTTP(w, traceR)
 	} else {
 		log := &logBuilder{}
+		remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 		log.appendHost(remoteIP)
 		log.appendTime()
 		log.appendRequest(r.Method, r.URL.Path, r.Proto)

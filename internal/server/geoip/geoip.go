@@ -31,8 +31,8 @@ type Location struct {
 	Country     string
 	CountryCode string
 	City        string
-	Lon         float64
 	Lat         float64
+	Lon         float64
 }
 
 var NoLocation *Location = &Location{}
@@ -102,27 +102,31 @@ func (s *LocationService) mapAddr(addr netip.Addr) []netip.Addr {
 	ip := net.IP(addr.AsSlice())
 	for network, host := range s.mapping {
 		if network.Contains(ip) {
-			mappedHostAddrs, err := net.LookupHost(host)
-			if err != nil {
-				s.logger.Warn("failed to lookup mapped host; ignoring mapping", slog.String("host", host), slog.Any("err", err))
-				return []netip.Addr{addr}
-			}
-			mappedAddrs := make([]netip.Addr, 0, len(mappedHostAddrs))
-			for _, mappedHostAddr := range mappedHostAddrs {
-				mappedAddr, err := netip.ParseAddr(mappedHostAddr)
-				if err != nil {
-					s.logger.Warn("ignoring mapped host address", slog.String("addr", mappedHostAddr), slog.Any("err", err))
-					continue
-				}
-				mappedAddrs = append(mappedAddrs, mappedAddr)
-			}
-			if len(mappedAddrs) == 0 {
-				return []netip.Addr{addr}
-			}
-			return mappedAddrs
+			return s.mapAddrToHost(addr, host)
 		}
 	}
 	return []netip.Addr{addr}
+}
+
+func (s *LocationService) mapAddrToHost(addr netip.Addr, host string) []netip.Addr {
+	mappedHostAddrs, err := net.LookupHost(host)
+	if err != nil {
+		s.logger.Warn("failed to lookup mapped host; ignoring mapping", slog.String("host", host), slog.Any("err", err))
+		return []netip.Addr{addr}
+	}
+	mappedAddrs := make([]netip.Addr, 0, len(mappedHostAddrs))
+	for _, mappedHostAddr := range mappedHostAddrs {
+		mappedAddr, err := netip.ParseAddr(mappedHostAddr)
+		if err != nil {
+			s.logger.Warn("ignoring mapped host address", slog.String("addr", mappedHostAddr), slog.Any("err", err))
+			continue
+		}
+		mappedAddrs = append(mappedAddrs, mappedAddr)
+	}
+	if len(mappedAddrs) == 0 {
+		return []netip.Addr{addr}
+	}
+	return mappedAddrs
 }
 
 func (s *LocationService) Close() error {

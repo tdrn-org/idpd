@@ -7,7 +7,6 @@ export type UserVerificationLog = {
     city: string | null
     lat: number | null
     lon: number | null
-
 }
 
 export type UserInfo = {

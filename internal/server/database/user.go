@@ -127,8 +127,8 @@ func NewUserVerificationLog(subject string, method string, location *geoip.Locat
 		Country:     location.Country,
 		CountryCode: location.CountryCode,
 		City:        location.City,
-		Lon:         location.Lon,
 		Lat:         location.Lat,
+		Lon:         location.Lon,
 	}
 }
 
@@ -138,8 +138,8 @@ func (l *UserVerificationLog) Update(log *UserVerificationLog) {
 	l.Country = log.Country
 	l.CountryCode = log.CountryCode
 	l.City = log.City
-	l.Lon = log.Lon
 	l.Lat = log.Lat
+	l.Lon = log.Lon
 }
 
 type UserTOTPRegistrationRequest struct {
