@@ -52,5 +52,3 @@ jobs:
         run: make check
       - name: Run SonarQube
         uses: SonarSource/sonarqube-scan-action@v5
-
-        

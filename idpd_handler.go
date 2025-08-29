@@ -399,6 +399,9 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 }
 
 func (s *Server) allowOrigin(r *http.Request, origin string) (bool, []string) {
+	if s.oauth2Provider.AllowedOrigin(origin) {
+		return true, []string{}
+	}
 	return origin == s.oauth2IssuerURL.String(), []string{}
 }
 

@@ -244,6 +244,20 @@ func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
 	return nil
 }
 
+func (p *OAuth2Provider) AllowedOrigin(origin string) bool {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	for _, client := range p.opClients {
+		for _, redirectURL := range client.redirectURLs {
+			u, err := url.Parse(redirectURL)
+			if err == nil && u.Scheme+"://"+u.Host == origin {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (p *OAuth2Provider) Mount(handler httpserver.Handler) *OAuth2Provider {
 	handler.HandleFunc("/healthz", p.opProvider.ServeHTTP)
 	handler.HandleFunc("/ready", p.opProvider.ServeHTTP)
