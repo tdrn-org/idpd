@@ -36,6 +36,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/trace"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/oauth2"
 )
@@ -131,7 +132,7 @@ func (d *databaseDriver) Name() string {
 }
 
 func (d *databaseDriver) UpdateSchema(ctx context.Context) (SchemaVersion, SchemaVersion, error) {
-	traceCtx, span := d.tracer.Start(ctx, "UpdateSchema")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "UpdateSchema")
 	defer span.End()
 
 	// Run schema version query inside separate TX, as some drivers will fail due the
@@ -176,7 +177,7 @@ func (d *databaseDriver) querySchemaVersion(tx *sql.Tx, txCtx context.Context) (
 }
 
 func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authRequest *OAuth2AuthRequest) error {
-	traceCtx, span := d.tracer.Start(ctx, "InsertOAuth2AuthRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "InsertOAuth2AuthRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -231,7 +232,7 @@ func (d *databaseDriver) InsertOAuth2AuthRequest(ctx context.Context, authReques
 }
 
 func (d *databaseDriver) SelectOAuth2AuthRequest(ctx context.Context, id string) (*OAuth2AuthRequest, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectOAuth2AuthRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectOAuth2AuthRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -363,7 +364,7 @@ func (d *databaseDriver) selectOAuth2AuthRequestScopes(tx *sql.Tx, txCtx context
 }
 
 func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code string) (*OAuth2AuthRequest, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectOAuth2AuthRequestByCode")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectOAuth2AuthRequestByCode")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -417,7 +418,7 @@ func (d *databaseDriver) SelectOAuth2AuthRequestByCode(ctx context.Context, code
 }
 
 func (d *databaseDriver) AuthenticateOAuth2AuthRequest(ctx context.Context, id string, subject string, generateChallenge GenerateChallengeFunc, remember bool) error {
-	traceCtx, span := d.tracer.Start(ctx, "AuthenticateOAuth2AuthRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "AuthenticateOAuth2AuthRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -455,7 +456,7 @@ func (d *databaseDriver) AuthenticateOAuth2AuthRequest(ctx context.Context, id s
 }
 
 func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(ctx context.Context, id string, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserSessionRequest, error) {
-	traceCtx, span := d.tracer.Start(ctx, "VerifyAndTransformOAuth2AuthRequestToUserSessionRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "VerifyAndTransformOAuth2AuthRequestToUserSessionRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -508,7 +509,7 @@ func (d *databaseDriver) VerifyAndTransformOAuth2AuthRequestToUserSessionRequest
 }
 
 func (d *databaseDriver) DeleteOAuth2AuthRequest(ctx context.Context, id string) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteOAuth2AuthRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteOAuth2AuthRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -543,7 +544,7 @@ func (d *databaseDriver) DeleteOAuth2AuthRequest(ctx context.Context, id string)
 }
 
 func (d *databaseDriver) DeleteExpiredOAuth2AuthRequests(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredOAuth2AuthRequests")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteExpiredOAuth2AuthRequests")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -579,7 +580,7 @@ func (d *databaseDriver) DeleteExpiredOAuth2AuthRequests(ctx context.Context) er
 }
 
 func (d *databaseDriver) InsertOAuth2AuthCode(ctx context.Context, code string, id string) error {
-	traceCtx, span := d.tracer.Start(ctx, "InsertOAuth2AuthCode")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "InsertOAuth2AuthCode")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -598,7 +599,7 @@ func (d *databaseDriver) InsertOAuth2AuthCode(ctx context.Context, code string, 
 }
 
 func (d *databaseDriver) InsertOAuth2Token(ctx context.Context, token *OAuth2Token) error {
-	traceCtx, span := d.tracer.Start(ctx, "InsertOAuth2Token")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "InsertOAuth2Token")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -640,7 +641,7 @@ func (d *databaseDriver) insertOAuth2Token(tx *sql.Tx, txCtx context.Context, to
 }
 
 func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAuth2Token, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectOAuth2Token")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectOAuth2Token")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -696,7 +697,7 @@ func (d *databaseDriver) SelectOAuth2Token(ctx context.Context, id string) (*OAu
 }
 
 func (d *databaseDriver) DeleteOAuth2Token(ctx context.Context, id string) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteOAuth2Token")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteOAuth2Token")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -715,7 +716,7 @@ func (d *databaseDriver) DeleteOAuth2Token(ctx context.Context, id string) error
 }
 
 func (d *databaseDriver) DeleteExpiredOAuth2Tokens(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredOAuth2Tokens")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteExpiredOAuth2Tokens")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -771,7 +772,7 @@ func (d *databaseDriver) deleteOAuth2TokenByRefreshTokenID(tx *sql.Tx, txCtx con
 }
 
 func (d *databaseDriver) InsertOAuth2RefreshToken(ctx context.Context, refreshToken *OAuth2RefreshToken, token *OAuth2Token) error {
-	traceCtx, span := d.tracer.Start(ctx, "InsertOAuth2RefreshToken")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "InsertOAuth2RefreshToken")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -824,7 +825,7 @@ func (d *databaseDriver) insertOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 }
 
 func (d *databaseDriver) RenewOAuth2RefreshToken(ctx context.Context, id string, newToken *OAuth2Token) (*OAuth2RefreshToken, error) {
-	traceCtx, span := d.tracer.Start(ctx, "RenewOAuth2RefreshToken")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "RenewOAuth2RefreshToken")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -876,7 +877,7 @@ func (d *databaseDriver) deleteOAuth2RefreshToken(tx *sql.Tx, txCtx context.Cont
 }
 
 func (d *databaseDriver) SelectOAuth2RefreshToken(ctx context.Context, id string) (*OAuth2RefreshToken, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectOAuth2RefreshToken")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectOAuth2RefreshToken")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -976,7 +977,7 @@ func (d *databaseDriver) selectOAuth2RefreshTokenScopes(tx *sql.Tx, txCtx contex
 }
 
 func (d *databaseDriver) DeleteOAuth2TokensBySubject(ctx context.Context, applicationID string, subject string) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteOAuth2TokensBySubject")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteOAuth2TokensBySubject")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1031,7 +1032,7 @@ func (d *databaseDriver) deleteOAuth2TokensBySubject(tx *sql.Tx, txCtx context.C
 }
 
 func (d *databaseDriver) DeleteOAuth2RefreshToken(ctx context.Context, id string) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteOAuth2RefreshToken")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteOAuth2RefreshToken")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1070,7 +1071,7 @@ func (d *databaseDriver) deleteOAuth2RefreshTokensByTokenID(tx *sql.Tx, txCtx co
 }
 
 func (d *databaseDriver) DeleteExpiredOAuth2RefreshTokens(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredOAuth2RefreshTokens")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteExpiredOAuth2RefreshTokens")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1098,7 +1099,7 @@ func (d *databaseDriver) DeleteExpiredOAuth2RefreshTokens(ctx context.Context) e
 }
 
 func (d *databaseDriver) RotateSigningKeys(ctx context.Context, algorithm jose.SignatureAlgorithm, now int64, generateSigningKey GenerateSigningKeyFunc) (SigningKeys, error) {
-	traceCtx, span := d.tracer.Start(ctx, "RotateSigningKeys")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "RotateSigningKeys")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1180,7 +1181,7 @@ func (d *databaseDriver) selectSigningKeys(tx *sql.Tx, txCtx context.Context) (S
 }
 
 func (d *databaseDriver) InstanciateEncryptionKey(ctx context.Context, keyGroup string, keyType servercrypto.SymetricKeyType, generateEncryptionKey GenerateEncryptionKeyFunc) (*EncryptionKey, error) {
-	traceCtx, span := d.tracer.Start(ctx, "InstanciateEncryptionKey")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "InstanciateEncryptionKey")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1249,7 +1250,7 @@ func (d *databaseDriver) insertEncryptionKey(tx *sql.Tx, txCtx context.Context, 
 }
 
 func (d *databaseDriver) TransformAndDeleteUserSessionRequest(ctx context.Context, state string, token *oauth2.Token) (*UserSession, bool, error) {
-	traceCtx, span := d.tracer.Start(ctx, "TransformAndDeleteUserSessionRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "TransformAndDeleteUserSessionRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1305,7 +1306,7 @@ func (d *databaseDriver) selectUserSessionRequestByState(tx *sql.Tx, txCtx conte
 }
 
 func (d *databaseDriver) DeleteExpiredUserSessionRequests(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredUserSessionRequests")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteExpiredUserSessionRequests")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1321,7 +1322,7 @@ func (d *databaseDriver) DeleteExpiredUserSessionRequests(ctx context.Context) e
 }
 
 func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*UserSession, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectUserSession")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectUserSession")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1357,7 +1358,7 @@ func (d *databaseDriver) SelectUserSession(ctx context.Context, id string) (*Use
 }
 
 func (d *databaseDriver) RefreshUserSessions(ctx context.Context, expiry int64, refresh RefreshUserSession) error {
-	traceCtx, span := d.tracer.Start(ctx, "RefreshUserSessions")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "RefreshUserSessions")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1393,7 +1394,7 @@ func (d *databaseDriver) RefreshUserSessions(ctx context.Context, expiry int64, 
 }
 
 func (d *databaseDriver) UpdateUserSession(ctx context.Context, session *UserSession) error {
-	traceCtx, span := d.tracer.Start(ctx, "UpdateUserSession")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "UpdateUserSession")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1416,7 +1417,7 @@ func (d *databaseDriver) UpdateUserSession(ctx context.Context, session *UserSes
 }
 
 func (d *databaseDriver) DeleteExpiredUserSessions(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredUserSessions")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteExpiredUserSessions")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1432,7 +1433,7 @@ func (d *databaseDriver) DeleteExpiredUserSessions(ctx context.Context) error {
 }
 
 func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, log *UserVerificationLog) (*UserVerificationLog, error) {
-	traceCtx, span := d.tracer.Start(ctx, "InsertOrUpdateUserVerificationLog")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "InsertOrUpdateUserVerificationLog")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1494,7 +1495,7 @@ func (d *databaseDriver) InsertOrUpdateUserVerificationLog(ctx context.Context, 
 }
 
 func (d *databaseDriver) SelectUserVerificationLogs(ctx context.Context, subject string) ([]*UserVerificationLog, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectUserVerificationLogs")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectUserVerificationLogs")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1540,7 +1541,7 @@ func (d *databaseDriver) deleteUserVerificationLog(tx *sql.Tx, txCtx context.Con
 }
 
 func (d *databaseDriver) GenerateUserTOTPRegistrationRequest(ctx context.Context, subject string, secret string, generateChallengeFunc GenerateChallengeFunc) (*UserTOTPRegistrationRequest, error) {
-	traceCtx, span := d.tracer.Start(ctx, "GenerateUserTOTPRegistrationRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "GenerateUserTOTPRegistrationRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1570,7 +1571,7 @@ func (d *databaseDriver) GenerateUserTOTPRegistrationRequest(ctx context.Context
 }
 
 func (d *databaseDriver) SelectUserTOTPRegistrationRequest(ctx context.Context, subject string) (*UserTOTPRegistrationRequest, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectUserTOTPRegistrationRequest")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectUserTOTPRegistrationRequest")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1607,7 +1608,7 @@ func (d *databaseDriver) selectUserTOTPRegistrationRequest(tx *sql.Tx, txCtx con
 }
 
 func (d *databaseDriver) DeleteExpiredUserTOTPRegistrationRequests(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "DeleteExpiredUserTOTPRegistrationRequests")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "DeleteExpiredUserTOTPRegistrationRequests")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1623,7 +1624,7 @@ func (d *databaseDriver) DeleteExpiredUserTOTPRegistrationRequests(ctx context.C
 }
 
 func (d *databaseDriver) VerifyAndTransformUserTOTPRegistrationRequestToRegistration(ctx context.Context, subject string, verifyChallengeResponse VerifyChallengeResponseFunc, response string) (*UserTOTPRegistration, error) {
-	traceCtx, span := d.tracer.Start(ctx, "VerifyAndTransformUserTOTPRegistrationRequestToRegistration")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "VerifyAndTransformUserTOTPRegistrationRequestToRegistration")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1672,7 +1673,7 @@ func (d *databaseDriver) deleteUserTOTPRegistration(tx *sql.Tx, txCtx context.Co
 }
 
 func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject string) (*UserTOTPRegistration, error) {
-	traceCtx, span := d.tracer.Start(ctx, "SelectUserTOTPRegistration")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "SelectUserTOTPRegistration")
 	defer span.End()
 
 	tx, txCtx, err := d.beginTx(traceCtx)
@@ -1700,7 +1701,7 @@ func (d *databaseDriver) SelectUserTOTPRegistration(ctx context.Context, subject
 }
 
 func (d *databaseDriver) Ping(ctx context.Context) error {
-	traceCtx, span := d.tracer.Start(ctx, "Ping")
+	traceCtx, span := trace.InternalStart(d.tracer, ctx, "Ping")
 	defer span.End()
 
 	return trace.RecordError(span, d.db.PingContext(traceCtx))
@@ -1751,7 +1752,7 @@ func (d *databaseDriver) commitTx(tx *sql.Tx, nestedTx bool) error {
 }
 
 func (d *databaseDriver) execTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) error {
-	traceCtx, span := d.tracer.Start(txCtx, query)
+	traceCtx, span := trace.InternalStart(d.tracer, txCtx, "execTx", attribute.String("query", query))
 	defer span.End()
 
 	stmt, err := d.prepareStmt(traceCtx, query)
@@ -1771,7 +1772,7 @@ func (d *databaseDriver) execTx(tx *sql.Tx, txCtx context.Context, query string,
 }
 
 func (d *databaseDriver) queryRowTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) (*sql.Row, error) {
-	traceCtx, span := d.tracer.Start(txCtx, query)
+	traceCtx, span := trace.InternalStart(d.tracer, txCtx, "queryRowTx", attribute.String("query", query))
 	defer span.End()
 
 	stmt, err := d.prepareStmt(traceCtx, query)
@@ -1783,7 +1784,7 @@ func (d *databaseDriver) queryRowTx(tx *sql.Tx, txCtx context.Context, query str
 }
 
 func (d *databaseDriver) queryTx(tx *sql.Tx, txCtx context.Context, query string, args ...any) (*sql.Rows, error) {
-	traceCtx, span := d.tracer.Start(txCtx, query)
+	traceCtx, span := trace.InternalStart(d.tracer, txCtx, "queryTx", attribute.String("query", query))
 	defer span.End()
 
 	stmt, err := d.prepareStmt(traceCtx, query)

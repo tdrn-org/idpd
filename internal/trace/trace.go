@@ -17,9 +17,20 @@
 package trace
 
 import (
+	"context"
+
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
+func ServerStart(tracer oteltrace.Tracer, ctx context.Context, spanName string, attributes ...attribute.KeyValue) (context.Context, oteltrace.Span) {
+	return tracer.Start(ctx, spanName, oteltrace.WithSpanKind(oteltrace.SpanKindServer), oteltrace.WithAttributes(attributes...))
+}
+
+func InternalStart(tracer oteltrace.Tracer, ctx context.Context, spanName string, attributes ...attribute.KeyValue) (context.Context, oteltrace.Span) {
+	return tracer.Start(ctx, spanName, oteltrace.WithSpanKind(oteltrace.SpanKindInternal), oteltrace.WithAttributes(attributes...))
+}
 
 func RecordError(span oteltrace.Span, err error) error {
 	if err != nil {

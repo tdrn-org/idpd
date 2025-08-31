@@ -66,7 +66,7 @@ func (l *UserVerificationLog) update(log *database.UserVerificationLog) {
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSession")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSession")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -126,7 +126,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionDetails(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionDetails")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionDetails")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -155,7 +155,7 @@ func (s *Server) handleSessionDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionAuthenticate")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionAuthenticate")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -213,7 +213,7 @@ func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string,
 }
 
 func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionVerify")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionVerify")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -255,7 +255,7 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionTerminate")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -287,7 +287,7 @@ type UserTOTPRegistrationRequest struct {
 }
 
 func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionTerminate")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -326,7 +326,7 @@ func (s *Server) handleSessionTOTPRegister(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleSessionTOTPVerify(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionTerminate")
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
 
@@ -374,7 +374,7 @@ func (s *Server) parseVerifyTOTPForm(r *http.Request) (string, error) {
 }
 
 func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
-	traceCtx, span := s.tracer.Start(r.Context(), "handleSessionTerminate")
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionTerminate")
 	defer span.End()
 
 	userSession, remember, err := s.database.TransformAndDeleteUserSessionRequest(traceCtx, state, tokens.Token)
@@ -399,10 +399,14 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 }
 
 func (s *Server) allowOrigin(r *http.Request, origin string) (bool, []string) {
-	if s.oauth2Provider.AllowedOrigin(origin) {
-		return true, []string{}
+	headers := []string{}
+	if origin == s.oauth2IssuerURL.Scheme+"://"+s.oauth2IssuerURL.Host {
+		return true, headers
 	}
-	return origin == s.oauth2IssuerURL.String(), []string{}
+	if s.oauth2Provider.AllowedOrigin(origin) {
+		return true, headers
+	}
+	return false, headers
 }
 
 func (s *Server) userSession(r *http.Request) (*database.UserSession, error) {

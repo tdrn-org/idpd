@@ -35,6 +35,7 @@ import (
 	"github.com/tdrn-org/go-tlsconf/tlsserver"
 	"github.com/tdrn-org/idpd/internal/trace"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -186,23 +187,24 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 }
 
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	traceCtx, span := s.tracer.Start(r.Context(), r.URL.Path)
+	traceCtx, span := trace.ServerStart(s.tracer, r.Context(), "ServeHTTP", attribute.String("path", r.URL.Path))
 	defer span.End()
 	traceR := r.WithContext(traceCtx)
+	wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
 
 	if !s.AccessLog {
-		s.mux.ServeHTTP(w, traceR)
+		s.mux.ServeHTTP(wrappedW, traceR)
 	} else {
 		log := &logBuilder{}
 		remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 		log.appendHost(remoteIP)
 		log.appendTime()
 		log.appendRequest(r.Method, r.URL.Path, r.Proto)
-		wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
 		s.mux.ServeHTTP(wrappedW, traceR)
 		log.appendStatus(wrappedW.statusCode, wrappedW.written)
 		s.logger.Info(log.String())
 	}
+	span.SetAttributes(attribute.Int("http.status_code", wrappedW.statusCode))
 }
 
 func (s *Instance) Shutdown(ctx context.Context) error {

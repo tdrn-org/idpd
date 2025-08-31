@@ -123,11 +123,7 @@ func (s *Server) OAuth2IssuerURL() *url.URL {
 }
 
 func (s *Server) AddOAuth2Client(client *OAuth2Client) error {
-	return s.oauth2Provider.AddClient(&server.OAuth2Client{
-		ID:           client.ID,
-		Secret:       client.Secret,
-		RedirectURLs: client.RedirectURLs,
-	})
+	return s.oauth2Provider.AddClient(client.toServerOAuth2Client())
 }
 
 func (s *Server) Shutdown(ctx context.Context) {
@@ -373,7 +369,7 @@ func (s *Server) initOAuth2Provider(config *Config) error {
 	oauth2Client := &server.OAuth2Client{
 		ID:           uuid.NewString(),
 		Secret:       uuid.NewString(),
-		RedirectURLs: []string{providerConfig.IssuerURL.JoinPath("/authorized").String()},
+		RedirectURLs: []*url.URL{providerConfig.IssuerURL.JoinPath("/authorized")},
 	}
 	err = provider.AddClient(oauth2Client)
 	if err != nil {

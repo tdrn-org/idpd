@@ -201,16 +201,26 @@ type Config struct {
 }
 
 type OAuth2Client struct {
-	ID           string   `toml:"id"`
-	Secret       string   `toml:"secret"`
-	RedirectURLs []string `toml:"redirect_urls"`
+	ID                     string    `toml:"id"`
+	Secret                 string    `toml:"secret"`
+	RedirectURLs           []URLSpec `toml:"redirect_urls"`
+	PostLogoutRedirectURLs []URLSpec `toml:"post_logout_redirect_urls"`
 }
 
 func (c *OAuth2Client) toServerOAuth2Client() *server.OAuth2Client {
+	redirectURLs := make([]*url.URL, 0, len(c.RedirectURLs))
+	for _, redirectURL := range c.RedirectURLs {
+		redirectURLs = append(redirectURLs, &redirectURL.URL)
+	}
+	postLogoutRedirectURLs := make([]*url.URL, 0, len(c.PostLogoutRedirectURLs))
+	for _, postLogoutRedirectURL := range c.PostLogoutRedirectURLs {
+		postLogoutRedirectURLs = append(postLogoutRedirectURLs, &postLogoutRedirectURL.URL)
+	}
 	return &server.OAuth2Client{
-		ID:           c.ID,
-		Secret:       c.Secret,
-		RedirectURLs: c.RedirectURLs,
+		ID:                     c.ID,
+		Secret:                 c.Secret,
+		RedirectURLs:           redirectURLs,
+		PostLogoutRedirectURLs: postLogoutRedirectURLs,
 	}
 }
 

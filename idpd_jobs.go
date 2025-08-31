@@ -28,7 +28,7 @@ import (
 const serverJobTickerSchedule time.Duration = 5 * time.Minute
 
 func (s *Server) runJobs() {
-	traceCtx, span := s.tracer.Start(context.Background(), "runJobs")
+	traceCtx, span := trace.InternalStart(s.tracer, context.Background(), "runJobs")
 	defer span.End()
 
 	// Run refresh jobs first, to avoid race conditions
@@ -37,7 +37,7 @@ func (s *Server) runJobs() {
 }
 
 func (s *Server) runRefreshSessionsJob(ctx context.Context) {
-	traceCtx, span := s.tracer.Start(ctx, "runRefreshSessionsJob")
+	traceCtx, span := trace.InternalStart(s.tracer, ctx, "runRefreshSessionsJob")
 	defer span.End()
 
 	expiry := time.Now().Add(2 * serverJobTickerSchedule).UnixMicro()
@@ -48,7 +48,7 @@ func (s *Server) runRefreshSessionsJob(ctx context.Context) {
 }
 
 func (s *Server) refreshUserSession(ctx context.Context, session *database.UserSession) error {
-	traceCtx, span := s.tracer.Start(ctx, "refreshUserSession")
+	traceCtx, span := trace.InternalStart(s.tracer, ctx, "refreshUserSession")
 	defer span.End()
 
 	tokenSource, err := s.authFLow.TokenSource(traceCtx, session.OAuth2Token())
@@ -75,7 +75,7 @@ func (s *Server) refreshUserSession(ctx context.Context, session *database.UserS
 }
 
 func (s *Server) runDeleteExpiredJob(ctx context.Context) {
-	traceCtx, span := s.tracer.Start(ctx, "runDeleteExpiredJob")
+	traceCtx, span := trace.InternalStart(s.tracer, ctx, "runDeleteExpiredJob")
 	defer span.End()
 
 	// Garbage collect OAuth2 authentication and user session requests

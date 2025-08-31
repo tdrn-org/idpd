@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,18 +35,20 @@ import (
 func TestAuthorizationCodeFlow(t *testing.T) {
 	idpdServer := idpd.MustStart(t.Context(), "testdata/idpd.toml")
 	callbackServer := (&httpserver.Instance{Addr: "localhost:", AccessLog: true}).MustListen()
-	clientBaseURL := "http://" + callbackServer.ListenerAddr()
+	clientBaseURL, err := url.Parse("http://" + callbackServer.ListenerAddr())
+	require.NoError(t, err)
 	client := &idpd.OAuth2Client{
-		ID:           "authorizationCodeFlowClient",
-		Secret:       "secret",
-		RedirectURLs: []string{clientBaseURL + "/authorized"},
+		ID:                     "authorizationCodeFlowClient",
+		Secret:                 "secret",
+		RedirectURLs:           []idpd.URLSpec{{URL: *clientBaseURL.JoinPath("/authorized")}},
+		PostLogoutRedirectURLs: []idpd.URLSpec{{URL: *clientBaseURL}},
 	}
 	idpdServer.AddOAuth2Client(client)
 	config := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
 		Issuer:       idpdServer.OAuth2IssuerURL().String(),
 		ClientId:     client.ID,
 		ClientSecret: client.Secret,
-		BaseURL:      clientBaseURL,
+		BaseURL:      clientBaseURL.String(),
 		Scopes:       []string{"openid", "profile", "email", "groups"},
 		EnablePKCE:   true,
 	}
@@ -57,7 +60,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	var httpClient *http.Client
 	flow, err := config.NewFlow(flowClient, context.Background(), func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
 		httpClient, _ = flow.Client(r.Context(), tokens.Token)
-		http.Redirect(w, r, clientBaseURL, http.StatusFound)
+		http.Redirect(w, r, clientBaseURL.String(), http.StatusFound)
 	})
 	require.NoError(t, err)
 	flow.Mount(callbackServer)

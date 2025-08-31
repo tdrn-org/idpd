@@ -125,7 +125,8 @@ signing_key_expiry = "30m"
 [[oauth2.client]]
 id = "client 1"
 secret = "verysecretphrase"
-redirect_urls = ["https://localhost:9124/authorized"]
+redirect_urls = [ "https://localhost:9124/authorized" ]
+post_logout_redirect_urls = [ "https://localhost:9124/" ]
 
 [tracing]
 enabled = true

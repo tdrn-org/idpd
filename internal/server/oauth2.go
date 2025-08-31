@@ -53,17 +53,18 @@ var ErrNoSigningKey = errors.New("no signing key")
 var ErrUserNotVerified = errors.New("user not verified")
 
 type OAuth2Client struct {
-	ID           string
-	Secret       string
-	RedirectURLs []string
+	ID                     string
+	Secret                 string
+	RedirectURLs           []*url.URL
+	PostLogoutRedirectURLs []*url.URL
 }
 
 type opClient struct {
 	id                             string
 	secret                         string
 	issuerURL                      *url.URL
-	redirectURLs                   []string
-	postLogoutRedirectURLs         []string
+	redirectURLs                   []*url.URL
+	postLogoutRedirectURLs         []*url.URL
 	applicationType                op.ApplicationType
 	authMethod                     oidc.AuthMethod
 	responseTypes                  []oidc.ResponseType
@@ -84,11 +85,19 @@ func (c *opClient) GetSecret() string {
 }
 
 func (c *opClient) RedirectURIs() []string {
-	return c.redirectURLs
+	redirectURLs := make([]string, 0, len(c.redirectURLs))
+	for _, redirectURL := range c.redirectURLs {
+		redirectURLs = append(redirectURLs, redirectURL.String())
+	}
+	return redirectURLs
 }
 
 func (c *opClient) PostLogoutRedirectURIs() []string {
-	return c.postLogoutRedirectURLs
+	postLogoutRedirectURLs := make([]string, 0, len(c.postLogoutRedirectURLs))
+	for _, postLogoutRedirectURL := range c.postLogoutRedirectURLs {
+		postLogoutRedirectURLs = append(postLogoutRedirectURLs, postLogoutRedirectURL.String())
+	}
+	return postLogoutRedirectURLs
 }
 
 func (c *opClient) ApplicationType() op.ApplicationType {
@@ -223,7 +232,7 @@ func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
 		secret:                         client.Secret,
 		issuerURL:                      p.issuerURL,
 		redirectURLs:                   client.RedirectURLs,
-		postLogoutRedirectURLs:         []string{},
+		postLogoutRedirectURLs:         client.PostLogoutRedirectURLs,
 		applicationType:                op.ApplicationTypeNative,
 		authMethod:                     oidc.AuthMethodNone,
 		responseTypes:                  []oidc.ResponseType{oidc.ResponseTypeCode},
@@ -249,8 +258,7 @@ func (p *OAuth2Provider) AllowedOrigin(origin string) bool {
 	defer p.mutex.RUnlock()
 	for _, client := range p.opClients {
 		for _, redirectURL := range client.redirectURLs {
-			u, err := url.Parse(redirectURL)
-			if err == nil && u.Scheme+"://"+u.Host == origin {
+			if origin == redirectURL.Scheme+"://"+redirectURL.Host {
 				return true
 			}
 		}
@@ -281,7 +289,7 @@ func (p *OAuth2Provider) Close() error {
 }
 
 func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject string, password string, verifyHandler VerifyHandler, remember bool) (string, error) {
-	traceCtx, span := p.tracer.Start(ctx, "Authenticate")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "Authenticate")
 	defer span.End()
 
 	err := p.userStore.CheckPassword(subject, password)
@@ -303,7 +311,7 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 }
 
 func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, verifyHandler VerifyHandler, response string) (string, error) {
-	traceCtx, span := p.tracer.Start(ctx, "Verify")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "Verify")
 	defer span.End()
 
 	sessionRequest, err := p.database.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(traceCtx, id, subject, verifyHandler.VerifyResponse, response)
@@ -318,7 +326,7 @@ func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, 
 }
 
 func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
-	traceCtx, span := p.tracer.Start(ctx, "CreateAuthRequest")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "CreateAuthRequest")
 	defer span.End()
 
 	authRequest := database.NewOAuth2AuthRequestFromOIDCAuthRequest(oidcAuthRequest, userID)
@@ -330,7 +338,7 @@ func (p *OAuth2Provider) CreateAuthRequest(ctx context.Context, oidcAuthRequest 
 }
 
 func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
-	traceCtx, span := p.tracer.Start(ctx, "AuthRequestByID")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "AuthRequestByID")
 	defer span.End()
 
 	authRequest, err := p.database.SelectOAuth2AuthRequest(traceCtx, id)
@@ -341,7 +349,7 @@ func (p *OAuth2Provider) AuthRequestByID(ctx context.Context, id string) (op.Aut
 }
 
 func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
-	traceCtx, span := p.tracer.Start(ctx, "AuthRequestByCode")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "AuthRequestByCode")
 	defer span.End()
 
 	authRequest, err := p.database.SelectOAuth2AuthRequestByCode(traceCtx, code)
@@ -352,21 +360,21 @@ func (p *OAuth2Provider) AuthRequestByCode(ctx context.Context, code string) (op
 }
 
 func (p *OAuth2Provider) SaveAuthCode(ctx context.Context, id string, code string) error {
-	traceCtx, span := p.tracer.Start(ctx, "SaveAuthCode")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "SaveAuthCode")
 	defer span.End()
 
 	return trace.RecordError(span, p.database.InsertOAuth2AuthCode(traceCtx, code, id))
 }
 
 func (p *OAuth2Provider) DeleteAuthRequest(ctx context.Context, id string) error {
-	traceCtx, span := p.tracer.Start(ctx, "DeleteAuthRequest")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "DeleteAuthRequest")
 	defer span.End()
 
 	return trace.RecordError(span, p.database.DeleteOAuth2AuthRequest(traceCtx, id))
 }
 
 func (p *OAuth2Provider) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
-	traceCtx, span := p.tracer.Start(ctx, "CreateAccessToken")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "CreateAccessToken")
 	defer span.End()
 
 	var tokenID string
@@ -403,7 +411,7 @@ func (p *OAuth2Provider) createAccessTokenFromTokenExchangeRequest(ctx context.C
 }
 
 func (p *OAuth2Provider) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
-	traceCtx, span := p.tracer.Start(ctx, "CreateAccessAndRefreshTokens")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "CreateAccessAndRefreshTokens")
 	defer span.End()
 
 	var accessTokenID string
@@ -477,7 +485,7 @@ func (p *OAuth2Provider) createAccessAndRefreshTokenFromRefreshTokenRequest(ctx 
 }
 
 func (p *OAuth2Provider) TokenRequestByRefreshToken(ctx context.Context, refreshTokenID string) (op.RefreshTokenRequest, error) {
-	traceCtx, span := p.tracer.Start(ctx, "TokenRequestByRefreshToken")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "TokenRequestByRefreshToken")
 	defer span.End()
 
 	refreshToken, err := p.database.SelectOAuth2RefreshToken(traceCtx, refreshTokenID)
@@ -488,14 +496,14 @@ func (p *OAuth2Provider) TokenRequestByRefreshToken(ctx context.Context, refresh
 }
 
 func (p *OAuth2Provider) TerminateSession(ctx context.Context, userID string, clientID string) error {
-	traceCtx, span := p.tracer.Start(ctx, "TerminateSession")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "TerminateSession")
 	defer span.End()
 
 	return trace.RecordError(span, p.database.DeleteOAuth2TokensBySubject(traceCtx, clientID, userID))
 }
 
 func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string, userID string, clientID string) *oidc.Error {
-	traceCtx, span := p.tracer.Start(ctx, "RevokeToken")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "RevokeToken")
 	defer span.End()
 
 	refreshToken, err := p.database.SelectOAuth2RefreshToken(traceCtx, tokenOrTokenID)
@@ -533,7 +541,7 @@ func (p *OAuth2Provider) RevokeToken(ctx context.Context, tokenOrTokenID string,
 }
 
 func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID string, token string) (string, string, error) {
-	traceCtx, span := p.tracer.Start(ctx, "GetRefreshTokenInfo")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "GetRefreshTokenInfo")
 	defer span.End()
 
 	refreshToken, err := p.database.SelectOAuth2RefreshToken(traceCtx, token)
@@ -548,7 +556,7 @@ func (p *OAuth2Provider) GetRefreshTokenInfo(ctx context.Context, clientID strin
 }
 
 func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) {
-	traceCtx, span := p.tracer.Start(ctx, "SigningKey")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "SigningKey")
 	defer span.End()
 
 	now := time.Now().UnixMicro()
@@ -565,7 +573,7 @@ func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 }
 
 func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
-	traceCtx, span := p.tracer.Start(ctx, "SignatureAlgorithms")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "SignatureAlgorithms")
 	defer span.End()
 
 	now := time.Now().UnixMicro()
@@ -584,7 +592,7 @@ func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.Signat
 }
 
 func (p *OAuth2Provider) KeySet(ctx context.Context) ([]op.Key, error) {
-	traceCtx, span := p.tracer.Start(ctx, "KeySet")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "KeySet")
 	defer span.End()
 
 	now := time.Now().UnixMicro()
@@ -606,14 +614,14 @@ func (p *OAuth2Provider) KeySet(ctx context.Context) ([]op.Key, error) {
 }
 
 func (p *OAuth2Provider) ClientCredentials(ctx context.Context, clientID string, clientSecret string) (op.Client, error) {
-	_, span := p.tracer.Start(ctx, "ClientCredentials")
+	_, span := trace.InternalStart(p.tracer, ctx, "ClientCredentials")
 	defer span.End()
 
 	p.logStubCall()
 	return nil, nil
 }
 func (p *OAuth2Provider) ClientCredentialsTokenRequest(ctx context.Context, clientID string, scopes []string) (op.TokenRequest, error) {
-	_, span := p.tracer.Start(ctx, "ClientCredentialsTokenRequest")
+	_, span := trace.InternalStart(p.tracer, ctx, "ClientCredentialsTokenRequest")
 	defer span.End()
 
 	p.logStubCall()
@@ -621,7 +629,7 @@ func (p *OAuth2Provider) ClientCredentialsTokenRequest(ctx context.Context, clie
 }
 
 func (p *OAuth2Provider) GetClientByClientID(ctx context.Context, clientID string) (op.Client, error) {
-	_, span := p.tracer.Start(ctx, "GetClientByClientID")
+	_, span := trace.InternalStart(p.tracer, ctx, "GetClientByClientID")
 	defer span.End()
 
 	p.mutex.RLock()
@@ -634,7 +642,7 @@ func (p *OAuth2Provider) GetClientByClientID(ctx context.Context, clientID strin
 }
 
 func (p *OAuth2Provider) AuthorizeClientIDSecret(ctx context.Context, clientID string, clientSecret string) error {
-	_, span := p.tracer.Start(ctx, "AuthorizeClientIDSecret")
+	_, span := trace.InternalStart(p.tracer, ctx, "AuthorizeClientIDSecret")
 	defer span.End()
 
 	p.mutex.RLock()
@@ -650,7 +658,7 @@ func (p *OAuth2Provider) AuthorizeClientIDSecret(ctx context.Context, clientID s
 }
 
 func (p *OAuth2Provider) SetUserinfoFromScopes(ctx context.Context, userInfo *oidc.UserInfo, userID string, clientID string, scopes []string) error {
-	_, span := p.tracer.Start(ctx, "SetUserinfoFromScopes")
+	_, span := trace.InternalStart(p.tracer, ctx, "SetUserinfoFromScopes")
 	defer span.End()
 
 	// Empty implementation; SetUserinfoFromRequest will be used instead
@@ -658,7 +666,7 @@ func (p *OAuth2Provider) SetUserinfoFromScopes(ctx context.Context, userInfo *oi
 }
 
 func (p *OAuth2Provider) SetUserinfoFromRequest(ctx context.Context, userInfo *oidc.UserInfo, token op.IDTokenRequest, scopes []string) error {
-	traceCtx, span := p.tracer.Start(ctx, "SetUserinfoFromRequest")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "SetUserinfoFromRequest")
 	defer span.End()
 
 	return trace.RecordError(span, p.setUserInfoFromSubject(traceCtx, userInfo, token.GetSubject(), scopes))
@@ -674,7 +682,7 @@ func (p *OAuth2Provider) setUserInfoFromSubject(ctx context.Context, userInfo *o
 }
 
 func (p *OAuth2Provider) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserInfo, tokenID string, subject string, origin string) error {
-	traceCtx, span := p.tracer.Start(ctx, "SetUserinfoFromToken")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "SetUserinfoFromToken")
 	defer span.End()
 
 	token, err := p.database.SelectOAuth2Token(traceCtx, tokenID)
@@ -685,7 +693,7 @@ func (p *OAuth2Provider) SetUserinfoFromToken(ctx context.Context, userInfo *oid
 }
 
 func (p *OAuth2Provider) SetIntrospectionFromToken(ctx context.Context, userinfo *oidc.IntrospectionResponse, tokenID string, subject string, clientID string) error {
-	_, span := p.tracer.Start(ctx, "SetIntrospectionFromToken")
+	_, span := trace.InternalStart(p.tracer, ctx, "SetIntrospectionFromToken")
 	defer span.End()
 
 	p.logStubCall()
@@ -693,7 +701,7 @@ func (p *OAuth2Provider) SetIntrospectionFromToken(ctx context.Context, userinfo
 }
 
 func (p *OAuth2Provider) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
-	_, span := p.tracer.Start(ctx, "GetPrivateClaimsFromScopes")
+	_, span := trace.InternalStart(p.tracer, ctx, "GetPrivateClaimsFromScopes")
 	defer span.End()
 
 	p.logStubCall()
@@ -701,7 +709,7 @@ func (p *OAuth2Provider) GetPrivateClaimsFromScopes(ctx context.Context, userID,
 }
 
 func (p *OAuth2Provider) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID string) (*jose.JSONWebKey, error) {
-	_, span := p.tracer.Start(ctx, "GetKeyByIDAndClientID")
+	_, span := trace.InternalStart(p.tracer, ctx, "GetKeyByIDAndClientID")
 	defer span.End()
 
 	p.logStubCall()
@@ -709,7 +717,7 @@ func (p *OAuth2Provider) GetKeyByIDAndClientID(ctx context.Context, keyID, clien
 }
 
 func (p *OAuth2Provider) ValidateJWTProfileScopes(ctx context.Context, userID string, scopes []string) ([]string, error) {
-	_, span := p.tracer.Start(ctx, "ValidateJWTProfileScopes")
+	_, span := trace.InternalStart(p.tracer, ctx, "ValidateJWTProfileScopes")
 	defer span.End()
 
 	p.logStubCall()
@@ -717,7 +725,7 @@ func (p *OAuth2Provider) ValidateJWTProfileScopes(ctx context.Context, userID st
 }
 
 func (p *OAuth2Provider) Health(ctx context.Context) error {
-	traceCtx, span := p.tracer.Start(ctx, "Health")
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "Health")
 	defer span.End()
 
 	logger := p.opProvider.Logger()
@@ -738,7 +746,7 @@ func (p *OAuth2Provider) Health(ctx context.Context) error {
 }
 
 func (p *OAuth2Provider) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
-	_, span := p.tracer.Start(ctx, "ValidateTokenExchangeRequest")
+	_, span := trace.InternalStart(p.tracer, ctx, "ValidateTokenExchangeRequest")
 	defer span.End()
 
 	p.logStubCall()
@@ -746,7 +754,7 @@ func (p *OAuth2Provider) ValidateTokenExchangeRequest(ctx context.Context, reque
 }
 
 func (p *OAuth2Provider) CreateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
-	_, span := p.tracer.Start(ctx, "CreateTokenExchangeRequest")
+	_, span := trace.InternalStart(p.tracer, ctx, "CreateTokenExchangeRequest")
 	defer span.End()
 
 	p.logStubCall()
@@ -754,7 +762,7 @@ func (p *OAuth2Provider) CreateTokenExchangeRequest(ctx context.Context, request
 }
 
 func (p *OAuth2Provider) GetPrivateClaimsFromTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) (claims map[string]any, err error) {
-	_, span := p.tracer.Start(ctx, "GetPrivateClaimsFromTokenExchangeRequest")
+	_, span := trace.InternalStart(p.tracer, ctx, "GetPrivateClaimsFromTokenExchangeRequest")
 	defer span.End()
 
 	p.logStubCall()
@@ -762,7 +770,7 @@ func (p *OAuth2Provider) GetPrivateClaimsFromTokenExchangeRequest(ctx context.Co
 }
 
 func (p *OAuth2Provider) SetUserinfoFromTokenExchangeRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.TokenExchangeRequest) error {
-	_, span := p.tracer.Start(ctx, "SetUserinfoFromTokenExchangeRequest")
+	_, span := trace.InternalStart(p.tracer, ctx, "SetUserinfoFromTokenExchangeRequest")
 	defer span.End()
 
 	p.logStubCall()
@@ -770,7 +778,7 @@ func (p *OAuth2Provider) SetUserinfoFromTokenExchangeRequest(ctx context.Context
 }
 
 func (p *OAuth2Provider) StoreDeviceAuthorization(ctx context.Context, clientID, deviceCode, userCode string, expires time.Time, scopes []string) error {
-	_, span := p.tracer.Start(ctx, "StoreDeviceAuthorization")
+	_, span := trace.InternalStart(p.tracer, ctx, "StoreDeviceAuthorization")
 	defer span.End()
 
 	p.logStubCall()
@@ -778,7 +786,7 @@ func (p *OAuth2Provider) StoreDeviceAuthorization(ctx context.Context, clientID,
 }
 
 func (p *OAuth2Provider) GetDeviceAuthorizatonState(ctx context.Context, clientID, deviceCode string) (*op.DeviceAuthorizationState, error) {
-	_, span := p.tracer.Start(ctx, "GetDeviceAuthorizatonState")
+	_, span := trace.InternalStart(p.tracer, ctx, "GetDeviceAuthorizatonState")
 	defer span.End()
 
 	p.logStubCall()
