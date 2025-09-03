@@ -62,7 +62,7 @@
 	{#if log.last_used}
 		{formatDate(new Date(log.last_used))}
 		{#if log.country_code}
-			(<button popovertarget={id}>
+			(<button popovertarget="{id}">
 				{#if log.city}
 					{log.city},
 				{/if}
@@ -78,7 +78,11 @@
 					{log.country_code.toUpperCase()}
 				{/if}
 			</button>)
-			<div popover id="{id}" class="absolute text-sm text-gray-500 bg-white border border-gray-200 rounded-lg shadow-xs dark:text-gray-400 dark:border-gray-600 dark:bg-gray-800">
+			<div
+				id="{id}"
+				popover
+				class="space-y-2 p-4 shadow-xs rounded-lg border border-gray-200 bg-white text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400"
+			>
 				<p>
 					From: {log.host}
 				</p>
@@ -86,7 +90,8 @@
 					City: {log.city}
 				{/if}
 				<p>
-					Country: {log.country} <img
+					Country: {log.country}
+					<img
 						src="img/flags/{log.country_code.toLowerCase()}.svg"
 						alt="{log.country_code} country flag"
 						width={24}

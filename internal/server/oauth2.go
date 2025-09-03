@@ -165,7 +165,8 @@ func (config *OAuth2ProviderConfig) NewProvider(databaseDriver database.Driver, 
 		database:            databaseDriver,
 		userStore:           userStore,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
-		opClients:           make(map[string]opClient, 0),
+		opClients:           make(map[string]*opClient),
+		allowedOrigins:      make(map[string]string),
 		tracer:              otel.Tracer(reflect.TypeFor[OAuth2Provider]().PkgPath()),
 	}
 	opConfig := &op.Config{
@@ -198,7 +199,8 @@ type OAuth2Provider struct {
 	database            database.Driver
 	userStore           userstore.Backend
 	signingKeyAlgorithm jose.SignatureAlgorithm
-	opClients           map[string]opClient
+	opClients           map[string]*opClient
+	allowedOrigins      map[string]string
 	opProvider          *op.Provider
 	tracer              oteltrace.Tracer
 	mutex               sync.RWMutex
@@ -249,21 +251,18 @@ func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
 	if exists {
 		return fmt.Errorf("%w (client ID '%s' already registered)", ErrClientIDAlreadyRegistered, opClient.id)
 	}
-	p.opClients[opClient.id] = *opClient
+	p.opClients[opClient.id] = opClient
+	for _, redirectURL := range client.RedirectURLs {
+		allowedOrigin := redirectURL.Scheme + "://" + redirectURL.Host
+		p.allowedOrigins[allowedOrigin] = allowedOrigin
+	}
 	return nil
 }
 
 func (p *OAuth2Provider) AllowedOrigin(origin string) bool {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
-	for _, client := range p.opClients {
-		for _, redirectURL := range client.redirectURLs {
-			if origin == redirectURL.Scheme+"://"+redirectURL.Host {
-				return true
-			}
-		}
-	}
-	return false
+	return p.allowedOrigins[origin] == origin
 }
 
 func (p *OAuth2Provider) Mount(handler httpserver.Handler) *OAuth2Provider {
@@ -638,7 +637,7 @@ func (p *OAuth2Provider) GetClientByClientID(ctx context.Context, clientID strin
 	if !exists {
 		return nil, trace.RecordError(span, fmt.Errorf("%w (unknown client: '%s')", ErrUnknownClient, clientID))
 	}
-	return &opClient, nil
+	return opClient, nil
 }
 
 func (p *OAuth2Provider) AuthorizeClientIDSecret(ctx context.Context, clientID string, clientSecret string) error {
