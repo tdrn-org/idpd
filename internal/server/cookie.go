@@ -25,13 +25,14 @@ import (
 
 type CookieHandler struct {
 	name     string
+	domain   string
 	path     string
 	secure   bool
 	sameSite http.SameSite
 	maxAge   int
 }
 
-func NewCookieHandler(name string, path string, secure bool, sameSite http.SameSite) *CookieHandler {
+func NewCookieHandler(name string, domain string, path string, secure bool, sameSite http.SameSite) *CookieHandler {
 	h := &CookieHandler{
 		name:   name,
 		path:   path,
@@ -49,6 +50,7 @@ func (h *CookieHandler) set(w http.ResponseWriter, value string, maxAge int) err
 	cookie := &http.Cookie{
 		Name:     h.name,
 		Value:    value,
+		Domain:   h.domain,
 		Path:     h.path,
 		MaxAge:   maxAge,
 		Secure:   h.secure,

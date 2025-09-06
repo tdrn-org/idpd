@@ -50,16 +50,17 @@ type Config struct {
 		SyslogFacility int    `toml:"syslog_facility"`
 	} `toml:"logging"`
 	Server struct {
-		Address         string         `toml:"address"`
-		Protocol        ServerProtocol `toml:"protocol"`
-		AccessLog       bool           `toml:"access_log"`
-		CertFile        string         `toml:"cert_file"`
-		KeyFile         string         `toml:"key_file"`
-		PublicURL       URLSpec        `toml:"public_url"`
-		SessionCookie   string         `toml:"session_cookie"`
-		SessionLifetime DurationSpec   `toml:"session_lifetime"`
-		RequestLifetime DurationSpec   `toml:"request_lifetime"`
-		TokenLifetime   DurationSpec   `toml:"token_lifetime"`
+		Address             string         `toml:"address"`
+		Protocol            ServerProtocol `toml:"protocol"`
+		AccessLog           bool           `toml:"access_log"`
+		CertFile            string         `toml:"cert_file"`
+		KeyFile             string         `toml:"key_file"`
+		PublicURL           URLSpec        `toml:"public_url"`
+		SessionCookie       string         `toml:"session_cookie"`
+		SessionCookieDomain string         `toml:"session_cookie_domain"`
+		SessionLifetime     DurationSpec   `toml:"session_lifetime"`
+		RequestLifetime     DurationSpec   `toml:"request_lifetime"`
+		TokenLifetime       DurationSpec   `toml:"token_lifetime"`
 	} `toml:"server"`
 	Mail struct {
 		Address     string `toml:"address"`

@@ -37,6 +37,8 @@
 #public_url = ""
 # session cookie name
 #session_cookie = "idpd_session"
+# domain the session cookie is shared with (should be defined restrictive as possible)
+# session_cookie_domain = ""
 # session lifetime
 #session_lifetime = "720h" # 30 days
 # request lifetime

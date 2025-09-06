@@ -97,7 +97,7 @@ func startConfig(ctx context.Context, config *Config) (*Server, error) {
 	return s, nil
 }
 
-const sessionCookiePath string = "/session"
+const sessionCookiePath string = "/"
 
 type Server struct {
 	httpServer        *httpserver.Instance
@@ -217,11 +217,15 @@ func (s *Server) initHttpServer(config *Config) error {
 	if err != nil {
 		return err
 	}
+	sessionCookieDomain := config.Server.SessionCookieDomain
+	if sessionCookieDomain == "" {
+		slog.Warn("no session domain set; session cookie will be sent to all domains")
+	}
 	secureCookies := ServerProtocol(issuerURL.Scheme) != ServerProtocolHttp
 	if !secureCookies {
 		slog.Warn("unsecure server protocol; disabling secure cookies")
 	}
-	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookiePath, secureCookies, http.SameSiteLaxMode)
+	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookieDomain, sessionCookiePath, secureCookies, http.SameSiteLaxMode)
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	s.oauth2IssuerURL = issuerURL
