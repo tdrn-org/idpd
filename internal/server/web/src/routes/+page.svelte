@@ -1,7 +1,8 @@
 <script lang="ts">
 	import Alert from '$lib/components/Alert.svelte';
+	import Anonymous from '$lib/components/Anonymous.svelte';
 	import VerificationLog from '$lib/components/VerificationLog.svelte';
-	import type { UserInfo } from '$lib/session';
+	import session from '$lib/session';
 	import {
 		Fingerprint,
 		KeyRound,
@@ -10,18 +11,12 @@
 		ScanFace,
 		Settings2
 	} from '@lucide/svelte';
-
-	async function sessionUserInfo(): Promise<UserInfo> {
-		const response = await fetch(`/session`);
-		const userInfo: UserInfo = await response.json();
-		return userInfo;
-	}
 </script>
 
 <section class="bg-gray-50 dark:bg-gray-900">
 	<div class="mx-auto flex flex-col items-center justify-center px-6 py-8 md:h-screen lg:py-0">
 		<Alert />
-		{#await sessionUserInfo() then userInfo}
+		{#await session.fetchUserInfo() then userInfo}
 			<div class="mb-6 flex items-center text-2xl font-semibold text-gray-900 dark:text-white">
 				<Fingerprint />&nbsp;Welcome {userInfo.name}
 			</div>
@@ -87,12 +82,7 @@
 				</div>
 			</div>
 		{:catch}
-			<a
-				href="/user"
-				class="mb-6 flex items-center text-2xl font-semibold text-gray-900 dark:text-white"
-			>
-				<Fingerprint size={96} />
-			</a>
+			<Anonymous />
 		{/await}
 	</div>
 </section>
