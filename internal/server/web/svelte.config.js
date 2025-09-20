@@ -11,12 +11,7 @@ const config = {
 			strict: true
 	}),
 	prerender: {
-		entries: [ '/', '/user', '/user/verify', '/user/totp' ]
-	},
-	csp: {
-		directives: {
-			'script-src': ['self']
-		},
+		entries: [ '/', '/user', '/user/verify', '/user/confirm', '/user/totp' ]
 	} }
 };
 

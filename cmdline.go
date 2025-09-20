@@ -18,25 +18,36 @@ package idpd
 
 import (
 	"context"
+	_ "embed"
+	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/tdrn-org/go-conf"
 	"github.com/tdrn-org/go-conf/service/loglevel"
+	"github.com/tdrn-org/idpd/internal/buildinfo"
 )
+
+var cmdLineApplication = kong.Name(buildinfo.Cmd())
+
+var cmdLineHelpOptions = kong.ConfigureHelp(kong.HelpOptions{
+	Compact: true,
+})
 
 var cmdLineVars = kong.Vars{
 	"config_default": DefaultConfig,
 }
 
 type cmdLine struct {
-	Silent  bool   `short:"s" help:"Enable silent mode (log level error)"`
-	Quiet   bool   `short:"q" help:"Enable quiet mode (log level warn)"`
-	Verbose bool   `short:"v" help:"Enable verbose output (log level info)"`
-	Debug   bool   `short:"d" help:"Enable debug output (log level debug)"`
-	RunCmd  runCmd `cmd:"" name:"run" default:"withargs" help:"run server"`
-	ctx     context.Context
+	Silent      bool            `short:"s" help:"Enable silent mode (log level error)"`
+	Quiet       bool            `short:"q" help:"Enable quiet mode (log level warn)"`
+	Verbose     bool            `short:"v" help:"Enable verbose output (log level info)"`
+	Debug       bool            `short:"d" help:"Enable debug output (log level debug)"`
+	RunCmd      runCmd          `cmd:"" name:"run" default:"withargs" help:"run server"`
+	VersionCmd  versionCmd      `cmd:"" name:"version" help:"show version info"`
+	TemplateCmd templateCmd     `cmd:"" name:"template" help:"output config template"`
+	ctx         context.Context `kong:"-"`
 }
 
 type runCmd struct {
@@ -82,4 +93,28 @@ func (cmd *runCmd) initLogging(config *Config) {
 	logLevel, _ := conf.LookupService[loglevel.LogLevelService]()
 	logger, _ := config.toLogConfig().GetLogger(logLevel.LevelVar())
 	slog.SetDefault(logger)
+}
+
+type versionCmd struct {
+	Extended bool `short:"x" help:"Output extended version info"`
+}
+
+func (cmd *versionCmd) Run(args *cmdLine) error {
+	fmt.Println(buildinfo.FullVersion())
+	if args.VersionCmd.Extended {
+		fmt.Println(buildinfo.Extended())
+	}
+	return nil
+}
+
+type templateCmd struct {
+	Diff string `help:"The configuration file to compare the config template to"`
+}
+
+//go:embed config_template.toml
+var template string
+
+func (cmd *templateCmd) Run(args *cmdLine) error {
+	fmt.Print(template)
+	return nil
 }

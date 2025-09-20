@@ -46,6 +46,10 @@
 # token lifetime
 #token_lifetime = "60m"
 
+[access_policies]
+# trusted = [ "127.0.0.1/32", "::1/128" ]
+# private = [ ]
+
 [mail]
 #address = "localhost:587"
 #user = "idpd"

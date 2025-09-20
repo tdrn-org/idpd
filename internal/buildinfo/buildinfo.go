@@ -19,12 +19,20 @@ package buildinfo
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
+	"strconv"
+	"strings"
 )
 
 const undefined = "<dev build>"
 
+var cmd = undefined
 var version = undefined
 var timestamp = undefined
+
+func Cmd() string {
+	return cmd
+}
 
 func Version() string {
 	return version
@@ -36,4 +44,18 @@ func Timestamp() string {
 
 func FullVersion() string {
 	return fmt.Sprintf("idpd version %s (%s) %s/%s", Version(), Timestamp(), runtime.GOOS, runtime.GOARCH)
+}
+
+func Extended() string {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "<no build info>"
+	}
+	buffer := &strings.Builder{}
+	fmt.Fprint(buffer, "Build toolchain ", buildInfo.GoVersion)
+	for _, setting := range buildInfo.Settings {
+		fmt.Fprintln(buffer)
+		fmt.Fprint(buffer, "  ", setting.Key, "=", strconv.Quote(setting.Value))
+	}
+	return buffer.String()
 }

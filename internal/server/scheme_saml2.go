@@ -14,23 +14,28 @@
  * limitations under the License.
  */
 
-package main
+package server
 
 import (
-	"context"
-	"log/slog"
-	"os"
-
-	"github.com/tdrn-org/go-log"
-	"github.com/tdrn-org/idpd"
+	"github.com/tdrn-org/idpd/httpserver"
+	"github.com/zitadel/saml/pkg/provider"
 )
 
-func main() {
-	args := os.Args[1:]
-	log.InitFromFlags(args, nil)
-	slog.Debug("running idpd command", slog.Any("args", args))
-	err := idpd.Run(context.Background(), args)
-	if err != nil {
-		slog.Error("idpd command failure", slog.Any("err", err))
-	}
+type SAML2ProviderConfig struct {
+}
+
+func (c *SAML2ProviderConfig) NewProvider() (*SAML2Provider, error) {
+	return nil, nil
+}
+
+type SAML2Provider struct {
+	saml2Provider *provider.Provider
+}
+
+func (p *SAML2Provider) Scheme() Scheme {
+	return SchemeSAML2
+}
+
+func (p *SAML2Provider) Mount(handler httpserver.Handler) {
+
 }

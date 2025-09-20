@@ -41,6 +41,8 @@ type UserInfo struct {
 	TOTPVerification     UserVerificationLog `json:"totp_verification"`
 	PasskeyVerification  UserVerificationLog `json:"passkey_verification"`
 	WebAuthnVerification UserVerificationLog `json:"webauthn_verification"`
+	ClientID             string              `json:"client_id"`
+	RequestedScopes      []string            `json:"requested_scopes"`
 }
 
 type UserVerificationLog struct {
@@ -90,10 +92,6 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		Name:    name,
 		Subject: oidcUserInfo.Subject,
 		Email:   oidcUserInfo.Email,
-		EmailVerification: UserVerificationLog{
-			LastUsed: time.Now(),
-			Host:     r.RemoteAddr,
-		},
 	}
 	logs, err := s.database.SelectUserVerificationLogs(traceCtx, userInfo.Subject)
 	if err != nil {
@@ -115,6 +113,18 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 		default:
 			slog.Warn("unexpected verification log", slog.String("method", log.Method))
 		}
+	}
+	id := r.URL.Query().Get("id")
+	if id != "" {
+		authRequest, err := s.database.SelectOAuth2AuthRequest(traceCtx, id)
+		if err != nil {
+			trace.RecordError(span, err)
+			slog.Warn("failed to query auth request", slog.Any("err", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		userInfo.ClientID = authRequest.ClientID
+		userInfo.RequestedScopes = authRequest.Scopes
 	}
 	err = json.NewEncoder(w).Encode(userInfo)
 	if err != nil {
@@ -178,21 +188,6 @@ func (s *Server) handleSessionAuthenticate(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, traceR, redirectURL, http.StatusFound)
 }
 
-func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
-	switch server.VerifyMethod(verification) {
-	case server.VerifyMethodEmail:
-		return server.NewEmailVerifyHandler(s.mailer, s.database, s.userStore)
-	case server.VerifyMethodTOTP:
-		return server.NewTOTPVerifyHandler(s.totpProvider, s.database, false)
-	case server.VerifyMethodPasskey:
-		return server.NoneVerifyHandler()
-	case server.VerifyMethodWebAuthn:
-		return server.NoneVerifyHandler()
-	default:
-		return server.NoneVerifyHandler()
-	}
-}
-
 func (s *Server) parseAuthenticateForm(r *http.Request) (string, string, string, string, bool, error) {
 	if r.Method != http.MethodPost {
 		return "", "", "", "", false, fmt.Errorf("invalid authenticate session request")
@@ -252,6 +247,15 @@ func (s *Server) parseVerifyForm(r *http.Request) (string, string, string, strin
 		return "", "", "", "", fmt.Errorf("incomplete verify session request (id='%s', subject='%s', verification='%s')", id, subject, verification)
 	}
 	return id, subject, verification, response, nil
+}
+
+func (s *Server) handleSessionConfirm(w http.ResponseWriter, r *http.Request) {
+	traceCtx, span := trace.InternalStart(s.tracer, r.Context(), "handleSessionConfirm")
+	defer span.End()
+	traceR := r.WithContext(traceCtx)
+
+	redirectURL := ""
+	http.Redirect(w, traceR, redirectURL, http.StatusFound)
 }
 
 func (s *Server) handleSessionTerminate(w http.ResponseWriter, r *http.Request) {
@@ -398,17 +402,6 @@ func (s *Server) tokenExchange(w http.ResponseWriter, r *http.Request, tokens *o
 	http.Redirect(w, r, s.oauth2IssuerURL.String(), http.StatusFound)
 }
 
-func (s *Server) allowOrigin(r *http.Request, origin string) (bool, []string) {
-	headers := []string{}
-	if origin == s.oauth2IssuerURL.Scheme+"://"+s.oauth2IssuerURL.Host {
-		return true, headers
-	}
-	if s.oauth2Provider.AllowedOrigin(origin) {
-		return true, headers
-	}
-	return false, headers
-}
-
 func (s *Server) userSession(r *http.Request) (*database.UserSession, error) {
 	sessionID, exists := s.sessionCookie.Get(r)
 	if !exists {
@@ -435,6 +428,21 @@ func (s *Server) userSessionClient(r *http.Request) (*database.UserSession, *htt
 		return nil, nil, err
 	}
 	return session, client, nil
+}
+
+func (s *Server) getVerifyHandler(verification string) server.VerifyHandler {
+	switch server.VerifyMethod(verification) {
+	case server.VerifyMethodEmail:
+		return server.NewEmailVerifyHandler(s.mailer, s.database, s.userStore)
+	case server.VerifyMethodTOTP:
+		return server.NewTOTPVerifyHandler(s.totpProvider, s.database, false)
+	case server.VerifyMethodPasskey:
+		return server.NoneVerifyHandler()
+	case server.VerifyMethodWebAuthn:
+		return server.NoneVerifyHandler()
+	default:
+		return server.NoneVerifyHandler()
+	}
 }
 
 func (s *Server) verifyHandlerContext(ctx context.Context, verifyHandler server.VerifyHandler, r *http.Request) context.Context {

@@ -13,10 +13,14 @@ cert_file = "idpd.crt"
 key_file = "idpd.key"
 public_url = "https://idpd.example.org"
 session_cookie = "auth_session"
-session_cookie_doamin = ".example.org"
+session_cookie_domain = ".example.org"
 session_lifetime = "1h"
 request_lifetime = "30m"
 token_lifetime = "2h"
+
+[access_policies]
+trusted = [ "127.0.0.1/32", "::1/128", "192.168.1.0/24" ]
+private = [ "10.1.0.0/16", "fd42::0/64" ]
 
 [mail]
 address = "smtp.example.org:25"

@@ -42,15 +42,15 @@ import (
 	"golang.org/x/text/language"
 )
 
-var ErrClientIDAlreadyRegistered = errors.New("client ID already registered")
+var ErrOAuth2ClientIDAlreadyRegistered = errors.New("oauth2 client ID already registered")
 
-var ErrUnknownClient = errors.New("unknown client")
+var ErrUnknownOAuth2Client = errors.New("unknown oauth2 client")
 
-var ErrInvalidClientSecret = errors.New("invalid client secret")
+var ErrInvalidOAuth2ClientSecret = errors.New("invalid oauth2 client secret")
 
-var ErrNoSigningKey = errors.New("no signing key")
+var ErrNoOAuth2SigningKey = errors.New("no oauth2 signing key")
 
-var ErrUserNotVerified = errors.New("user not verified")
+var ErrOAuth2UserNotVerified = errors.New("oauth2 user not verified")
 
 type OAuth2Client struct {
 	ID                     string
@@ -166,7 +166,6 @@ func (config *OAuth2ProviderConfig) NewProvider(databaseDriver database.Driver, 
 		userStore:           userStore,
 		signingKeyAlgorithm: config.SigningKeyAlgorithm,
 		opClients:           make(map[string]*opClient),
-		allowedOrigins:      make(map[string]string),
 		tracer:              otel.Tracer(reflect.TypeFor[OAuth2Provider]().PkgPath()),
 	}
 	opConfig := &op.Config{
@@ -200,7 +199,6 @@ type OAuth2Provider struct {
 	userStore           userstore.Backend
 	signingKeyAlgorithm jose.SignatureAlgorithm
 	opClients           map[string]*opClient
-	allowedOrigins      map[string]string
 	opProvider          *op.Provider
 	tracer              oteltrace.Tracer
 	mutex               sync.RWMutex
@@ -214,12 +212,12 @@ func oauth2LoginURL(issuerURL *url.URL, id string) string {
 	return url.String()
 }
 
-func oauth2VerifyURL(issuerURL *url.URL, id string, subject string, verification string) string {
+func oauth2VerifyURL(issuerURL *url.URL, id string, subject string, verification VerifyMethod) string {
 	url := issuerURL.JoinPath("/user/verify")
 	query := url.Query()
 	query.Add("id", id)
 	query.Add("subject", subject)
-	query.Add("verification", verification)
+	query.Add("verification", string(verification))
 	url.RawQuery = query.Encode()
 	return url.String()
 }
@@ -249,35 +247,25 @@ func (p *OAuth2Provider) AddClient(client *OAuth2Client) error {
 	defer p.mutex.Unlock()
 	_, exists := p.opClients[opClient.id]
 	if exists {
-		return fmt.Errorf("%w (client ID '%s' already registered)", ErrClientIDAlreadyRegistered, opClient.id)
+		return fmt.Errorf("%w (client ID '%s' already registered)", ErrOAuth2ClientIDAlreadyRegistered, opClient.id)
 	}
 	p.opClients[opClient.id] = opClient
-	for _, redirectURL := range client.RedirectURLs {
-		allowedOrigin := redirectURL.Scheme + "://" + redirectURL.Host
-		p.allowedOrigins[allowedOrigin] = allowedOrigin
-	}
 	return nil
 }
 
-func (p *OAuth2Provider) AllowedOrigin(origin string) bool {
-	p.mutex.RLock()
-	defer p.mutex.RUnlock()
-	return p.allowedOrigins[origin] == origin
-}
-
 func (p *OAuth2Provider) Mount(handler httpserver.Handler) *OAuth2Provider {
-	handler.HandleFunc("/healthz", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/ready", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/.well-known/openid-configuration", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/authorize/callback", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/authorize", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/oauth/token", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/oauth/introspect", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/userinfo", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/revoke", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/end_session", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/keys", p.opProvider.ServeHTTP)
-	handler.HandleFunc("/device_authorization", p.opProvider.ServeHTTP)
+	handler.Handle("/healthz", p.opProvider)
+	handler.Handle("/ready", p.opProvider)
+	handler.Handle("/.well-known/openid-configuration", p.opProvider)
+	handler.Handle("/authorize/callback", p.opProvider)
+	handler.Handle("/authorize", p.opProvider)
+	handler.Handle("/oauth/token", p.opProvider)
+	handler.Handle("/oauth/introspect", p.opProvider)
+	handler.Handle("/userinfo", p.opProvider)
+	handler.Handle("/revoke", p.opProvider)
+	handler.Handle("/end_session", p.opProvider)
+	handler.Handle("/keys", p.opProvider)
+	handler.Handle("/device_authorization", p.opProvider)
 	return p
 }
 
@@ -306,7 +294,7 @@ func (p *OAuth2Provider) Authenticate(ctx context.Context, id string, subject st
 	if !verifyHandler.Tainted() {
 		slog.Info("OAuth2 user authenticated", slog.String("id", id), slog.String("subject", subject))
 	}
-	return oauth2VerifyURL(p.issuerURL, id, subject, string(verifyHandler.Method())), nil
+	return oauth2VerifyURL(p.issuerURL, id, subject, verifyHandler.Method()), nil
 }
 
 func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, verifyHandler VerifyHandler, response string) (string, error) {
@@ -318,7 +306,22 @@ func (p *OAuth2Provider) Verify(ctx context.Context, id string, subject string, 
 		return "", trace.RecordError(span, fmt.Errorf("OAuth2 user verification failure: %s (cause: %w)", id, err))
 	}
 	if sessionRequest == nil {
-		return "", trace.RecordError(span, ErrUserNotVerified)
+		return "", trace.RecordError(span, ErrOAuth2UserNotVerified)
+	}
+	slog.Info("OAuth2 user verified", slog.String("id", id), slog.String("subject", subject))
+	return op.AuthCallbackURL(p.opProvider)(traceCtx, id), nil
+}
+
+func (p *OAuth2Provider) Confirm(ctx context.Context, id string, subject string, remember bool) (string, error) {
+	traceCtx, span := trace.InternalStart(p.tracer, ctx, "Confirm")
+	defer span.End()
+
+	sessionRequest, err := p.database.VerifyAndTransformOAuth2AuthRequestToUserSessionRequest(traceCtx, id, subject, nil, "")
+	if err != nil {
+		return "", trace.RecordError(span, fmt.Errorf("OAuth2 user verification failure: %s (cause: %w)", id, err))
+	}
+	if sessionRequest == nil {
+		return "", trace.RecordError(span, ErrOAuth2UserNotVerified)
 	}
 	slog.Info("OAuth2 user verified", slog.String("id", id), slog.String("subject", subject))
 	return op.AuthCallbackURL(p.opProvider)(traceCtx, id), nil
@@ -568,7 +571,7 @@ func (p *OAuth2Provider) SigningKey(ctx context.Context) (op.SigningKey, error) 
 			return signingKey.OpSigningKey()
 		}
 	}
-	return nil, trace.RecordError(span, ErrNoSigningKey)
+	return nil, trace.RecordError(span, ErrNoOAuth2SigningKey)
 }
 
 func (p *OAuth2Provider) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
@@ -635,7 +638,7 @@ func (p *OAuth2Provider) GetClientByClientID(ctx context.Context, clientID strin
 	defer p.mutex.RUnlock()
 	opClient, exists := p.opClients[clientID]
 	if !exists {
-		return nil, trace.RecordError(span, fmt.Errorf("%w (unknown client: '%s')", ErrUnknownClient, clientID))
+		return nil, trace.RecordError(span, fmt.Errorf("%w (unknown client: '%s')", ErrUnknownOAuth2Client, clientID))
 	}
 	return opClient, nil
 }
@@ -648,10 +651,10 @@ func (p *OAuth2Provider) AuthorizeClientIDSecret(ctx context.Context, clientID s
 	defer p.mutex.RUnlock()
 	opClient, exists := p.opClients[clientID]
 	if !exists {
-		return trace.RecordError(span, fmt.Errorf("%w (unknown client: '%s')", ErrUnknownClient, clientID))
+		return trace.RecordError(span, fmt.Errorf("%w (unknown client: '%s')", ErrUnknownOAuth2Client, clientID))
 	}
 	if opClient.secret != clientSecret {
-		return trace.RecordError(span, fmt.Errorf("%w (invalid client secret: '%s')", ErrInvalidClientSecret, clientID))
+		return trace.RecordError(span, fmt.Errorf("%w (invalid client secret: '%s')", ErrInvalidOAuth2ClientSecret, clientID))
 	}
 	return nil
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package server_test
+package totp_test
 
 import (
 	"testing"
@@ -22,14 +22,14 @@ import (
 
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/internal/server"
+	servertotp "github.com/tdrn-org/idpd/internal/server/totp"
 )
 
-func TestTOTPProvider(t *testing.T) {
-	config := server.TOTPConfig{
+func TestProvider(t *testing.T) {
+	config := servertotp.Config{
 		Issuer: "issuer",
 	}
-	provider := config.NewTOTPProvider()
+	provider := config.NewProvider()
 	secret, qrCode, otpURL, err := provider.GenerateRegistrationRequest("subject", 64, 64)
 	require.NoError(t, err)
 	require.NotEmpty(t, secret)

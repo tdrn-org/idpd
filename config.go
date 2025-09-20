@@ -31,6 +31,7 @@ import (
 	"github.com/tdrn-org/idpd/httpserver"
 	"github.com/tdrn-org/idpd/internal/server"
 	"github.com/tdrn-org/idpd/internal/server/mail"
+	"github.com/tdrn-org/idpd/internal/server/totp"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/telemetry"
 )
@@ -61,7 +62,12 @@ type Config struct {
 		SessionLifetime     DurationSpec   `toml:"session_lifetime"`
 		RequestLifetime     DurationSpec   `toml:"request_lifetime"`
 		TokenLifetime       DurationSpec   `toml:"token_lifetime"`
+		AllowedOrigins      []string       `toml:"allowed_origins"`
 	} `toml:"server"`
+	AccessPolicies struct {
+		Trusted []NetworkSpec `toml:"trusted"`
+		Private []NetworkSpec `toml:"private"`
+	} `toml:"access_policies"`
 	Mail struct {
 		Address     string `toml:"address"`
 		User        string `toml:"user"`
@@ -275,12 +281,12 @@ func (c *Config) toMailConfig() *mail.MailConfig {
 	}
 }
 
-func (c *Config) toTOTPConfig(defaultIssuer string) *server.TOTPConfig {
+func (c *Config) toTOTPConfig(defaultIssuer string) *totp.Config {
 	issuer := c.TOTP.Issuer
 	if issuer == "" {
 		issuer = defaultIssuer
 	}
-	return &server.TOTPConfig{
+	return &totp.Config{
 		Issuer: issuer,
 	}
 }

@@ -14,23 +14,22 @@
  * limitations under the License.
  */
 
-package main
+package server
 
 import (
-	"context"
-	"log/slog"
-	"os"
-
-	"github.com/tdrn-org/go-log"
-	"github.com/tdrn-org/idpd"
+	"github.com/tdrn-org/idpd/httpserver"
 )
 
-func main() {
-	args := os.Args[1:]
-	log.InitFromFlags(args, nil)
-	slog.Debug("running idpd command", slog.Any("args", args))
-	err := idpd.Run(context.Background(), args)
-	if err != nil {
-		slog.Error("idpd command failure", slog.Any("err", err))
-	}
+type Scheme string
+
+const (
+	SchemeNone    Scheme = ""
+	SchemeForward Scheme = "forward"
+	SchemeOAuth2  Scheme = "oauth2"
+	SchemeSAML2   Scheme = "saml2"
+)
+
+type SchemeHandler interface {
+	Scheme() Scheme
+	Mount(handler httpserver.Handler)
 }

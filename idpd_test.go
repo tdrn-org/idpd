@@ -25,12 +25,16 @@ import (
 	"github.com/tdrn-org/idpd"
 )
 
-func TestServer(t *testing.T) {
+func TestRunCommand(t *testing.T) {
 	_, err := os.Stat("idpd-local.toml")
 	if err != nil {
 		t.SkipNow()
 	}
 	err = idpd.Run(t.Context(), []string{"--debug", "--config=idpd-local.toml"})
+	require.NoError(t, err)
+}
+func TestVersionCommand(t *testing.T) {
+	err := idpd.Run(t.Context(), []string{"--debug", "version"})
 	require.NoError(t, err)
 }
 

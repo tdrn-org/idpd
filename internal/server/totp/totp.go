@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package server
+package totp
 
 import (
 	"encoding/base64"
@@ -27,28 +27,28 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
-type TOTPConfig struct {
+type Config struct {
 	Issuer string
 	Period time.Duration
 }
 
-func (c *TOTPConfig) NewTOTPProvider() *TOTPProvider {
+func (c *Config) NewProvider() *Provider {
 	logger := slog.With(slog.String("issuer", c.Issuer))
 	logger.Info("initializing TOTP provider")
-	return &TOTPProvider{
+	return &Provider{
 		issuer: c.Issuer,
 		period: c.Period,
 		logger: logger,
 	}
 }
 
-type TOTPProvider struct {
+type Provider struct {
 	issuer string
 	period time.Duration
 	logger *slog.Logger
 }
 
-func (p *TOTPProvider) GenerateRegistrationRequest(subject string, width int, height int) (string, string, string, error) {
+func (p *Provider) GenerateRegistrationRequest(subject string, width int, height int) (string, string, string, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      p.issuer,
 		AccountName: subject,
@@ -69,6 +69,6 @@ func (p *TOTPProvider) GenerateRegistrationRequest(subject string, width int, he
 	return key.Secret(), qrCode.String(), key.URL(), nil
 }
 
-func (p *TOTPProvider) VerifyCode(secret string, code string) bool {
+func (p *Provider) VerifyCode(secret string, code string) bool {
 	return totp.Validate(code, secret)
 }

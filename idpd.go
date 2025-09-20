@@ -38,7 +38,9 @@ import (
 	servercrypto "github.com/tdrn-org/idpd/internal/server/crypto"
 	"github.com/tdrn-org/idpd/internal/server/database"
 	"github.com/tdrn-org/idpd/internal/server/geoip"
+	serverhttp "github.com/tdrn-org/idpd/internal/server/http"
 	"github.com/tdrn-org/idpd/internal/server/mail"
+	"github.com/tdrn-org/idpd/internal/server/totp"
 	"github.com/tdrn-org/idpd/internal/server/userstore"
 	"github.com/tdrn-org/idpd/internal/server/web"
 	"github.com/tdrn-org/idpd/oauth2client"
@@ -52,7 +54,7 @@ const shutdownTimeout time.Duration = 5 * time.Second
 
 func Run(ctx context.Context, args []string) error {
 	cmdLine := &cmdLine{ctx: ctx}
-	cmdParser, err := kong.New(cmdLine, cmdLineVars)
+	cmdParser, err := kong.New(cmdLine, cmdLineApplication, cmdLineHelpOptions, cmdLineVars)
 	if err != nil {
 		return err
 	}
@@ -101,11 +103,11 @@ const sessionCookiePath string = "/"
 
 type Server struct {
 	httpServer        *httpserver.Instance
-	sessionCookie     *server.CookieHandler
+	sessionCookie     *serverhttp.CookieHandler
 	shutdownTelemetry func(context.Context) error
 	tracer            oteltrace.Tracer
 	mailer            *mail.Mailer
-	totpProvider      *server.TOTPProvider
+	totpProvider      *totp.Provider
 	locationService   *geoip.LocationService
 	database          database.Driver
 	userStore         userstore.Backend
@@ -205,9 +207,9 @@ func (s *Server) initServerConf(config *Config) error {
 
 func (s *Server) initHttpServer(config *Config) error {
 	httpServer := &httpserver.Instance{
-		Addr:            config.Server.Address,
-		AccessLog:       config.Server.AccessLog,
-		AllowOriginFunc: s.allowOrigin,
+		Addr:           config.Server.Address,
+		AccessLog:      config.Server.AccessLog,
+		AllowedOrigins: config.Server.AllowedOrigins,
 	}
 	err := httpServer.Listen()
 	if err != nil {
@@ -225,7 +227,7 @@ func (s *Server) initHttpServer(config *Config) error {
 	if !secureCookies {
 		slog.Warn("unsecure server protocol; disabling secure cookies")
 	}
-	sessionCookie := server.NewCookieHandler(config.Server.SessionCookie, sessionCookieDomain, sessionCookiePath, secureCookies, http.SameSiteLaxMode)
+	sessionCookie := serverhttp.NewCookieHandler(config.Server.SessionCookie, sessionCookieDomain, sessionCookiePath, secureCookies, http.SameSiteLaxMode)
 	s.httpServer = httpServer
 	s.sessionCookie = sessionCookie
 	s.oauth2IssuerURL = issuerURL
@@ -256,7 +258,7 @@ func (s *Server) initMailer(config *Config) error {
 }
 
 func (s *Server) initTOTP(config *Config) error {
-	s.totpProvider = config.toTOTPConfig(s.oauth2IssuerURL.Host).NewTOTPProvider()
+	s.totpProvider = config.toTOTPConfig(s.oauth2IssuerURL.Host).NewProvider()
 	return nil
 }
 
@@ -436,6 +438,7 @@ func (s *Server) startServer(config *Config) error {
 	s.httpServer.HandleFunc("/session/details", s.handleSessionDetails)
 	s.httpServer.HandleFunc("/session/authenticate", s.handleSessionAuthenticate)
 	s.httpServer.HandleFunc("/session/verify", s.handleSessionVerify)
+	s.httpServer.HandleFunc("/session/confirm", s.handleSessionConfirm)
 	s.httpServer.HandleFunc("/session/terminate", s.handleSessionTerminate)
 	s.httpServer.HandleFunc("/session/totp_register", s.handleSessionTOTPRegister)
 	s.httpServer.HandleFunc("/session/totp_verify", s.handleSessionTOTPVerify)

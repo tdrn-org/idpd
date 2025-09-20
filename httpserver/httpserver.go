@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package httpserver provides http server functionality for this
+// library in a pluggable manner.
 package httpserver
 
 import (
@@ -39,27 +41,38 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
+// The Handler interface provides a generic way to mount any
+// kind of service to an http server.
 type Handler interface {
+	Handle(pattern string, handler http.Handler)
 	HandleFunc(pattern string, handler http.HandlerFunc)
 }
 
 const serverFailureMessage = "http server failure"
 
+// Instance provides a http server based on the standard [http.Server].
 type Instance struct {
-	Addr            string
-	AccessLog       bool
-	AllowOriginFunc func(*http.Request, string) (bool, []string)
-	AllowedMethods  []string
-	listener        net.Listener
-	listenerAddr    string
-	mux             *http.ServeMux
-	baseURL         *url.URL
-	logger          *slog.Logger
-	tracer          oteltrace.Tracer
-	httpServer      *http.Server
-	stoppedWG       sync.WaitGroup
+	// Addr defines the TCP address to listen on (see [net.Listen]).
+	Addr string
+	// AccessLog controls whether access logging is enabled or not.
+	AccessLog bool
+	// AllowedOrigins defines the allowed origins for cross-origin
+	// requests (CORS).
+	AllowedOrigins []string
+	listener       net.Listener
+	listenerAddr   string
+	mux            *http.ServeMux
+	baseURL        *url.URL
+	logger         *slog.Logger
+	tracer         oteltrace.Tracer
+	httpServer     *http.Server
+	stoppedWG      sync.WaitGroup
 }
 
+// Listen invokes [net.Listen] to establish the http servers [net.Listener].
+//
+// After a successfull Listen call, [ListenerAddr] can be used to retrieve
+// the actual listen address.
 func (s *Instance) Listen() error {
 	if s.listener != nil {
 		return nil
@@ -82,6 +95,8 @@ func (s *Instance) Listen() error {
 	return nil
 }
 
+// MustListen estblishes the http server's [net.Listener] like [Listen], but panics
+// in case of an error.
 func (s *Instance) MustListen() *Instance {
 	err := s.Listen()
 	if err != nil {
@@ -91,8 +106,24 @@ func (s *Instance) MustListen() *Instance {
 	return s
 }
 
+// ListenerAddr returns the listener address of the http server.
+//
+// [Listen] or [MustListen] must be invoked first, to establish the http server's [net.Listener].
+// If this is not the case, "" is returned.
+//
+// If the Instance's Addr attribute defines an explicit port, the returned address will be equal
+// to the Addr attribute. Otherwise the returned address contains the choosen port.
 func (s *Instance) ListenerAddr() string {
 	return s.listenerAddr
+}
+
+// Handle
+func (s *Instance) Handle(pattern string, handler http.Handler) {
+	if s.mux == nil {
+		s.mux = http.NewServeMux()
+	}
+	slog.Debug("http server pattern", slog.String("server", s.Addr), slog.String("pattern", pattern))
+	s.mux.Handle(pattern, handler)
 }
 
 func (s *Instance) HandleFunc(pattern string, handler http.HandlerFunc) {
@@ -123,17 +154,14 @@ func (s *Instance) prepareServe(schema string) (*cors.Cors, error) {
 	s.logger = slog.With(slog.Any("baseURL", s.baseURL))
 	s.tracer = otel.Tracer(reflect.TypeFor[Instance]().PkgPath())
 	corsOptions := cors.Options{
-		AllowOriginVaryRequestFunc: s.AllowOriginFunc,
-		AllowedMethods:             s.AllowedMethods,
+		AllowedOrigins: s.AllowedOrigins,
 	}
 	cors := cors.New(corsOptions)
 	return cors, nil
 }
 
 func (s *Instance) runServe(serve func() error) {
-	s.stoppedWG.Add(1)
-	go func() {
-		defer s.stoppedWG.Done()
+	s.stoppedWG.Go(func() {
 		s.logger.Info("http server started")
 		err := serve()
 		if !errors.Is(err, http.ErrServerClosed) {
@@ -141,7 +169,7 @@ func (s *Instance) runServe(serve func() error) {
 		} else {
 			s.logger.Info("http server stopped")
 		}
-	}()
+	})
 }
 
 func (s *Instance) Serve() error {
@@ -189,22 +217,37 @@ func (s *Instance) ServeTLS(certFile string, keyFile string) error {
 func (s *Instance) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	traceCtx, span := trace.ServerStart(s.tracer, r.Context(), "ServeHTTP", attribute.String("path", r.URL.Path))
 	defer span.End()
-	traceR := r.WithContext(traceCtx)
+
+	remoteIP, _, remoteIPR := s.remoteIPContextAndRequest(traceCtx, r)
 	wrappedW := &wrappedResponseWriter{wrapped: w, statusCode: http.StatusOK}
 
 	if !s.AccessLog {
-		s.mux.ServeHTTP(wrappedW, traceR)
+		s.mux.ServeHTTP(wrappedW, remoteIPR)
 	} else {
 		log := &logBuilder{}
-		remoteIP := trace.GetHttpRequestRemoteIP(traceR)
 		log.appendHost(remoteIP)
 		log.appendTime()
 		log.appendRequest(r.Method, r.URL.Path, r.Proto)
-		s.mux.ServeHTTP(wrappedW, traceR)
+		s.mux.ServeHTTP(wrappedW, remoteIPR)
 		log.appendStatus(wrappedW.statusCode, wrappedW.written)
 		s.logger.Info(log.String())
 	}
 	span.SetAttributes(attribute.Int("http.status_code", wrappedW.statusCode))
+}
+
+type remoteIPKeyType string
+
+const remoteIPKey remoteIPKeyType = "remoteIP"
+
+func (s *Instance) remoteIPContextAndRequest(ctx context.Context, r *http.Request) (string, context.Context, *http.Request) {
+	remoteIP := trace.GetHttpRequestRemoteIP(r)
+	remoteIPCtx := context.WithValue(ctx, remoteIPKey, remoteIP)
+	remoteIPR := r.WithContext(remoteIPCtx)
+	return remoteIP, remoteIPCtx, remoteIPR
+}
+
+func RemoteIPContextValue(r *http.Request) string {
+	return r.Context().Value(remoteIPKey).(string)
 }
 
 func (s *Instance) Shutdown(ctx context.Context) error {

@@ -17,56 +17,81 @@
 package httpserver_test
 
 import (
-	"context"
-	"crypto/tls"
+	"io"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/go-tlsconf"
+	"github.com/tdrn-org/go-tlsconf/tlsclient"
 	"github.com/tdrn-org/idpd/httpserver"
 )
 
-const httpServerAddr string = "localhost:"
-const httpServerShutdownPath string = "/shutdown"
-
-func TestHttpServerServe(t *testing.T) {
-	server := &httpserver.Instance{Addr: httpServerAddr, AccessLog: true}
-	server.HandleFunc(httpServerShutdownPath, func(w http.ResponseWriter, _ *http.Request) {
-		go func() {
-			err := server.Shutdown(context.Background())
-			require.NoError(t, err)
-		}()
-		w.WriteHeader(http.StatusOK)
-	})
+func TestServe(t *testing.T) {
+	server := newServer()
 	err := server.Serve()
 	require.NoError(t, err)
 	client := &http.Client{}
-	rsp, err := client.Get(server.BaseURL().JoinPath(httpServerShutdownPath).String())
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rsp.StatusCode)
-	server.WaitStopped()
+	pingServer(t, server, client)
+	server.Shutdown(t.Context())
 }
 
-func TestHttpServerServeTLS(t *testing.T) {
-	server := &httpserver.Instance{Addr: httpServerAddr, AccessLog: true}
-	server.HandleFunc(httpServerShutdownPath, func(w http.ResponseWriter, _ *http.Request) {
-		go func() {
-			err := server.Shutdown(context.Background())
-			require.NoError(t, err)
-		}()
-		w.WriteHeader(http.StatusOK)
-	})
+func TestServeTLS(t *testing.T) {
+	server := newServer()
 	err := server.ServeTLS("", "")
 	require.NoError(t, err)
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
+
+	tlsclient.SetOptions(tlsconf.EnableInsecureSkipVerify())
+
+	client := tlsclient.ApplyConfig(&http.Client{})
+	pingServer(t, server, client)
+	server.Shutdown(t.Context())
+}
+
+func TestPolicy(t *testing.T) {
+	server := newServer()
+	allowedNetworks, err := httpserver.ParseNetworks("127.0.0.1/32", "::1/128")
+	require.NoError(t, err)
+	allowedPolicy := httpserver.AllowNetworks(allowedNetworks)
+	server.Handle("/allowed", httpserver.AccessPolicyHandler(http.HandlerFunc(echoHandler), allowedPolicy))
+	forbiddenNetworks, err := httpserver.ParseNetworks("192.168.1.0/24", "fd::0/64")
+	require.NoError(t, err)
+	forbiddenPolicy := httpserver.AllowNetworks(forbiddenNetworks)
+	server.Handle("/forbidden", httpserver.AccessPolicyHandler(http.HandlerFunc(echoHandler), forbiddenPolicy))
+	err = server.Serve()
+	require.NoError(t, err)
+	client := &http.Client{}
+	require.Equal(t, http.StatusOK, getServer(t, server, client, "/allowed"))
+	require.Equal(t, http.StatusForbidden, getServer(t, server, client, "/forbidden"))
+	server.Shutdown(t.Context())
+}
+
+func echoHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Write([]byte("ok"))
+}
+
+func newServer() *httpserver.Instance {
+	server := &httpserver.Instance{
+		Addr:           "localhost:",
+		AccessLog:      true,
+		AllowedOrigins: []string{"localhost"},
 	}
-	rsp, err := client.Get(server.BaseURL().JoinPath(httpServerShutdownPath).String())
+	server.HandleFunc("/ping", echoHandler)
+	return server
+}
+
+func pingServer(t *testing.T, server *httpserver.Instance, client *http.Client) {
+	rsp, err := client.Get(server.BaseURL().JoinPath("/ping").String())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rsp.StatusCode)
-	server.WaitStopped()
+	defer rsp.Body.Close()
+	responseBody, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "ok", string(responseBody))
+}
+
+func getServer(t *testing.T, server *httpserver.Instance, client *http.Client, path string) int {
+	rsp, err := client.Get(server.BaseURL().JoinPath(path).String())
+	require.NoError(t, err)
+	return rsp.StatusCode
 }

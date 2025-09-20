@@ -26,12 +26,29 @@ import (
 )
 
 //go:embed all:build/*
-var docs embed.FS
+var build embed.FS
 
 func Mount(handler httpserver.Handler) {
-	docs, err := fs.Sub(docs, "build")
+	sub, err := fs.Sub(build, "build")
 	if err != nil {
 		panic(fmt.Sprintf("unexpected web document structure: %s", err))
 	}
-	handler.HandleFunc("/", http.FileServerFS(docs).ServeHTTP)
+	docs := sub.(fs.ReadDirFS)
+	const noneSrc = "'none'"
+	const selfSrc = "'self'"
+	const unsafeInlineSrc = "'unsafe-inline'"
+	const dataSrc = "data:"
+	contentSecurityPolicy := &httpserver.ContentSecurityPolicy{
+		DefaultSrc: []string{noneSrc},
+		ConnectSrc: []string{selfSrc},
+		ScriptSrc:  []string{selfSrc},
+		StyleSrc:   []string{selfSrc, unsafeInlineSrc},
+		ImgSrc:     []string{selfSrc, dataSrc},
+	}
+	err = contentSecurityPolicy.AddHashes(docs)
+	if err != nil {
+		panic(fmt.Sprintf("failed to generate csp hashes: %s", err))
+	}
+	contentSecurityPolicyHeader := contentSecurityPolicy.Header()
+	handler.Handle("/", httpserver.HeaderHandler(http.FileServerFS(docs), contentSecurityPolicyHeader))
 }

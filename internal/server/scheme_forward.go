@@ -14,23 +14,17 @@
  * limitations under the License.
  */
 
-package main
+package server
 
-import (
-	"context"
-	"log/slog"
-	"os"
+import "github.com/tdrn-org/idpd/httpserver"
 
-	"github.com/tdrn-org/go-log"
-	"github.com/tdrn-org/idpd"
-)
+type ForwardHandler struct {
+}
 
-func main() {
-	args := os.Args[1:]
-	log.InitFromFlags(args, nil)
-	slog.Debug("running idpd command", slog.Any("args", args))
-	err := idpd.Run(context.Background(), args)
-	if err != nil {
-		slog.Error("idpd command failure", slog.Any("err", err))
-	}
+func (h *ForwardHandler) Scheme() Scheme {
+	return SchemeForward
+}
+
+func (h *ForwardHandler) Mount(handler httpserver.Handler) {
+
 }

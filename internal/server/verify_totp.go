@@ -20,16 +20,17 @@ import (
 	"context"
 
 	"github.com/tdrn-org/idpd/internal/server/database"
+	"github.com/tdrn-org/idpd/internal/server/totp"
 )
 
 type TOTPVerifyHandler struct {
-	totpProvider        *TOTPProvider
+	totpProvider        *totp.Provider
 	database            database.Driver
 	requestVerification bool
 	tainted             bool
 }
 
-func NewTOTPVerifyHandler(totpProvider *TOTPProvider, database database.Driver, requestVerification bool) *TOTPVerifyHandler {
+func NewTOTPVerifyHandler(totpProvider *totp.Provider, database database.Driver, requestVerification bool) *TOTPVerifyHandler {
 	return &TOTPVerifyHandler{
 		totpProvider:        totpProvider,
 		database:            database,

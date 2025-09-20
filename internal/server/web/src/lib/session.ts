@@ -8,6 +8,8 @@ export type UserInfo = {
     totp_verification: UserVerificationLog
     passkey_verification: UserVerificationLog
     webauthn_verification: UserVerificationLog
+    client_id: string
+    requested_scopes: string[]
 }
 
 export type UserVerificationLog = {
@@ -26,8 +28,12 @@ export type UserTOTPRegistrationRequest = {
     otp_url: string
 }
 
-async function fetchUserInfo(): Promise<UserInfo> {
-    const response = await fetch(`/session`);
+async function fetchUserInfo(id: string | null): Promise<UserInfo> {
+    let url: string = `/session`;
+    if (id) {
+        url += new URLSearchParams({id: id})
+    }
+    const response = await fetch(url);
     const userInfo: UserInfo = await response.json();
     return userInfo;
 }
