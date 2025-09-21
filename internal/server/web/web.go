@@ -34,21 +34,30 @@ func Mount(handler httpserver.Handler) {
 		panic(fmt.Sprintf("unexpected web document structure: %s", err))
 	}
 	docs := sub.(fs.ReadDirFS)
-	const noneSrc = "'none'"
-	const selfSrc = "'self'"
-	const unsafeInlineSrc = "'unsafe-inline'"
+	const policyNone = "'none'"
+	const policySelf = "'self'"
+	const policyUnsafeInline = "'unsafe-inline'"
 	const dataSrc = "data:"
 	contentSecurityPolicy := &httpserver.ContentSecurityPolicy{
-		DefaultSrc: []string{noneSrc},
-		ConnectSrc: []string{selfSrc},
-		ScriptSrc:  []string{selfSrc},
-		StyleSrc:   []string{selfSrc, unsafeInlineSrc},
-		ImgSrc:     []string{selfSrc, dataSrc},
+		BaseUri:        []string{policySelf},
+		FormActions:    []string{policySelf},
+		FrameAncestors: []string{policyNone},
+		DefaultSrc:     []string{policyNone},
+		ConnectSrc:     []string{policySelf},
+		ScriptSrc:      []string{policySelf},
+		StyleSrc:       []string{policySelf, policyUnsafeInline},
+		ImgSrc:         []string{policySelf, dataSrc},
 	}
 	err = contentSecurityPolicy.AddHashes(docs)
 	if err != nil {
 		panic(fmt.Sprintf("failed to generate csp hashes: %s", err))
 	}
 	contentSecurityPolicyHeader := contentSecurityPolicy.Header()
-	handler.Handle("/", httpserver.HeaderHandler(http.FileServerFS(docs), contentSecurityPolicyHeader))
+	securityHeaders := &httpserver.StaticHeaders{
+		Headers: []httpserver.StaticHeader{
+			{Key: "X-Content-Type-Options", Value: "nosniff"},
+			{Key: "X-Frame-Options", Value: "DENY"},
+		},
+	}
+	handler.Handle("/", httpserver.HeaderHandler(http.FileServerFS(docs), contentSecurityPolicyHeader, securityHeaders))
 }

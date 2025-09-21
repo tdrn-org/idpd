@@ -30,13 +30,16 @@ import (
 )
 
 type ContentSecurityPolicy struct {
-	DefaultSrc   []string
-	ConnectSrc   []string
-	ScriptSrc    []string
-	StyleSrc     []string
-	ImgSrc       []string
-	scriptHashes map[string][]string
-	styleHashes  map[string][]string
+	BaseUri        []string
+	FormActions    []string
+	FrameAncestors []string
+	DefaultSrc     []string
+	ConnectSrc     []string
+	ScriptSrc      []string
+	StyleSrc       []string
+	ImgSrc         []string
+	scriptHashes   map[string][]string
+	styleHashes    map[string][]string
 }
 
 func (p *ContentSecurityPolicy) AddHashes(fs fs.ReadDirFS) error {
@@ -124,12 +127,21 @@ func (p *ContentSecurityPolicy) Header() *ContentSecurityPolicyHeader {
 			policies[path] = p.policy(path)
 		}
 	}
-	defaultPolicy := "default-src: 'none';"
+	defaultPolicy := "base-uri: 'none';default-src: 'none';"
 	return &ContentSecurityPolicyHeader{policies: policies, defaultPolicy: defaultPolicy}
 }
 
 func (p *ContentSecurityPolicy) policy(path string) string {
 	buffer := &contentSecurityPolicyBuilder{}
+	if len(p.BaseUri) > 0 {
+		buffer.AddSimpleDirective("base-uri", p.BaseUri)
+	}
+	if len(p.FormActions) > 0 {
+		buffer.AddSimpleDirective("form-action", p.FormActions)
+	}
+	if len(p.FrameAncestors) > 0 {
+		buffer.AddSimpleDirective("frame-ancestors", p.FrameAncestors)
+	}
 	if len(p.DefaultSrc) > 0 {
 		buffer.AddFetchDirective("default-src", p.DefaultSrc)
 	}
@@ -169,6 +181,17 @@ func (h *ContentSecurityPolicyHeader) Apply(w http.ResponseWriter, r *http.Reque
 
 type contentSecurityPolicyBuilder struct {
 	strings.Builder
+}
+
+func (b *contentSecurityPolicyBuilder) AddSimpleDirective(directive string, srcs ...[]string) {
+	b.WriteString(directive)
+	for _, src := range srcs {
+		for _, srcEntry := range src {
+			b.WriteRune(' ')
+			b.WriteString(srcEntry)
+		}
+	}
+	b.WriteRune(';')
 }
 
 func (b *contentSecurityPolicyBuilder) AddFetchDirective(directive string, srcs ...[]string) {

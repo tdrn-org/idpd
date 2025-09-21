@@ -30,12 +30,20 @@ type Header interface {
 	Apply(w http.ResponseWriter, r *http.Request)
 }
 
-func HeaderHandler(handler http.Handler, header Header) http.Handler {
-	if header == nil {
+func HeaderHandler(handler http.Handler, headers ...Header) http.Handler {
+	handlerHeaders := make([]Header, 0, len(headers))
+	for _, header := range headers {
+		if header != nil {
+			handlerHeaders = append(handlerHeaders, header)
+		}
+	}
+	if len(handlerHeaders) == 0 {
 		return handler
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		header.Apply(w, r)
+		for _, header := range handlerHeaders {
+			header.Apply(w, r)
+		}
 		handler.ServeHTTP(w, r)
 	})
 }
@@ -45,6 +53,12 @@ type StaticHeader struct {
 	Value string
 }
 
-func (h *StaticHeader) Apply(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Add(h.Key, h.Value)
+type StaticHeaders struct {
+	Headers []StaticHeader
+}
+
+func (h *StaticHeaders) Apply(w http.ResponseWriter, _ *http.Request) {
+	for _, header := range h.Headers {
+		w.Header().Add(header.Key, header.Value)
+	}
 }
