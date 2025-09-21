@@ -79,6 +79,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tdrn-org/go-conf v0.0.4
+	github.com/tdrn-org/go-diff v0.0.1
 	github.com/tdrn-org/go-log v0.4.1
 	github.com/wneessen/go-mail v0.7.0
 	github.com/zitadel/oidc/v3 v3.44.0

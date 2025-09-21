@@ -21,11 +21,13 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/tdrn-org/go-conf"
 	"github.com/tdrn-org/go-conf/service/loglevel"
+	"github.com/tdrn-org/go-diff"
 	"github.com/tdrn-org/idpd/internal/buildinfo"
 )
 
@@ -115,6 +117,19 @@ type templateCmd struct {
 var template string
 
 func (cmd *templateCmd) Run(args *cmdLine) error {
-	fmt.Print(template)
+	if cmd.Diff == "" {
+		fmt.Print(template)
+	} else {
+		diffFile, err := os.Open(cmd.Diff)
+		if err != nil {
+			return fmt.Errorf("unable to open file '%s' (cause: %w)", cmd.Diff, err)
+		}
+		defer diffFile.Close()
+		diffResult, err := diff.Diff(strings.NewReader(template), diffFile)
+		if err != nil {
+			return fmt.Errorf("failed to compare configurations (cause: %w)", err)
+		}
+		diff.NewPrinter(os.Stdout).Print(diffResult)
+	}
 	return nil
 }
