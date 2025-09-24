@@ -110,7 +110,10 @@ func (cmd *versionCmd) Run(args *cmdLine) error {
 }
 
 type templateCmd struct {
-	Diff string `help:"The configuration file to compare the config template to"`
+	Diff    string `help:"The configuration file to compare the config template to"`
+	Unified bool   `short:"u" help:"Print diff in unified format"`
+	NoAnsi  bool   `help:"Disable colored output"`
+	Ansi    bool   `help:"Force colored output"`
 }
 
 //go:embed config_template.toml
@@ -129,7 +132,16 @@ func (cmd *templateCmd) Run(args *cmdLine) error {
 		if err != nil {
 			return fmt.Errorf("failed to compare configurations (cause: %w)", err)
 		}
-		diff.NewPrinter(os.Stdout).Print(diffResult)
+		printerOptions := make([]diff.PrinterOption, 0, 2)
+		if cmd.NoAnsi {
+			printerOptions = append(printerOptions, diff.WithAnsi(false))
+		} else if cmd.Ansi {
+			printerOptions = append(printerOptions, diff.WithAnsi(true))
+		}
+		if cmd.Unified {
+			printerOptions = append(printerOptions, diff.WithUnifiedFormatter(diff.DefaultUnifiedContext))
+		}
+		diff.NewPrinter(os.Stdout, printerOptions...).Print(diffResult)
 	}
 	return nil
 }

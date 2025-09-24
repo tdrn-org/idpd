@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Fingerprint } from '@lucide/svelte';
 	import session from '$lib/session';
-	import Anonymous from '$lib/components/Anonymous.svelte';
 
 	let id: string | null;
 	let subject: string = '';

@@ -8,8 +8,6 @@ export type UserInfo = {
     totp_verification: UserVerificationLog
     passkey_verification: UserVerificationLog
     webauthn_verification: UserVerificationLog
-    client_id: string
-    requested_scopes: string[]
 }
 
 export type UserVerificationLog = {
