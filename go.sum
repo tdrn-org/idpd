@@ -152,8 +152,8 @@ github.com/tdrn-org/go-log v0.4.1 h1:ECCa9EODU/YdQqIXaQea71cy2KBxLAQp9+7ZchZjrLk
 github.com/tdrn-org/go-log v0.4.1/go.mod h1:3n+/oQ7xT5mAgvnBjqIYinWu1lhNpgE6G4ixbQ7A1sw=
 github.com/tdrn-org/go-tlsconf v0.0.5 h1:0173khUlGAFQM1vEbQF4KmOxvN3qs3eALFAq1rtOJFg=
 github.com/tdrn-org/go-tlsconf v0.0.5/go.mod h1:CWSnvaSx8gSGYTT83o7wDLKnbtqxFRx7T8RZIPkvzbM=
-github.com/wneessen/go-mail v0.7.0 h1:/Wmgd5AVjp5PA+Ken5EFfr+QR83gmqHli9HcAhh0vnU=
-github.com/wneessen/go-mail v0.7.0/go.mod h1:+TkW6QP3EVkgTEqHtVmnAE/1MRhmzb8Y9/W3pweuS+k=
+github.com/wneessen/go-mail v0.7.2 h1:xxPnhZ6IZLSgxShebmZ6DPKh1b6OJcoHfzy7UjOkzS8=
+github.com/wneessen/go-mail v0.7.2/go.mod h1:+TkW6QP3EVkgTEqHtVmnAE/1MRhmzb8Y9/W3pweuS+k=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/zitadel/logging v0.6.2 h1:MW2kDDR0ieQynPZ0KIZPrh9ote2WkxfBif5QoARDQcU=
