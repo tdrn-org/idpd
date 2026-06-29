@@ -1,6 +1,6 @@
 module github.com/tdrn-org/idpd
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/go-jose/go-jose/v4 v4.1.3
@@ -14,7 +14,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0
 	golang.org/x/net v0.46.0
 	golang.org/x/oauth2 v0.31.0
-	golang.org/x/text v0.30.0
+	golang.org/x/text v0.37.0
 )
 
 require (
@@ -57,7 +57,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.8.0 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250922171735-9219d122eba9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
@@ -81,7 +81,7 @@ require (
 	github.com/tdrn-org/go-conf v0.0.4
 	github.com/tdrn-org/go-diff v0.1.1
 	github.com/tdrn-org/go-log v0.4.1
-	github.com/wneessen/go-mail v0.7.2
+	github.com/wneessen/go-mail v0.7.3
 	github.com/zitadel/oidc/v3 v3.45.0
 	github.com/zitadel/saml v0.3.6
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0
