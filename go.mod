@@ -1,6 +1,6 @@
 module github.com/tdrn-org/idpd
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/go-jose/go-jose/v4 v4.1.3
@@ -78,7 +78,7 @@ require (
 	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.10
 	github.com/pquerna/otp v1.5.0
 	github.com/stretchr/testify v1.11.1
-	github.com/tdrn-org/go-conf v0.0.4
+	github.com/tdrn-org/go-conf v0.0.6
 	github.com/tdrn-org/go-diff v0.1.1
 	github.com/tdrn-org/go-log v0.4.1
 	github.com/wneessen/go-mail v0.7.3
