@@ -144,8 +144,8 @@ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXl
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/tdrn-org/go-conf v0.0.4 h1:tfKMROBLaYOqrPHFPRGjlDy9Oy2CXN5iizAYuc4sbT0=
-github.com/tdrn-org/go-conf v0.0.4/go.mod h1:X/Iflg4sWcOoh7hTF+X42Tw+0svEAnayGUEwdrycAZI=
+github.com/tdrn-org/go-conf v0.0.6 h1:m3/aa/yhXu19IkRJpQzAw00g7Vmcpj2MURarLPiBFK0=
+github.com/tdrn-org/go-conf v0.0.6/go.mod h1:Glz0wM7/C1aDYhbJGUw25afRTIQSCtnWWSxI+jJozwM=
 github.com/tdrn-org/go-diff v0.1.1 h1:3cowoHB1wxPmOmvn2DbV8S+5sSKEqUD4N+LihZl7q60=
 github.com/tdrn-org/go-diff v0.1.1/go.mod h1:RcGAIbRNtgTiQ2mz4QU+ddEgAi2rqxwC60ypy0pGvbc=
 github.com/tdrn-org/go-log v0.4.1 h1:ECCa9EODU/YdQqIXaQea71cy2KBxLAQp9+7ZchZjrLk=
