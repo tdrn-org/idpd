@@ -83,7 +83,7 @@ require (
 	github.com/tdrn-org/go-log v0.4.1
 	github.com/wneessen/go-mail v0.7.3
 	github.com/zitadel/oidc/v3 v3.45.0
-	github.com/zitadel/saml v0.3.6
+	github.com/zitadel/saml v0.4.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0
 	golang.org/x/sys v0.45.0 // indirect
