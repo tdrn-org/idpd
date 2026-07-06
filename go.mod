@@ -14,7 +14,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	golang.org/x/net v0.55.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.39.0
 )
 
 require (
@@ -66,11 +66,11 @@ require (
 )
 
 require (
-	github.com/BurntSushi/toml v1.5.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/alecthomas/kong v1.12.1
 	github.com/go-ldap/ldap/v3 v3.4.12
 	github.com/go-webauthn/webauthn v0.14.0
-	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/maxmind/mmdbwriter v1.2.0
