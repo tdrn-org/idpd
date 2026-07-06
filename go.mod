@@ -66,7 +66,7 @@ require (
 )
 
 require (
-	github.com/BurntSushi/toml v1.5.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/alecthomas/kong v1.12.1
 	github.com/go-ldap/ldap/v3 v3.4.12
 	github.com/go-webauthn/webauthn v0.14.0
