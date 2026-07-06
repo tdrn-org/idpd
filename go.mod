@@ -75,7 +75,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/mocktools/go-smtp-mock/v2 v2.5.1
-	github.com/oschwald/maxminddb-golang/v2 v2.1.1
+	github.com/oschwald/maxminddb-golang/v2 v2.4.1
 	github.com/pquerna/otp v1.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tdrn-org/go-conf v0.0.6
@@ -86,5 +86,5 @@ require (
 	github.com/zitadel/saml v0.4.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.44.0
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
 )
