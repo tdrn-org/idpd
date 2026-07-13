@@ -42,7 +42,7 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/muhlemmer/httpforwarded v0.1.0 // indirect
@@ -79,7 +79,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tdrn-org/go-conf v0.0.6
-	github.com/tdrn-org/go-diff v0.1.1
+	github.com/tdrn-org/go-diff v0.1.3
 	github.com/tdrn-org/go-log v0.4.1
 	github.com/wneessen/go-mail v0.8.0
 	github.com/zitadel/oidc/v3 v3.45.0
