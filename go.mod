@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/rs/cors v1.11.1
-	github.com/tdrn-org/go-tlsconf v0.0.5
+	github.com/tdrn-org/go-tlsconf v0.0.10
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
