@@ -18,7 +18,7 @@ require (
 )
 
 require (
-	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
+	github.com/Azure/go-ntlmssp v0.1.0 // indirect
 	github.com/amdonov/xmlsig v0.1.0 // indirect
 	github.com/beevik/etree v1.6.0 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
@@ -68,7 +68,7 @@ require (
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/alecthomas/kong v1.12.1
-	github.com/go-ldap/ldap/v3 v3.4.12
+	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/go-webauthn/webauthn v0.14.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jellydator/ttlcache/v3 v3.4.0
