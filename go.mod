@@ -72,7 +72,7 @@ require (
 	github.com/go-webauthn/webauthn v0.14.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jellydator/ttlcache/v3 v3.4.0
-	github.com/mattn/go-sqlite3 v1.14.32
+	github.com/mattn/go-sqlite3 v1.14.48
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/mocktools/go-smtp-mock/v2 v2.5.1
 	github.com/oschwald/maxminddb-golang/v2 v2.4.1
