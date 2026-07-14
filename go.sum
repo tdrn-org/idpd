@@ -150,8 +150,8 @@ github.com/tdrn-org/go-diff v0.1.3 h1:JKt3dM1f+nJqGi/1OoOe/4RI95clZMB5iAs8duXcPX
 github.com/tdrn-org/go-diff v0.1.3/go.mod h1:1uisqWhRRecdjC03N3ULIaq6smN7WTyhyE2nV7RLR1I=
 github.com/tdrn-org/go-log v0.4.1 h1:ECCa9EODU/YdQqIXaQea71cy2KBxLAQp9+7ZchZjrLk=
 github.com/tdrn-org/go-log v0.4.1/go.mod h1:3n+/oQ7xT5mAgvnBjqIYinWu1lhNpgE6G4ixbQ7A1sw=
-github.com/tdrn-org/go-tlsconf v0.0.5 h1:0173khUlGAFQM1vEbQF4KmOxvN3qs3eALFAq1rtOJFg=
-github.com/tdrn-org/go-tlsconf v0.0.5/go.mod h1:CWSnvaSx8gSGYTT83o7wDLKnbtqxFRx7T8RZIPkvzbM=
+github.com/tdrn-org/go-tlsconf v0.0.10 h1:dbBiA9sZ4Y/9zGdMeVtXyDyd/vLoOh4diebkk5BZatk=
+github.com/tdrn-org/go-tlsconf v0.0.10/go.mod h1:xSklUyH615Z55/4nrevuuqgmN7goVAy2XgfDMwhLMcE=
 github.com/wneessen/go-mail v0.8.0 h1:I65TZ7+oYA+Kcme8GeJrBzfVioKDezj8f/BS+XhVpEE=
 github.com/wneessen/go-mail v0.8.0/go.mod h1:EkVXlu2G11/WYwPBElvN7QQ2c7IKIk0Nexs8BIPVsoQ=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
