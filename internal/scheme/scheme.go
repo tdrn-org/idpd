@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,29 @@
  * limitations under the License.
  */
 
-package idpd_test
+package scheme
 
 import (
-	"testing"
+	"log/slog"
+	"net/url"
 
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/go-httpserver"
+	"github.com/tdrn-org/idpd/internal/data"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+type Runtime interface {
+	BaseURL() *url.URL
+	DataStore() *data.Store
+	Logger() *slog.Logger
+}
+
+type Name string
+
+func (n Name) String() string {
+	return string(n)
+}
+
+type Handler interface {
+	Name() Name
+	Mount(instance *httpserver.Instance)
 }

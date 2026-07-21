@@ -1,0 +1,36 @@
+[logging]
+level = "info"
+target = "stdout"
+color = "auto"
+file_name = "./idpd.log"
+file_size_limit = 0
+syslog_network = "tcp"
+syslog_address = "localhost:601"
+syslog_encoding = "rfc5424"
+syslog_facility = 4
+
+[server]
+address = "localhost:0"
+protocol = "http"
+cert_file = ""
+key_file = ""
+public_url = ""
+trusted_proxies = [ ]
+trusted_headers = [ ]
+allowed_origins = [ ]
+access_log = ""
+access_log_size_limit = 0
+
+[store]
+type = "memory"
+
+[store.memory]
+
+[store.sqlite]
+file = "./idpd.db"
+
+[store.postgres]
+address = "localhost:5432"
+db = "idpd"
+user = "idpd"
+password = ""

@@ -1,5 +1,7 @@
+//go:build windows
+
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +16,10 @@
  * limitations under the License.
  */
 
-package idpd_test
+package config
 
-import (
-	"testing"
+import "os"
 
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
-)
-
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+func DefaultPath() string {
+	return os.ExpandEnv("${LOCALAPPDATA}/idpd/idpd.toml")
 }

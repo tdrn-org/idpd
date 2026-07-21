@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,11 +26,13 @@ import (
 )
 
 func main() {
-	args := os.Args[1:]
-	log.InitFromFlags(args, nil)
-	slog.Debug("running idpd command", slog.Any("args", args))
-	err := idpd.Run(context.Background(), args)
+	cmd := os.Args[0]
+	cmdArgs := os.Args[1:]
+	log.InitFromFlags(cmdArgs, nil)
+	slog.Debug("running "+cmd+" command", slog.Any("args", cmdArgs))
+	err := idpd.RunArgs(context.Background(), cmdArgs)
 	if err != nil {
-		slog.Error("idpd command failure", slog.Any("err", err))
+		slog.Error(cmd+" command failure", slog.Any("err", err))
+		os.Exit(1)
 	}
 }

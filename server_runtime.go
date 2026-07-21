@@ -14,36 +14,36 @@
  * limitations under the License.
  */
 
-package oauth2client
+package idpd
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"net/http"
-	"time"
+	"log/slog"
+	"net/url"
+
+	"github.com/tdrn-org/idpd/internal/data"
 )
 
-const DefaultIDTokenLifetime time.Duration = 5 * time.Minute
-
-type Flow[A any, S any] interface {
-	Init(ctx context.Context) (string, S, error)
-	Callback(ctx context.Context, req *http.Request, session S) (A, error)
+func (s *Server) runtime() *serverRuntime {
+	return &serverRuntime{server: s}
 }
 
-type NonceSessionDate struct {
-	State string
-	Nonce string
+type serverRuntime struct {
+	server *Server
 }
 
-type TokenAuthResult struct {
-	AccessToken  string
-	RefreshToken string
-	Expiry       time.Time
+func (runtime *serverRuntime) BaseURL() *url.URL {
+	return runtime.server.baseURL
 }
 
-func randString(n int) string {
-	b := make([]byte, n)
-	rand.Read(b)
-	return base64.URLEncoding.EncodeToString(b)
+func (runtime *serverRuntime) DataStore() *data.Store {
+	return runtime.server.dataStore
+}
+
+func (runtime *serverRuntime) Logger() *slog.Logger {
+	return runtime.server.logger
+}
+
+func (runtime *serverRuntime) Ping(ctx context.Context) error {
+	return runtime.server.Ping(ctx)
 }

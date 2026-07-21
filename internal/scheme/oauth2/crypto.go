@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package idpd_test
+package oauth2
 
-import (
-	"testing"
+type opCrypto struct {
+	handler *Handler
+}
 
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
-)
+func (crypto *opCrypto) Encrypt(plain string) (string, error) {
+	return plain, nil
+}
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+func (crypto *opCrypto) Decrypt(encrypted string) (string, error) {
+	return encrypted, nil
 }

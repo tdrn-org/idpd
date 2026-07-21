@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,23 @@
  * limitations under the License.
  */
 
-package idpd_test
+package model_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/go-database/memory"
+	"github.com/tdrn-org/idpd/internal/data/model"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
+func newTestDB(t *testing.T) *database.Driver {
+	driver, err := database.Open(memory.NewConfig(model.SqliteSchemaScriptOption))
 	require.NoError(t, err)
+	from, to, err := driver.UpdateSchema(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, database.SchemaNone, from)
+	require.Equal(t, 1, to)
+	return driver
 }

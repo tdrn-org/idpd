@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,29 @@
  * limitations under the License.
  */
 
-package idpd_test
+package saml2
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/go-httpserver"
+	"github.com/tdrn-org/idpd/internal/scheme"
+	"github.com/zitadel/saml/pkg/provider"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+const Name scheme.Name = "saml2"
+
+type Handler struct {
+	saml2Provider *provider.Provider
+}
+
+func NewHandler(runtime scheme.Runtime) (*Handler, error) {
+	h := &Handler{}
+	return h, nil
+}
+
+func (h *Handler) Name() scheme.Name {
+	return Name
+}
+
+func (h *Handler) Mount(instance *httpserver.Instance) {
+	instance.Handle("/saml2", h.saml2Provider.HttpHandler())
 }

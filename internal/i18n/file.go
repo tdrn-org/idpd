@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-package idpd_test
+package i18n
 
 import (
-	"testing"
+	"strings"
 
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"golang.org/x/text/language"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+func FileName(name string, locale language.Tag) string {
+	localeBase, _ := locale.Base()
+	split := strings.LastIndex(name, ".")
+	if split <= 0 {
+		return name + "_" + localeBase.String()
+	}
+	return name[:split] + "_" + localeBase.String() + name[split:]
 }

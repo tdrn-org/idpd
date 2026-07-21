@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-package idpd_test
+package forward
 
-import (
-	"testing"
+import "github.com/tdrn-org/idpd/internal/scheme"
 
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
-)
+const Name scheme.Name = "forward"
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+type Handler struct {
+}
+
+func (h *Handler) Name() scheme.Name {
+	return Name
 }

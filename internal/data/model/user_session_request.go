@@ -14,36 +14,29 @@
  * limitations under the License.
  */
 
-package oauth2client
+package model
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"net/http"
-	"time"
+
+	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/idpd/internal/domain"
 )
 
-const DefaultIDTokenLifetime time.Duration = 5 * time.Minute
-
-type Flow[A any, S any] interface {
-	Init(ctx context.Context) (string, S, error)
-	Callback(ctx context.Context, req *http.Request, session S) (A, error)
+type UserSessionRequest struct {
+	ID         string `db:"id"`
+	State      string `db:"state"`
+	AuthInfo   string `db:"auth_info"`
+	CreateTime int64  `db:"create_time"`
 }
 
-type NonceSessionDate struct {
-	State string
-	Nonce string
+func (usr *UserSessionRequest) ToDomain() (*domain.UserSessionRequest, error) {
+	userSessionRequest := &domain.UserSessionRequest{
+		ID: usr.ID,
+	}
+	return userSessionRequest, nil
 }
 
-type TokenAuthResult struct {
-	AccessToken  string
-	RefreshToken string
-	Expiry       time.Time
-}
-
-func randString(n int) string {
-	b := make([]byte, n)
-	rand.Read(b)
-	return base64.URLEncoding.EncodeToString(b)
+func InsertUserSessionRequest(ctx context.Context, driver *database.Driver, userSessionRequest *domain.UserSessionRequest) (*UserSessionRequest, error) {
+	return nil, nil
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ func Timestamp() string {
 }
 
 func FullVersion() string {
-	return fmt.Sprintf("idpd version %s (%s) %s/%s", Version(), Timestamp(), runtime.GOOS, runtime.GOARCH)
+	return fmt.Sprintf("%s version %s (%s) %s/%s", Cmd(), Version(), Timestamp(), runtime.GOOS, runtime.GOARCH)
 }
 
 func Extended() string {

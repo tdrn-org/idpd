@@ -5,6 +5,7 @@ GOMODULE_VERSION := $(shell cat version.txt)
 
 GO := $(shell command -v go 2> /dev/null)
 ifdef GO
+GOBIN ?= $(shell go env GOPATH)/bin
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 LDFLAGS := $(LDFLAGS) -X $(GOMODULE)/internal/buildinfo.version=$(GOMODULE_VERSION) -X $(GOMODULE)/internal/buildinfo.timestamp=$(shell date +%Y%m%d%H%M%S)
@@ -18,7 +19,7 @@ endif
 NPM := $(shell command -v npm 2> /dev/null)
 NPMOPTS ?= --no-progress --no-color --no-fund
 
-WEB ?= 1
+WEB ?= 0
 
 .DEFAULT_GOAL := help
 
@@ -37,26 +38,26 @@ init:
 ifndef GO
     $(error "ERROR: go command is not available")
 endif
-	@echo "  GO: $(GO) (GOOS:$(GOOS), GOARCH:$(GOARCH))"
+	@echo "  GO: $(GO) ($(shell $(GO) version))"
 ifndef NPM
     $(error "ERROR: npm command is not available")
 endif
-	@echo "  NPM: $(NPM)"
+	@echo "  NPM: $(NPM) ($(shell $(NPM) -v))"
 
 .PHONY: deps
 deps: init
 	@echo "Preparing dependencies..."
 ifeq (1, $(WEB))
-	$(NPM) $(NPMOPTS) install --prefix internal/server/web
+	$(NPM) $(NPMOPTS) install --prefix internal/web
 endif
 	$(GO) mod download -x
 
 .PHONY: build
-build: deps
+build: fmt deps
 	@echo "Building artifacts..."
 ifeq (1, $(WEB))
 	# cd internal/web && $(NPM) $(NPMOPTS) run build
-	$(NPM) $(NPMOPTS) run --prefix internal/server/web build
+	$(NPM) $(NPMOPTS) run --prefix internal/web build
 endif
 	mkdir -p "build/bin"
 	$(foreach GOCMD, $(GOCMDS), $(GO) build -ldflags "-X $(GOMODULE)/internal/buildinfo.cmd=$(GOCMD) $(LDFLAGS)" -o "./build/bin/$(GOCMD)$(GOCMDEXT)" ./cmd/$(GOCMD);)
@@ -67,13 +68,20 @@ dist: build
 	mkdir -p build/dist
 	tar czvf build/dist/$(GOPROJECT)-$(GOOS)-$(GOARCH)-$(GOMODULE_VERSION).tar.gz -C build/bin .
 
+.PHONY: testdeps
+testdeps: build
+	@echo "Preparing test dependencies..."
+	$(GO) install honnef.co/go/tools/cmd/staticcheck@latest
+
 .PHONY: check
-check: build
+check: fmt testdeps vet
 	@echo "Testing artifacts..."
 ifeq (1, $(WEB))
 	# $(NPM) $(NPMOPTS) run --prefix internal/server/web test
 endif
 	$(GO) test -ldflags "$(LDFLAGS)" -v -coverpkg=./... -covermode=atomic -coverprofile=build/coverage.out ./...
+	$(GO) vet ./...
+	$(GOBIN)/staticcheck ./...
 
 .PHONY: clean
 clean: init
@@ -86,3 +94,15 @@ clean: init
 tidy: init
 	go mod verify
 	go mod tidy
+
+.PHONY: generate
+generate: deps
+	go generate ./...
+
+.PHONY: fmt
+fmt:
+	go fmt ./...
+
+.PHONY: vet
+vet:
+	go vet ./...

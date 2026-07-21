@@ -1,4 +1,6 @@
 name: build
+permissions:
+  contents: read
 
 on:
   - workflow_dispatch
@@ -13,26 +15,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-    services:
-      openldap:
-        image: bitnami/openldap
-        ports:
-          - '1389:1389'
-          - '1636:1636'
-        env:
-          LDAP_ADMIN_USERNAME: idpd
-          LDAP_ADMIN_PASSWORD: ldappassword
-          LDAP_ROOT: dc=example,dc=org
-          LDAP_ADMIN_DN: cn=admin,dc=example,dc=org
-          LDAP_SKIP_DEFAULT_TREE: yes
-      postgres:
-        image: library/postgres
-        ports:
-          - '5432:5432'
-        env:
-          POSTGRES_DB: idpd
-          POSTGRES_USER: idpd
-          POSTGRES_PASSWORD: dbpassword
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -43,11 +25,6 @@ jobs:
         with:
           go-version-file: 'go.mod'
           check-latest: true
-      - name: Setup services
-        run: |
-          sudo apt-get update
-          sudo apt install ldap-utils
-          ldapadd -v -x -D "cn=idpd,dc=example,dc=org" -w ldappassword -H ldap://localhost:1389 -f ./testdata/bootstrap/openldap/userstore.ldif
       - name: Run Build
         run: make check
       - name: Run SonarQube

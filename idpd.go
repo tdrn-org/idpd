@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,43 +18,24 @@ package idpd
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"reflect"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/alecthomas/kong"
-	"github.com/google/uuid"
-	"github.com/tdrn-org/idpd/httpserver"
-	"github.com/tdrn-org/idpd/internal/server"
-	serverconf "github.com/tdrn-org/idpd/internal/server/conf"
-	servercrypto "github.com/tdrn-org/idpd/internal/server/crypto"
-	"github.com/tdrn-org/idpd/internal/server/database"
-	"github.com/tdrn-org/idpd/internal/server/geoip"
-	serverhttp "github.com/tdrn-org/idpd/internal/server/http"
-	"github.com/tdrn-org/idpd/internal/server/mail"
-	"github.com/tdrn-org/idpd/internal/server/totp"
-	"github.com/tdrn-org/idpd/internal/server/userstore"
-	"github.com/tdrn-org/idpd/internal/server/web"
-	"github.com/tdrn-org/idpd/oauth2client"
-	"github.com/zitadel/oidc/v3/pkg/oidc"
-	"github.com/zitadel/oidc/v3/pkg/op"
-	"go.opentelemetry.io/otel"
-	oteltrace "go.opentelemetry.io/otel/trace"
+	"github.com/tdrn-org/go-diff"
+	"github.com/tdrn-org/go-log"
+	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/idpd/internal/buildinfo"
 )
 
-const shutdownTimeout time.Duration = 5 * time.Second
-
-func Run(ctx context.Context, args []string) error {
-	cmdLine := &cmdLine{ctx: ctx}
-	cmdParser, err := kong.New(cmdLine, cmdLineApplication, cmdLineHelpOptions, cmdLineVars)
+func RunArgs(ctx context.Context, args []string) error {
+	cmdParser, err := kong.New(&cmdLine{}, kong.BindTo(ctx, (*context.Context)(nil)), cmdLineApplication, cmdLineHelpOptions, cmdLineVars)
 	if err != nil {
 		return err
 	}
@@ -62,84 +43,62 @@ func Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	err = cmd.Run()
+	return cmd.Run()
+}
+
+var cmdLineApplication = kong.Name(buildinfo.Cmd())
+
+var cmdLineHelpOptions = kong.ConfigureHelp(kong.HelpOptions{
+	Compact: true,
+})
+
+var cmdLineVars = kong.Vars{
+	"config_default": config.DefaultPath(),
+}
+
+type cmdLine struct {
+	Silent      bool        `short:"s" help:"Enable silent mode (log level error)"`
+	Quiet       bool        `short:"q" help:"Enable quiet mode (log level warn)"`
+	Verbose     bool        `short:"v" help:"Enable verbose output (log level info)"`
+	Debug       bool        `short:"d" help:"Enable debug output (log level debug)"`
+	RunCmd      runCmd      `cmd:"" name:"run" default:"withargs" help:"Run server"`
+	VersionCmd  versionCmd  `cmd:"" name:"version" help:"Show version info"`
+	TemplateCmd templateCmd `cmd:"" name:"template" help:"Output config template"`
+}
+
+type runCmd struct {
+	Config    string `short:"c" help:"The configuration file to use" default:"${config_default}"`
+	stoppedWG sync.WaitGroup
+}
+
+func (cmd *runCmd) Run(ctx context.Context, args *cmdLine) error {
+	path := strings.TrimSpace(cmd.Config)
+	if path == "" {
+		path = config.DefaultPath()
+	}
+	config, err := config.Load(path, false)
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func Start(ctx context.Context, path string) (*Server, error) {
-	config, err := LoadConfig(path, false)
+	cmd.applyGlobalArgs(config, args)
+	server, err := StartServer(ctx, config)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return startConfig(ctx, config)
-}
-
-func MustStart(ctx context.Context, path string) *Server {
-	s, err := Start(ctx, path)
-	if err != nil {
-		panic(err)
-	}
-	return s
-}
-
-func startConfig(ctx context.Context, config *Config) (*Server, error) {
-	s := &Server{}
-	err := s.initAndStart(config)
-	if err != nil {
-		return nil, err
-	}
-	s.stoppedWG.Add(1)
+	cmd.stoppedWG.Go(func() {
+		err = errors.Join(server.Run(ctx), server.Close())
+	})
 	go func() {
-		defer s.stoppedWG.Done()
-		s.run(ctx)
+		cmd.handleSIGINT(ctx, server)
 	}()
-	return s, nil
-}
-
-const sessionCookiePath string = "/"
-
-type Server struct {
-	httpServer        *httpserver.Instance
-	sessionCookie     *serverhttp.CookieHandler
-	shutdownTelemetry func(context.Context) error
-	tracer            oteltrace.Tracer
-	mailer            *mail.Mailer
-	totpProvider      *totp.Provider
-	locationService   *geoip.LocationService
-	database          database.Driver
-	userStore         userstore.Backend
-	oauth2IssuerURL   *url.URL
-	oauth2Provider    *server.OAuth2Provider
-	oauth2Client      *server.OAuth2Client
-	authFLow          *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]
-	jobTicker         *time.Ticker
-	jobTickerStopped  chan bool
-	stoppedWG         sync.WaitGroup
-}
-
-func (s *Server) OAuth2IssuerURL() *url.URL {
-	return s.oauth2IssuerURL
-}
-
-func (s *Server) AddOAuth2Client(client *OAuth2Client) error {
-	return s.oauth2Provider.AddClient(client.toServerOAuth2Client())
-}
-
-func (s *Server) Shutdown(ctx context.Context) {
-	err := s.shutdown(ctx)
-	if err != nil {
-		slog.Warn("shutdown failed; exiting", slog.Any("err", err))
+	cmd.stoppedWG.Wait()
+	if err == nil {
+		slog.Info("stopped")
 	}
+	return err
 }
 
-func (s *Server) WaitStopped() {
-	s.stoppedWG.Wait()
-}
-
-func (s *Server) run(ctx context.Context) {
+func (cmd *runCmd) handleSIGINT(ctx context.Context, server *Server) {
 	sigint := make(chan os.Signal, 1)
 	signal.Notify(sigint, os.Interrupt)
 	sigintCtx, cancelListenAndServe := context.WithCancel(ctx)
@@ -148,306 +107,70 @@ func (s *Server) run(ctx context.Context) {
 		slog.Info("signal SIGINT; stopping")
 		cancelListenAndServe()
 	}()
-	slog.Info("startup complete; running")
 	<-sigintCtx.Done()
-	s.shutdown(ctx)
+	server.Shutdown(ctx)
 }
 
-func (s *Server) shutdown(ctx context.Context) error {
-	slog.Info("initiating shutdown")
-	shutdownCtx, cancelShutdown := context.WithTimeout(ctx, shutdownTimeout)
-	defer cancelShutdown()
-	// Stop background job processing
-	s.jobTicker.Stop()
-	s.jobTickerStopped <- true
-	// Stop/Close/Shutdown running services
-	err := errors.Join(s.httpServer.Shutdown(shutdownCtx), s.oauth2Provider.Close(), s.database.Close(), s.locationService.Close(), s.shutdownTelemetry(shutdownCtx))
-	if err != nil {
-		return err
+func (cmd *runCmd) applyGlobalArgs(c *config.Config, args *cmdLine) {
+	if args.Debug {
+		c.Logging.Level = config.LogLevel(slog.LevelDebug)
+	} else if args.Verbose {
+		c.Logging.Level = config.LogLevel(slog.LevelInfo)
+	} else if args.Quiet {
+		c.Logging.Level = config.LogLevel(slog.LevelWarn)
+	} else if args.Silent {
+		c.Logging.Level = config.LogLevel(slog.LevelError)
 	}
-	slog.Info("shutdown complete; exiting")
-	return nil
 }
 
-func (s *Server) initAndStart(config *Config) error {
-	inits := []func(*Config) error{
-		s.initServerConf,
-		s.initHttpServer,
-		s.initTelemetry,
-		s.initMailer,
-		s.initTOTP,
-		s.initGeoIP,
-		s.initDatabase,
-		s.initUserStore,
-		s.initOAuth2Provider,
-		s.initOAuth2AuthFlow,
-		s.startJobTicker,
-		s.startServer,
-	}
-	for _, init := range inits {
-		err := init(config)
-		if err != nil {
-			return err
-		}
+type versionCmd struct {
+	Extended bool `short:"x" help:"Output extended version info"`
+}
+
+func (cmd *versionCmd) Run(_ context.Context, args *cmdLine) error {
+	logger := slog.Default()
+	log.Notice(logger, buildinfo.FullVersion())
+	if args.VersionCmd.Extended {
+		log.Notice(logger, buildinfo.Extended())
 	}
 	return nil
 }
 
-func (s *Server) initServerConf(config *Config) error {
-	runtime := &serverconf.Runtime{
-		SessionLifetime:    config.Server.SessionLifetime.Duration,
-		RequestLifetime:    config.Server.RequestLifetime.Duration,
-		TokenLifetime:      config.Server.TokenLifetime.Duration,
-		SigningKeyLifetime: config.OAuth2.SigningKeyLifetime.Duration,
-		SigningKeyExpiry:   config.OAuth2.SigningKeyExpiry.Duration,
-	}
-	runtime.Bind()
-	return nil
+type templateCmd struct {
+	Diff    string `help:"The configuration file to compare the config template to"`
+	Unified bool   `short:"u" help:"Print diff in unified format"`
+	NoAnsi  bool   `help:"Disable colored output"`
+	Ansi    bool   `help:"Force colored output"`
 }
 
-func (s *Server) initHttpServer(config *Config) error {
-	httpServer := &httpserver.Instance{
-		Addr:           config.Server.Address,
-		AccessLog:      config.Server.AccessLog,
-		AllowedOrigins: config.Server.AllowedOrigins,
-	}
-	err := httpServer.Listen()
-	if err != nil {
-		return err
-	}
-	issuerURL, err := config.issuerURL(httpServer)
-	if err != nil {
-		return err
-	}
-	sessionCookieDomain := config.Server.SessionCookieDomain
-	if sessionCookieDomain == "" {
-		slog.Warn("no session domain set; session cookie will be sent to all domains")
-	}
-	secureCookies := ServerProtocol(issuerURL.Scheme) != ServerProtocolHttp
-	if !secureCookies {
-		slog.Warn("unsecure server protocol; disabling secure cookies")
-	}
-	sessionCookie := serverhttp.NewCookieHandler(config.Server.SessionCookie, sessionCookieDomain, sessionCookiePath, secureCookies, http.SameSiteLaxMode)
-	s.httpServer = httpServer
-	s.sessionCookie = sessionCookie
-	s.oauth2IssuerURL = issuerURL
-	return nil
-}
+//go:embed config_template.toml
+var configTemplate string
 
-func (s *Server) initTelemetry(config *Config) error {
-	telemetryConfig, err := config.toTelemetryConfig(s.httpServer)
-	if err != nil {
-		return err
-	}
-	shutdown, err := telemetryConfig.Apply()
-	if err != nil {
-		return err
-	}
-	s.shutdownTelemetry = shutdown
-	s.tracer = otel.Tracer(reflect.TypeFor[Server]().PkgPath())
-	return nil
-}
-
-func (s *Server) initMailer(config *Config) error {
-	mailer, err := config.toMailConfig().NewMailer()
-	if err != nil {
-		return err
-	}
-	s.mailer = mailer
-	return nil
-}
-
-func (s *Server) initTOTP(config *Config) error {
-	s.totpProvider = config.toTOTPConfig(s.oauth2IssuerURL.Host).NewProvider()
-	return nil
-}
-
-func (s *Server) initGeoIP(config *Config) error {
-	cache := geoip.DefaultCache()
-	mapping := make(map[*net.IPNet]string)
-	for _, configMapping := range config.GeoIP.Mappings {
-		for _, network := range configMapping.Networks {
-			mapping[&network.IPNet] = configMapping.Host
-		}
-	}
-	_, err := os.Stat(config.GeoIP.CityDB)
-	if err != nil {
-		s.locationService = geoip.NewLocationService(geoip.DummyProvider(), cache, mapping)
-		return nil
-	}
-	slog.Info("intializing GeoIP provider", slog.String("db", config.GeoIP.CityDB))
-	provider, err := geoip.OpenMaxMindDB(config.GeoIP.CityDB)
-	if err != nil {
-		return err
-	}
-	s.locationService = geoip.NewLocationService(provider, cache, mapping)
-	return nil
-}
-
-func (s *Server) initDatabase(config *Config) error {
-	logger := slog.With(slog.String("driver", string(config.Database.Type)))
-	logger.Info("initializing database")
-	var driver database.Driver
-	var err error
-	switch config.Database.Type {
-	case DatabaseTypeMemory:
-		driver, err = database.OpenMemoryDB(logger)
-	case DatabaseTypeSqlite:
-		driver, err = database.OpenSQLite3DB(config.Database.SQLite.File, logger)
-	case DatabaseTypePostgres:
-		driver, err = database.OpenPostgresDB(fmt.Sprintf("postgres://%s:%s@%s/%s", config.Database.Postgres.User, config.Database.Postgres.Password, config.Database.Postgres.Address, config.Database.Postgres.DB), logger)
-	default:
-		err = fmt.Errorf("unrecognized database type: '%s'", config.Database.Type)
-	}
-	if err != nil {
-		return err
-	}
-	logger.Info("updating database schema")
-	fromSchema, toSchema, err := driver.UpdateSchema(context.Background())
-	if err != nil {
-		return err
-	}
-	if fromSchema != toSchema {
-		logger.Info("database schema updated", slog.String("from", string(fromSchema)), slog.String("to", string(toSchema)))
+func (cmd *templateCmd) Run(_ context.Context, args *cmdLine) error {
+	if cmd.Diff == "" {
+		fmt.Print(configTemplate)
 	} else {
-		logger.Info("database schema already up-to-date")
-	}
-	s.database = driver
-	return nil
-}
-
-func (s *Server) initUserStore(config *Config) error {
-	logger := slog.With(slog.String("store", string(config.UserStore.Type)))
-	logger.Info("initializing user store")
-	var backend userstore.Backend
-	var err error
-	switch config.UserStore.Type {
-	case UserStoreTypeLDAP:
-		ldapConfig, err2 := config.toLDAPUserstoreConfig()
-		err = err2
-		if err == nil {
-			backend, err = userstore.NewLDAPBackend(ldapConfig, logger)
-		}
-	case UserStoreTypeStatic:
-		backend, err = userstore.NewStaticBackend(config.toStaticUsers(), logger)
-	default:
-		err = fmt.Errorf("unrecognized user store type: '%s'", config.UserStore.Type)
-	}
-	if err != nil {
-		return err
-	}
-	s.userStore = backend
-	return nil
-}
-
-func (s *Server) initOAuth2Provider(config *Config) error {
-	issuerURL := s.oauth2IssuerURL
-	logger := slog.With(slog.String("issuer", issuerURL.String()))
-	opOpts := make([]op.Option, 0, 3)
-	opOpts = append(opOpts, op.WithLogger(logger))
-	cryptoKey, err := s.database.InstanciateEncryptionKey(context.Background(), "oauth2CryptoKey", servercrypto.SymetricKeyTypeAES256SHA256, database.NewEncryptionKey)
-	if err != nil {
-		return err
-	}
-	opCrypto, err := cryptoKey.OpCrypto()
-	if err != nil {
-		return err
-	}
-	opOpts = append(opOpts, op.WithCrypto(opCrypto))
-	if ServerProtocol(issuerURL.Scheme) == ServerProtocolHttp {
-		opOpts = append(opOpts, op.WithAllowInsecure())
-	}
-	logger.Info("initializing OAuth2 provider")
-	providerConfig, err := config.toOAuth2ProviderConfig(s.httpServer)
-	if err != nil {
-		return err
-	}
-	provider, err := providerConfig.NewProvider(s.database, s.userStore, opOpts...)
-	if err != nil {
-		return err
-	}
-	for _, client := range config.OAuth2.Clients {
-		err = provider.AddClient(client.toServerOAuth2Client())
+		diffFile, err := os.Open(cmd.Diff)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to open file '%s' (cause: %w)", cmd.Diff, err)
 		}
-	}
-	oauth2Client := &server.OAuth2Client{
-		ID:           uuid.NewString(),
-		Secret:       uuid.NewString(),
-		RedirectURLs: []*url.URL{providerConfig.IssuerURL.JoinPath("/authorized")},
-	}
-	err = provider.AddClient(oauth2Client)
-	if err != nil {
-		return err
-	}
-	s.oauth2Provider = provider
-	s.oauth2Client = oauth2Client
-	return nil
-}
-
-func (s *Server) initOAuth2AuthFlow(config *Config) error {
-	authFlowConfig := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		BaseURL:      s.oauth2IssuerURL.String(),
-		Issuer:       s.oauth2IssuerURL.String(),
-		ClientId:     s.oauth2Client.ID,
-		ClientSecret: s.oauth2Client.Secret,
-		Scopes:       []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail, oidc.ScopeOfflineAccess, "groups"},
-		EnablePKCE:   true,
-	}
-	authFlow, err := authFlowConfig.NewFlow(&http.Client{}, context.Background(), s.tokenExchange)
-	if err != nil {
-		return err
-	}
-	s.authFLow = authFlow
-	return nil
-}
-
-func (s *Server) startJobTicker(config *Config) error {
-	schedule := serverJobTickerSchedule
-	s.jobTicker = time.NewTicker(schedule)
-	s.jobTickerStopped = make(chan bool)
-	slog.Info("starting job ticker", slog.String("schedule", schedule.String()))
-	s.stoppedWG.Add(1)
-	go func() {
-		defer s.stoppedWG.Done()
-		for stopped := false; !stopped; {
-			select {
-			case <-s.jobTickerStopped:
-				stopped = true
-			case <-s.jobTicker.C:
-				s.runJobs()
-			}
+		defer diffFile.Close()
+		diffResult, err := diff.Diff(strings.NewReader(configTemplate), diffFile)
+		if err != nil {
+			return fmt.Errorf("failed to compare configurations (cause: %w)", err)
 		}
-		slog.Info("job ticker stopped")
-	}()
+		diffResult.LeftName = "totem.toml"
+		diffResult.RightName = diffFile.Name()
+		printerOptions := make([]diff.PrinterOption, 0, 2)
+		if cmd.NoAnsi {
+			printerOptions = append(printerOptions, diff.WithAnsi(false))
+		} else if cmd.Ansi {
+			printerOptions = append(printerOptions, diff.WithAnsi(true))
+		}
+		if cmd.Unified {
+			printerOptions = append(printerOptions, diff.WithUnifiedFormatter(diff.DefaultUnifiedContext))
+		}
+		diff.NewPrinter(os.Stdout, printerOptions...).Print(diffResult)
+	}
 	return nil
-}
-
-func (s *Server) startServer(config *Config) error {
-	s.oauth2Provider.Mount(s.httpServer)
-	s.authFLow.Mount(s.httpServer)
-	if !config.Mock.Enabled {
-		web.Mount(s.httpServer)
-	} else {
-		s.httpServer.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
-			s.handleUserMock(w, r, config.Mock.Subject, config.Mock.Password, config.Mock.Rembemer)
-		})
-	}
-	s.httpServer.HandleFunc("/session", s.handleSession)
-	s.httpServer.HandleFunc("/session/details", s.handleSessionDetails)
-	s.httpServer.HandleFunc("/session/authenticate", s.handleSessionAuthenticate)
-	s.httpServer.HandleFunc("/session/verify", s.handleSessionVerify)
-	s.httpServer.HandleFunc("/session/confirm", s.handleSessionConfirm)
-	s.httpServer.HandleFunc("/session/terminate", s.handleSessionTerminate)
-	s.httpServer.HandleFunc("/session/totp_register", s.handleSessionTOTPRegister)
-	s.httpServer.HandleFunc("/session/totp_verify", s.handleSessionTOTPVerify)
-	switch config.Server.Protocol {
-	case ServerProtocolHttp:
-		return s.httpServer.Serve()
-	case ServerProtocolHttps:
-		return s.httpServer.ServeTLS(config.Server.CertFile, config.Server.KeyFile)
-	default:
-		return fmt.Errorf("unexpected server protocol: %s", config.Server.Protocol)
-	}
 }

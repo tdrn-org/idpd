@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-package idpd_test
+package model
 
 import (
-	"testing"
+	_ "embed"
 
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/go-database/postgres"
+	"github.com/tdrn-org/go-database/sqlite"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
-}
+//go:embed schema.sqlite.1.sql
+var schemaSQLite1Script []byte
+var SqliteSchemaScriptOption sqlite.ConfigSetter = sqlite.WithSchemaScripts(schemaSQLite1Script)
+
+//go:embed schema.postgres.1.sql
+var schemaPostgres1Script []byte
+var PostgresSchemaScriptOption postgres.ConfigSetter = postgres.WithSchemaScripts(schemaPostgres1Script)

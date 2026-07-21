@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,24 @@
  * limitations under the License.
  */
 
-package idpd_test
+package i18n_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/idpd/internal/i18n"
+	"golang.org/x/text/language"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+func TestFileName(t *testing.T) {
+	rawName := "test.txt"
+
+	// English file name
+	name := i18n.FileName(rawName, language.English)
+	require.Equal(t, "test_en.txt", name)
+
+	// German file name
+	name = i18n.FileName(rawName, language.German)
+	require.Equal(t, "test_de.txt", name)
 }

@@ -1,0 +1,50 @@
+basePath: /api/v1
+definitions:
+  rest.ServerInfo:
+    properties:
+      version:
+        description: The server version
+        type: string
+    type: object
+host: localhost:9123
+info:
+  contact:
+    url: https://github.com/tdrn-org/totem
+  description: IdPD identity provider server API.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: IdPD REST API
+  version: "1.0"
+paths:
+  /api/v1/info:
+    get:
+      description: Ping the server to check general health
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rest.ServerInfo'
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Query server info
+  /api/v1/ping:
+    get:
+      description: Ping the server to check general health
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Ping the server
+swagger: "2.0"

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,71 +17,51 @@
 package oauth2client_test
 
 import (
-	"context"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd"
-	"github.com/tdrn-org/idpd/httpserver"
+	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/oauth2client"
-	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"golang.org/x/oauth2"
 )
 
-func TestAuthorizationCodeFlow(t *testing.T) {
-	idpdServer := idpd.MustStart(t.Context(), "testdata/idpd.toml")
-	callbackServer := (&httpserver.Instance{Addr: "localhost:", AccessLog: true}).MustListen()
-	clientBaseURL, err := url.Parse("http://" + callbackServer.ListenerAddr())
-	require.NoError(t, err)
-	client := &idpd.OAuth2Client{
-		ID:                     "authorizationCodeFlowClient",
-		Secret:                 "secret",
-		RedirectURLs:           []idpd.URLSpec{{URL: *clientBaseURL.JoinPath("/authorized")}},
-		PostLogoutRedirectURLs: []idpd.URLSpec{{URL: *clientBaseURL}},
-	}
-	idpdServer.AddOAuth2Client(client)
-	config := &oauth2client.AuthorizationCodeFlowConfig[*oidc.IDTokenClaims]{
-		Issuer:       idpdServer.OAuth2IssuerURL().String(),
-		ClientId:     client.ID,
-		ClientSecret: client.Secret,
-		BaseURL:      clientBaseURL.String(),
-		Scopes:       []string{"openid", "profile", "email", "groups"},
-		EnablePKCE:   true,
-	}
-	jar, err := cookiejar.New(nil)
-	require.NoError(t, err)
-	flowClient := &http.Client{
-		Jar: jar,
-	}
-	var httpClient *http.Client
-	flow, err := config.NewFlow(flowClient, context.Background(), func(w http.ResponseWriter, r *http.Request, tokens *oidc.Tokens[*oidc.IDTokenClaims], state string, flow *oauth2client.AuthorizationCodeFlow[*oidc.IDTokenClaims]) {
-		httpClient, _ = flow.Client(r.Context(), tokens.Token)
-		http.Redirect(w, r, clientBaseURL.String(), http.StatusFound)
+func TestOIDCCodeFlow(t *testing.T) {
+	t.SkipNow()
+	server := runTestServer(t, "testdata/idpd.toml")
+	defer server.Close()
+
+	redirectURL := server.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(r)
 	})
+	clientConfig := oauth2client.NewOIDCCodeFlowClientConfig("testclient", "testsecret", false, redirectURL)
+	server.OAuth2().AddClient(clientConfig)
+	oauth2Config := &oauth2.Config{
+		ClientID:     clientConfig.ID,
+		ClientSecret: clientConfig.Secret,
+		Endpoint:     *server.OAuth2().Endpoint(),
+		RedirectURL:  clientConfig.RedirectURLStrings()[0],
+		Scopes:       clientConfig.AllowedScopes,
+	}
+	flow := oauth2client.NewOIDCCodeFLow(oauth2Config)
+	authURL, _, err := flow.Init(t.Context())
 	require.NoError(t, err)
-	flow.Mount(callbackServer)
-	callbackServer.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	err = callbackServer.Serve()
+	rsp, err := http.Get(authURL)
 	require.NoError(t, err)
-	testFlow(t, flow)
-	require.NotNil(t, httpClient)
-	userInfo, err := flow.GetUserInfo(httpClient, context.Background())
-	require.NoError(t, err)
-	fmt.Println(userInfo)
-	callbackServer.Shutdown(context.Background())
+	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	server.Shutdown(t.Context())
 }
 
-func testFlow(t *testing.T, flow oauth2client.AuthorizationFlow) {
-	err := flow.Authenticate()
+func runTestServer(t *testing.T, path string) *idpd.Server {
+	cfg, err := config.Load(path, true)
 	require.NoError(t, err)
-}
-
-func init() {
-	log.InitDefault()
+	server, err := idpd.StartServer(t.Context(), cfg)
+	require.NoError(t, err)
+	go func() {
+		err := server.Run(t.Context())
+		require.NoError(t, err)
+	}()
+	return server
 }

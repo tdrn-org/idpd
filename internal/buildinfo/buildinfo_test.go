@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Holger de Carne
+ * Copyright 2025-2026 Holger de Carne
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,31 @@
  * limitations under the License.
  */
 
-package idpd_test
+package buildinfo_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/idpd/internal/buildinfo"
 )
 
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+func TestCmd(t *testing.T) {
+	require.NotEmpty(t, buildinfo.Cmd())
+}
+
+func TestVersion(t *testing.T) {
+	require.NotEmpty(t, buildinfo.Version())
+}
+
+func TestTimestamp(t *testing.T) {
+	require.NotEmpty(t, buildinfo.Timestamp())
+}
+
+func TestFullVersion(t *testing.T) {
+	require.Regexp(t, "^.* version .* \\(.*\\) .*/.*$", buildinfo.FullVersion())
+}
+
+func TestExtended(t *testing.T) {
+	require.Regexp(t, "^Build toolchain ", buildinfo.Extended())
 }

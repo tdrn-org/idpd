@@ -1,0 +1,76 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "IdPD identity provider server API.",
+        "title": "IdPD REST API",
+        "contact": {
+            "url": "https://github.com/tdrn-org/totem"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:9123",
+    "basePath": "/api/v1",
+    "paths": {
+        "/api/v1/info": {
+            "get": {
+                "description": "Ping the server to check general health",
+                "produces": [
+                    "text/plain"
+                ],
+                "summary": "Query server info",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.ServerInfo"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/ping": {
+            "get": {
+                "description": "Ping the server to check general health",
+                "produces": [
+                    "text/plain"
+                ],
+                "summary": "Ping the server",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "rest.ServerInfo": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "description": "The server version",
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

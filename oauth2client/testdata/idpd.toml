@@ -1,29 +1,5 @@
+[logging]
+level = "debug"
+
 [server]
-address = "localhost:"
-access_log = true
-
-[database]
-type = "memory"
-
-[database.memory]
-
-[userstore]
-type = "static"
-
-[[userstore.static]]
-subject = "user0"
-password = "password0"
-[userstore.static.email]
-address = "user0@example.org"
-
-[oauth2]
-
-[[oauth2.client]]
-id = "authorization_code_flow"
-secret = "secret"
-redirect_urls = ["http://localhost:9123/authorized"]
-
-[mock]
-enabled = true
-subject = "user0"
-password = "password0"
+access_log = "stdout"
