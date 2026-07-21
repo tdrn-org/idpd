@@ -18,7 +18,7 @@
 #level = "info"
 #target = "stdout"
 #color = "auto"
-#file_name = "./idbd.log"
+#file_name = "./idpd.log"
 #file_size_limit = 0
 #syslog_network = "tcp"
 #syslog_address = "localhost:601"

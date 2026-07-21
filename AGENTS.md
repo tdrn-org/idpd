@@ -1,73 +1,73 @@
 # AGENTS.md — idpd (Identity Provider Daemon)
 
-## Projekt-Identität
+## Project Identity
 
-| Feld | Wert |
+| Field | Value |
 |------|------|
 | Repository | `github.com/tdrn-org/idpd` |
-| Modul-Pfad | `github.com/tdrn-org/idpd` |
-| Go-Version | `1.26` |
-| Typ | **Applikation** (Binary) |
-| Lizenz | Apache 2.0 |
+| Module Path | `github.com/tdrn-org/idpd` |
+| Go Version | `1.26` |
+| Type | **Application** (Binary) |
+| License | Apache 2.0 |
 
-**Zweck:** Identity Provider Daemon. Bietet OAuth2/OIDC, SAML2 und Forward-Auth als pluggable Auth-Schemes hinter einem einheitlichen Reverse-Proxy-fähigen HTTP-Server.
+**Purpose:** Identity Provider Daemon. Provides OAuth2/OIDC, SAML2, and Forward-Auth as pluggable auth schemes behind a unified reverse-proxy-capable HTTP server.
 
 ---
 
 ## Build & Test
 
 ```bash
-# Build (Applikation → Binary)
+# Build (Application → Binary)
 make build
 
 # Test + Vet + Staticcheck
 make check
 
-# Nur Formatieren
+# Format only
 make fmt
 
-# Dependencies aktualisieren
+# Update dependencies
 make deps
 
-# Swagger-Doku generieren (nach API-Änderungen)
+# Generate Swagger docs (after API changes)
 make generate
 
-# Aufräumen
+# Clean build artifacts
 make clean
 ```
 
-**Regel:** Vor jedem Commit muss `make check` grün sein.
+**Rule:** `make check` must pass before every commit.
 
 ---
 
-## Architektur-Übersicht
+## Architecture Overview
 
 ```
 cmd/idpd/main.go          → Entry point
 idpd.go                   → Kong CLI (run, version, template)
-server.go                 → Server-Lifecycle (Start, Run, Shutdown, Close)
-server_runtime.go         → Runtime-Adapter (Dependency Injection)
+server.go                 → Server lifecycle (Start, Run, Shutdown, Close)
+server_runtime.go         → Runtime adapter (dependency injection)
 
 internal/
 ├── adapters/middleware/rest/  → REST API (/api/v1/ping, /api/v1/info)
-├── buildinfo/                 → Build-Metadaten (ldflags)
-├── crypto/                    → Key-Generierung (RSA, ECDSA, EdDSA, HMAC)
-├── data/                      → Repository + Transaction-Handling
-│   └── model/                 → SQL-Modelle + Schema-Migrationen (embedded)
-├── domain/                    → Domain-Typen (SigningKey, UserSessionRequest)
-├── i18n/                      → en/de Sprachunterstützung
-└── scheme/                    → 🔑 Plugin-System für Auth-Schemes
-    ├── scheme.go              → Runtime + Handler Interface
-    ├── oauth2/                → Zitadel OP Provider (aktiv, mit Stubs)
-    ├── saml2/                 → Zitadel SAML (Skelett)
-    └── forward/               → Forward Auth (Skelett)
+├── buildinfo/                 → Build metadata (ldflags)
+├── crypto/                    → Key generation (RSA, ECDSA, EdDSA, HMAC)
+├── data/                      → Repository + transaction handling
+│   └── model/                 → SQL models + schema migrations (embedded)
+├── domain/                    → Domain types (SigningKey, UserSessionRequest)
+├── i18n/                      → en/de language support
+└── scheme/                    → 🔑 Plugin system for auth schemes
+    ├── scheme.go              → Runtime + Handler interface
+    ├── oauth2/                → Zitadel OP Provider (active, with stubs)
+    ├── saml2/                 → Zitadel SAML (skeleton)
+    └── forward/               → Forward Auth (skeleton)
 
-oauth2client/              → Client-seitiger OAuth2-Flow (generisch)
-config/                    → TOML-Konfiguration mit Defaults
-config_template.toml       → Embedded Config-Template
+oauth2client/              → Client-side OAuth2 flow (generic)
+config/                    → TOML configuration with defaults
+config_template.toml       → Embedded config template
 ```
 
-### Dependency-Richtung (Hexagonal)
+### Dependency Direction (Hexagonal)
 
 ```
 CLI → Server → scheme.Handler → zitadel/oidc OP
@@ -75,84 +75,84 @@ CLI → Server → scheme.Handler → zitadel/oidc OP
             ↘ REST API
 ```
 
-**Disziplin:** `domain/` hat keine externen Imports. `data/` kennt `domain/`. `scheme/` kennt `domain/` und `data/`. Niemand importiert rückwärts.
+**Discipline:** `domain/` has no external imports. `data/` knows `domain/`. `scheme/` knows `domain/` and `data/`. No backward imports.
 
 ---
 
-## Externe Abhängigkeiten (kritische)
+## Key External Dependencies
 
-| Paket | Zweck |
+| Package | Purpose |
 |-------|-------|
-| `github.com/zitadel/oidc/v3` | OAuth2/OIDC OP Provider (Motor) |
+| `github.com/zitadel/oidc/v3` | OAuth2/OIDC OP Provider (engine) |
 | `github.com/zitadel/saml` | SAML2 Provider |
 | `github.com/go-jose/go-jose/v4` | JOSE (JWK, JWT Signing) |
-| `github.com/alecthomas/kong` | CLI-Framework |
-| `github.com/tdrn-org/go-database` | DB-Abstraktion |
-| `github.com/tdrn-org/go-httpserver` | HTTP-Server-Wrapper |
+| `github.com/alecthomas/kong` | CLI framework |
+| `github.com/tdrn-org/go-database` | DB abstraction |
+| `github.com/tdrn-org/go-httpserver` | HTTP server wrapper |
 | `github.com/tdrn-org/go-log` | Logging |
-| `github.com/tdrn-org/go-conf` | Config-Binding |
-| `github.com/tdrn-org/go-diff` | Config-Template Diff |
-| `github.com/swaggo/swag` | Swagger-Generator (tool) |
+| `github.com/tdrn-org/go-conf` | Config binding |
+| `github.com/tdrn-org/go-diff` | Config template diff |
+| `github.com/swaggo/swag` | Swagger generator (tool) |
 
 ---
 
-## Besonderheiten
+## Notable Design Decisions
 
-### 1. Scheme Plugin-System
-Jedes Auth-Scheme implementiert `scheme.Handler`:
+### 1. Scheme Plugin System
+Each auth scheme implements `scheme.Handler`:
 ```go
 type Handler interface {
     Name() Name
     Mount(instance *httpserver.Instance)
 }
 ```
-Runtime-Abhängigkeiten werden per `scheme.Runtime` injiziert, nicht global.
+Runtime dependencies are injected via `scheme.Runtime`, not global state.
 
-### 2. OAuth2 Storage: Stub-Phase
-`internal/scheme/oauth2/storage.go` implementiert das Zitadel `op.Storage`-Interface mit **~30 Stub-Methoden** (`logStub()`). 
-- **Arbeitend:** `GetClientByClientID`, `SigningKey`, `SignatureAlgorithms`
-- **Stubs:** Alle Token/Session/Auth-Request-Methoden
-- Das ist bewusst — die OP-Infrastruktur läuft, die echte Storage-Implementierung ist der nächste große Schritt.
+### 2. OAuth2 Storage: Stub Phase
+`internal/scheme/oauth2/storage.go` implements the Zitadel `op.Storage` interface with **~30 stub methods** (`logStub()`). 
+- **Working:** `GetClientByClientID`, `SigningKey`, `SignatureAlgorithms`
+- **Stubs:** All token/session/auth-request methods
+- This is intentional — the OP infrastructure runs, real storage implementation is the next major step.
 
-### 3. Key-Rotation
-Signing-Keys werden automatisch rotiert:
-- Aktiv: 30 Tage (`DefaultSigningKeyActiveDuration`)
-- Lebensdauer: 60 Tage (`DefaultSigningKeyLifetimeDuration`)
-- Alte Keys werden bei `GetSigningKey()` automatisch gelöscht
+### 3. Key Rotation
+Signing keys are automatically rotated:
+- Active: 30 days (`DefaultSigningKeyActiveDuration`)
+- Lifetime: 60 days (`DefaultSigningKeyLifetimeDuration`)
+- Expired keys are automatically deleted during `GetSigningKey()`
 
 ### 4. Multi-Database
-Unterstützt via `go-database`:
-- `memory` — In-Memory (Tests)
-- `sqlite` — Lokal/Entwicklung (Schema: `schema.sqlite.1.sql`)
-- `postgres` — Produktion (Schema: `schema.postgres.1.sql`)
+Supported via `go-database`:
+- `memory` — In-memory (tests)
+- `sqlite` — Local/development (schema: `schema.sqlite.1.sql`)
+- `postgres` — Production (schema: `schema.postgres.1.sql`)
 
-Schema-Migrationen sind embedded SQL-Dateien in `internal/data/model/`.
+Schema migrations are embedded SQL files in `internal/data/model/`.
 
-### 5. Build-Info per ldflags
-Version, Timestamp und Command-Name werden beim Build per `-ldflags -X` in `internal/buildinfo/` injiziert. Im Dev-Build steht dort `<dev build>`.
+### 5. Build Info via ldflags
+Version, timestamp, and command name are injected at build time via `-ldflags -X` into `internal/buildinfo/`. Dev builds show `<dev build>`.
 
-### 6. Config-Template-Diff
-`idpd template --diff /etc/idpd.toml` vergleicht die aktuelle Config mit dem embedded Template — nützlich nach Updates.
-
----
-
-## Aktueller Stand (21.07.2026)
-
-- ✅ Server startet, OAuth2 OP Provider läuft
-- ✅ REST API (ping, info) funktioniert
-- ✅ Client-Registrierung aus Config
-- ✅ Key-Generierung, -Rotation, -Persistenz
-- ✅ Multi-DB Support
-- 🚧 OAuth2 Storage: Token/Session-Persistenz fehlt
-- 🚧 SAML2: Handler-Skelett, keine echte Integration
-- 🚧 Forward-Auth: Nur Name definiert
+### 6. Config Template Diff
+`idpd template --diff /etc/idpd.toml` compares the current config against the embedded template — useful after upgrades.
 
 ---
 
-## Agent-spezifische Hinweise
+## Current Status (2026-07-21)
 
-- **Vor jedem Commit:** `make check` muss grün sein (gilt für alle tdrn-org Projekte)
-- **Swagger:** Nach API-Änderungen `make generate` nicht vergessen
-- **Schema-Änderungen:** Neue SQL-Dateien in `internal/data/model/` erfordern neue `model.*SchemaScriptOption`-Konstanten
-- **Neue Auth-Schemes:** `scheme.Handler` implementieren, in `server.go` `startSchemeHandlers()` registrieren
-- **Review-Fokus:** `opStorage`-Stubs sind der kritischste unfertige Bereich. Alles andere ist stabil.
+- ✅ Server starts, OAuth2 OP Provider running
+- ✅ REST API (ping, info) functional
+- ✅ Client registration from config
+- ✅ Key generation, rotation, persistence
+- ✅ Multi-DB support
+- 🚧 OAuth2 Storage: Token/session persistence missing
+- 🚧 SAML2: Handler skeleton, no real integration
+- 🚧 Forward-Auth: Name only defined
+
+---
+
+## Agent Notes
+
+- **Before every commit:** `make check` must pass (applies to all tdrn-org projects)
+- **Swagger:** After API changes, run `make generate`
+- **Schema changes:** New SQL files in `internal/data/model/` require new `model.*SchemaScriptOption` constants
+- **New auth schemes:** Implement `scheme.Handler`, register in `server.go` `startSchemeHandlers()`
+- **Review focus:** `opStorage` stubs are the most critical unfinished area. Everything else is stable.
