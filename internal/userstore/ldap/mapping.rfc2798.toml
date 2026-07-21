@@ -1,0 +1,23 @@
+[user]
+login = "uid"                               #inetOrgPerson
+name = "displayName"                        #inetOrgPerson
+given_name = "givenName"                    #inetOrgPerson
+family_name = "sn"                          #inetOrgPerson
+picture = "jpegPhoto"                       #inetOrgPerson
+#website = ""
+#birthdate = ""
+#timezone = ""
+locale = "preferredLanguage"                #inetOrgPerson
+email_addresses = "mail"                    #inetOrgPerson
+phone_numbers = "telephoneNumber"           #inetOrgPerson
+street = "street"                           #inetOrgPerson
+locality = "l"                              #inetOrgPerson
+#region = ""
+postal_code = "postalCode"                  #inetOrgPerson
+country = "c"
+updated_at = "whenChanged"
+#groups = ""
+
+[group]
+name = "cn"
+members = "member"

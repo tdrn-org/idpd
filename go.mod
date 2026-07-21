@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/amdonov/xmlsig v0.1.0 // indirect
 	github.com/beevik/etree v1.7.0 // indirect
@@ -22,6 +23,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
+	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/go-chi/chi/v5 v5.3.1 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -78,12 +80,14 @@ require (
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/cors v1.11.1
 	github.com/swaggo/swag v1.16.6
 	github.com/tdrn-org/go-database v0.1.0
 	github.com/tdrn-org/go-httpserver v0.1.1
 	github.com/tdrn-org/go-log v0.5.7
+	github.com/tdrn-org/go-pool v0.0.2
 	github.com/zitadel/oidc/v3 v3.47.9
 	github.com/zitadel/saml v0.4.1
 	gopkg.in/yaml.v3 v3.0.1 // indirect

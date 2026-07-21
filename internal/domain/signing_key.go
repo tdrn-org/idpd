@@ -17,6 +17,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -27,4 +28,8 @@ type SigningKey struct {
 	Algorithm  jose.SignatureAlgorithm
 	Key        any
 	CreateTime time.Time
+}
+
+type SigninKeyStore interface {
+	GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*SigningKey, error)
 }

@@ -1,0 +1,23 @@
+[user]
+login = "userPrincipalName"
+name = "displayName"
+given_name = "givenName"
+family_name = "sn"
+picture = "thumbnailPhoto"
+website = "wWWHomePage"
+#birthdate = ""
+#timezone = ""
+#locale = ""
+email_addresses = "mail"
+phone_numbers = "telephoneNumber"
+street = "street"
+locality = "l"
+#region = ""
+postal_code = "postalCode"
+country = "c"
+updated_at = "whenChanged"
+groups = "memberOf"
+
+[group]
+name = "sAMAccountName"
+members = "member"

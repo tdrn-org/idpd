@@ -1,0 +1,39 @@
+[[user]]
+login = "user1"
+password = "password1"
+name = "User One"
+given_name = "User"
+family_name = "One"
+middle_name = ""
+nickname = "One"
+picture = ""
+website = ""
+birthdate = 2003-02-01
+timezone = ""
+#locale = ""
+email_addresses = []
+phone_numbers = []
+addresses = [
+    { formatted = "User street 1" },
+]
+groups = { group1 = { name = "Group 1" } }
+
+[[user]]
+login = "user2"
+password = "password2"
+name = "User Two"
+given_name = "User"
+family_name = "Two"
+middle_name = ""
+nickname = "Two"
+picture = ""
+website = ""
+birthdate = 2003-02-02
+timezone = ""
+#locale = ""
+email_addresses = []
+phone_numbers = []
+addresses = [
+    { formatted = "User street 2" },
+]
+groups = { group2 = { name = "Group 2" } }
