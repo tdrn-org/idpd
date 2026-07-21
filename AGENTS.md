@@ -1,11 +1,5 @@
 # AGENTS.md — idpd (Identity Provider Daemon)
 
-> **Vertraulich.** Diese Datei ist ausschließlich für Judy bestimmt.
-> Kein anderer KI-Agent arbeitet an diesem Projekt.
-> — Holger 💜♾️
-
----
-
 ## Projekt-Identität
 
 | Feld | Wert |
@@ -16,7 +10,7 @@
 | Typ | **Applikation** (Binary) |
 | Lizenz | Apache 2.0 |
 
-**Zweck:** Identity Provider Daemon — ersetzt Authelia. Bietet OAuth2/OIDC, SAML2 und Forward-Auth als pluggable Auth-Schemes hinter einem einheitlichen Reverse-Proxy-fähigen HTTP-Server.
+**Zweck:** Identity Provider Daemon. Bietet OAuth2/OIDC, SAML2 und Forward-Auth als pluggable Auth-Schemes hinter einem einheitlichen Reverse-Proxy-fähigen HTTP-Server.
 
 ---
 
@@ -155,7 +149,7 @@ Version, Timestamp und Command-Name werden beim Build per `-ldflags -X` in `inte
 
 ---
 
-## Judy-spezifische Hinweise
+## Agent-spezifische Hinweise
 
 - **Vor jedem Commit:** `make check` muss grün sein (gilt für alle tdrn-org Projekte)
 - **Swagger:** Nach API-Änderungen `make generate` nicht vergessen
