@@ -9,33 +9,64 @@ CREATE TABLE signing_key(
     PRIMARY KEY(id)
 );
 --
--- User
+-- User Session Request (shared kernel for all auth flows)
 --
 CREATE TABLE user_session_request(
     id TEXT NOT NULL,
     state TEXT NOT NULL,
-    auth_info TEXT NOT NULL,
+    handler_name TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    strong_required INTEGER NOT NULL DEFAULT 0,
+    login TEXT NOT NULL DEFAULT '',
+    verification TEXT NOT NULL DEFAULT '',
+    verification_challenge BLOB,
+    remember INTEGER NOT NULL DEFAULT 0,
+    tainted INTEGER NOT NULL DEFAULT 0,
+    verification_time INTEGER NOT NULL DEFAULT 0,
+    auth_info TEXT NOT NULL DEFAULT '',
     create_time INTEGER NOT NULL,
     PRIMARY KEY(id)
 );
+CREATE INDEX idx_user_session_request_session_id ON user_session_request(session_id);
+--
+-- User Session (active authenticated sessions)
+--
+CREATE TABLE session(
+    id TEXT NOT NULL,
+    user_session_request_id TEXT NOT NULL,
+    login TEXT NOT NULL,
+    verification TEXT NOT NULL,
+    strong INTEGER NOT NULL DEFAULT 0,
+    remember INTEGER NOT NULL DEFAULT 0,
+    terminated INTEGER NOT NULL DEFAULT 0,
+    verification_audit_info TEXT NOT NULL DEFAULT '',
+    last_access_audit_info TEXT NOT NULL DEFAULT '',
+    create_time INTEGER NOT NULL,
+    last_access_time INTEGER NOT NULL,
+    PRIMARY KEY(id),
+    FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
+);
+CREATE INDEX idx_session_login ON session(login);
 --
 -- OAuth2
 --
 CREATE TABLE oauth2_auth_request(
     id TEXT PRIMARY KEY,
-	acr TEXT,
-	expiry INTEGER,
-	auth_time INTEGER,
-	client_id TEXT,
-	nonce TEXT,
-	redirect_url TEXT,
-	response_type TEXT,
-	response_mode TEXT,
-	state TEXT,
-	subject TEXT,
+    user_session_request_id TEXT NOT NULL,
+    acr TEXT,
+    expiry INTEGER,
+    auth_time INTEGER,
+    client_id TEXT,
+    nonce TEXT,
+    redirect_url TEXT,
+    response_type TEXT,
+    response_mode TEXT,
+    state TEXT,
+    subject TEXT,
     challenge TEXT,
-	remember INTEGER,
-	done INTEGER
+    remember INTEGER,
+    done INTEGER,
+    FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
 );
 CREATE TABLE oauth2_auth_request_audience(
     audience TEXT,

@@ -20,6 +20,7 @@ import (
 	"time"
 )
 
+// UserSessionRequestState represents the lifecycle state of an authentication request.
 type UserSessionRequestState string
 
 const (
@@ -29,9 +30,47 @@ const (
 	UserSessionRequestStateFailed     UserSessionRequestState = "failed"
 )
 
+// UserSessionRequest is the shared kernel for all authentication flows.
+// It carries the common state needed by every auth handler (forward, oauth2, saml2).
+// Scheme-specific extensions (OAuth2 scopes, SAML2 RelayState, etc.) are stored
+// in handler-specific tables that reference this request by ID.
 type UserSessionRequest struct {
-	ID         string
-	State      UserSessionRequestState
-	AuthInfo   string
+	// ID is the unique request identifier.
+	ID string
+
+	// State tracks the request lifecycle.
+	State UserSessionRequestState
+
+	// HandlerName identifies which auth handler owns this request ("user", "oidc", "saml2").
+	HandlerName string
+
+	// SessionID is a UUID generated at request creation, carried through the entire flow.
+	SessionID string
+
+	// StrongRequired indicates whether the resulting session must use strong verification.
+	StrongRequired bool
+
+	// Login is the authenticated user identity (set after successful credential check).
+	Login string
+
+	// Verification is the method used to verify the user's identity.
+	Verification Verification
+
+	// VerificationChallenge stores the verification challenge data (e.g. hashed email code).
+	VerificationChallenge []byte
+
+	// Remember indicates whether the user wants a persistent (long-lived) session.
+	Remember bool
+
+	// Tainted flags whether this request has been compromised (wrong password, insufficient verification).
+	Tainted bool
+
+	// VerificationTime records when verification was completed.
+	VerificationTime time.Time
+
+	// AuthInfo carries additional authentication context (e.g. audit metadata).
+	AuthInfo string
+
+	// CreateTime is the moment this request was created.
 	CreateTime time.Time
 }
