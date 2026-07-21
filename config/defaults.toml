@@ -34,3 +34,18 @@ address = "localhost:5432"
 db = "idpd"
 user = "idpd"
 password = ""
+
+[oauth2]
+enabled = true
+claims = []
+scopes = []
+signing_key_algorithm = "RS256"
+
+[saml2]
+enabled = true
+organization_name = ""
+organization_url = ""
+contact_email = ""
+
+[forward]
+enabled = true

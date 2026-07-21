@@ -40,15 +40,6 @@ const DefaultSigningKeyActiveDuration time.Duration = 30 * 24 * time.Hour
 const DefaultSigningKeyLifetimeDuration time.Duration = 60 * 24 * time.Hour
 const DefaultClientClockSkew time.Duration = 1 * time.Minute
 
-type Handler struct {
-	runtime    scheme.Runtime
-	cfg        *config.OAuth2Config
-	opProvider *op.Provider
-	clients    map[string]*opClient
-	logger     *slog.Logger
-	mutex      sync.RWMutex
-}
-
 const (
 	authorizationEndpoint = "/" + string(Name) + "/authorize"
 	authCallbackEndpoint  = authorizationEndpoint + "/callback"
@@ -63,6 +54,15 @@ const (
 
 	loginEndpoint = "/" + string(Name) + "/login"
 )
+
+type Handler struct {
+	runtime    scheme.Runtime
+	cfg        *config.OAuth2Config
+	opProvider *op.Provider
+	clients    map[string]*opClient
+	logger     *slog.Logger
+	mutex      sync.RWMutex
+}
 
 func NewHandler(runtime scheme.Runtime, cfg *config.OAuth2Config) (*Handler, error) {
 	logger := runtime.Logger().With("scheme", Name)
@@ -109,7 +109,7 @@ func NewHandler(runtime scheme.Runtime, cfg *config.OAuth2Config) (*Handler, err
 		op.StaticIssuer(issuerURL.String()),
 		opOptions...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OP provider (cause: %w)", err)
+		return nil, fmt.Errorf("failed to create OAuth2 OP provider (cause: %w)", err)
 	}
 	h.opProvider = opProvider
 	return h, nil

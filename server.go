@@ -37,6 +37,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/scheme/oauth2"
+	"github.com/tdrn-org/idpd/internal/scheme/saml2"
 )
 
 const serverJobTickerSchedule time.Duration = 5 * time.Minute
@@ -191,12 +192,22 @@ func (s *Server) startRestAPI(_ context.Context, _ *config.Config) error {
 }
 
 func (s *Server) startSchemeHandlers(_ context.Context, cfg *config.Config) error {
-	handler, err := oauth2.NewHandler(s.runtime(), &cfg.OAuth2)
-	if err != nil {
-		return err
+	if cfg.OAuth2.Enabled {
+		handler, err := oauth2.NewHandler(s.runtime(), &cfg.OAuth2)
+		if err != nil {
+			return err
+		}
+		handler.Mount(s.httpServer)
+		s.schemeHandlers[handler.Name()] = handler
 	}
-	handler.Mount(s.httpServer)
-	s.schemeHandlers[handler.Name()] = handler
+	if cfg.SAML2.Enabled {
+		handler, err := saml2.NewHandler(s.runtime(), &cfg.SAML2)
+		if err != nil {
+			return err
+		}
+		handler.Mount(s.httpServer)
+		s.schemeHandlers[handler.Name()] = handler
+	}
 	return nil
 }
 

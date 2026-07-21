@@ -26,6 +26,7 @@ import (
 )
 
 type OAuth2Config struct {
+	Enabled             bool                 `toml:"enabled"`
 	Claims              []string             `toml:"claims"`
 	Scopes              []string             `toml:"scopes"`
 	SigningKeyAlgorithm SignatureAlgorithm   `toml:"signing_key_algorithm"`

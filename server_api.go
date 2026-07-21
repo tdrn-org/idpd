@@ -77,3 +77,7 @@ func (s *Server) OAuth2() OAuth2API {
 	}
 	return nil
 }
+
+type SAML2API interface {
+	MetadataURL() *url.URL
+}

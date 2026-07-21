@@ -14,16 +14,8 @@
  * limitations under the License.
  */
 
-package idpd_test
+package config
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
-)
-
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+type ForwardConfig struct {
+	Enabled bool `toml:"enabled"`
 }

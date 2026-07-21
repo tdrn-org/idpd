@@ -32,6 +32,8 @@ type Config struct {
 	Server  ServerConfig  `toml:"server"`
 	Store   StoreConfig   `toml:"store"`
 	OAuth2  OAuth2Config  `toml:"oauth2"`
+	SAML2   SAML2Config   `toml:"saml2"`
+	Forward ForwardConfig `toml:"forward"`
 }
 
 //go:embed defaults.toml

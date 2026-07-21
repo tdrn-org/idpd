@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-package idpd_test
+package config
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/tdrn-org/idpd/config"
-)
-
-func TestLoadConfig(t *testing.T) {
-	_, err := config.Load("testdata/idpd.toml", true)
-	require.NoError(t, err)
+type SAML2Config struct {
+	Enabled          bool    `toml:"enabled"`
+	OrganizationName string  `toml:"organization_name"`
+	OrganizationURL  URLSpec `toml:"organization_url"`
+	ContactEmail     string  `toml:"contact_email"`
 }
