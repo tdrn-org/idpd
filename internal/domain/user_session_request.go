@@ -42,8 +42,10 @@ type UserSessionRequest struct {
 	// State tracks the request lifecycle.
 	State UserSessionRequestState
 
-	// HandlerName identifies which auth handler owns this request ("user", "oidc", "saml2").
-	HandlerName string
+	IC IntegrityContext
+
+	// Handler identifies which auth handler owns this request ("oauth2", "saml2", ...).
+	Handler string
 
 	// SessionID is a UUID generated at request creation, carried through the entire flow.
 	SessionID string

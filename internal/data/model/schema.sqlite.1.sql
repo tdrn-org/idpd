@@ -14,20 +14,10 @@ CREATE TABLE signing_key(
 CREATE TABLE user_session_request(
     id TEXT NOT NULL,
     state TEXT NOT NULL,
-    handler_name TEXT NOT NULL,
-    session_id TEXT NOT NULL,
-    strong_required INTEGER NOT NULL DEFAULT 0,
-    login TEXT NOT NULL DEFAULT '',
-    verification TEXT NOT NULL DEFAULT '',
-    verification_challenge BLOB,
-    remember INTEGER NOT NULL DEFAULT 0,
-    tainted INTEGER NOT NULL DEFAULT 0,
-    verification_time INTEGER NOT NULL DEFAULT 0,
-    auth_info TEXT NOT NULL DEFAULT '',
+    auth_info BLOG NOT NULL,
     create_time INTEGER NOT NULL,
     PRIMARY KEY(id)
 );
-CREATE INDEX idx_user_session_request_session_id ON user_session_request(session_id);
 --
 -- User Session (active authenticated sessions)
 --

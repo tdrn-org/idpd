@@ -55,34 +55,21 @@ func (k *SigningKey) ToDomain() (*domain.SigningKey, error) {
 //go:embed signing_key.insert.sql
 var insertSigningKeySQL string
 
-func InsertSigningKey(ctx context.Context, driver *database.Driver, signingKey *domain.SigningKey) (*SigningKey, error) {
+func InsertSigningKey(ctx context.Context, tx *database.Tx, signingKey *domain.SigningKey) (*SigningKey, error) {
 	algorithm, privateKey, err := crypto.MarshalSigningKey(signingKey)
 	if err != nil {
 		return nil, err
 	}
-
-	txCtx, tx, err := driver.BeginTx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.RollbackUncommitedTx(txCtx)
-
 	k := &SigningKey{
 		ID:         database.NewID(),
 		Algorithm:  string(algorithm),
 		PrivateKey: privateKey,
 		CreateTime: database.Time2DB(tx.Now()),
 	}
-	err = tx.ExecTx(txCtx, insertSigningKeySQL, k.ID, k.Algorithm, k.PrivateKey, k.CreateTime)
+	err = tx.ExecTx(ctx, insertSigningKeySQL, k.ID, k.Algorithm, k.PrivateKey, k.CreateTime)
 	if err != nil {
 		return nil, err
 	}
-
-	err = tx.CommitTx(txCtx)
-	if err != nil {
-		return nil, err
-	}
-
 	signingKey.ID, signingKey.CreateTime = k.ID, database.DB2Time(k.CreateTime)
 	return k, nil
 }
@@ -90,15 +77,9 @@ func InsertSigningKey(ctx context.Context, driver *database.Driver, signingKey *
 //go:embed signing_key.select_by_algorithm.sql
 var selectSigningKeyByAlgorithmSQL string
 
-func SelectSigningKeyByAlgorithm(ctx context.Context, driver *database.Driver, algorithm jose.SignatureAlgorithm) (*SigningKey, error) {
-	txCtx, tx, err := driver.BeginTx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.RollbackUncommitedTx(txCtx)
-
+func SelectSigningKeyByAlgorithm(ctx context.Context, tx *database.Tx, algorithm jose.SignatureAlgorithm) (*SigningKey, error) {
 	var k *SigningKey
-	row, err := tx.QueryRowTx(txCtx, selectSigningKeyByAlgorithmSQL, algorithm)
+	row, err := tx.QueryRowTx(ctx, selectSigningKeyByAlgorithmSQL, algorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -111,29 +92,12 @@ func SelectSigningKeyByAlgorithm(ctx context.Context, driver *database.Driver, a
 	} else if err != nil {
 		return nil, err
 	}
-
-	err = tx.CommitTx(txCtx)
-	if err != nil {
-		return nil, err
-	}
-
 	return k, nil
 }
 
 //go:embed signing_key.delete_by_create_time.sql
 var deleteSigningKeyByCreateTimeSQL string
 
-func DeleteSigningKeyByCreateTime(ctx context.Context, driver *database.Driver, before time.Time) error {
-	txCtx, tx, err := driver.BeginTx(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.RollbackUncommitedTx(txCtx)
-
-	err = tx.ExecTx(txCtx, deleteSigningKeyByCreateTimeSQL, database.Time2DB(before))
-	if err != nil {
-		return err
-	}
-
-	return tx.CommitTx(txCtx)
+func DeleteSigningKeyByCreateTime(ctx context.Context, tx *database.Tx, before time.Time) error {
+	return tx.ExecTx(ctx, deleteSigningKeyByCreateTimeSQL, database.Time2DB(before))
 }

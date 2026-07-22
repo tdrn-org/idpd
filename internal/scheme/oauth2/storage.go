@@ -115,7 +115,7 @@ func (s *opStorage) GetRefreshTokenInfo(ctx context.Context, clientID string, to
 
 // op.AuthStorage
 func (s *opStorage) SigningKey(ctx context.Context) (op.SigningKey, error) {
-	signingKey, err := s.handler.runtime.DataStore().GetSigningKey(ctx, jose.SignatureAlgorithm(s.handler.cfg.SigningKeyAlgorithm), DefaultSigningKeyActiveDuration, DefaultSigningKeyLifetimeDuration)
+	signingKey, err := s.handler.runtime.DataStore().ActiveSigningKey(ctx, jose.SignatureAlgorithm(s.handler.cfg.SigningKeyAlgorithm), DefaultSigningKeyActiveDuration, DefaultSigningKeyLifetimeDuration)
 	if err != nil {
 		return nil, err
 	}

@@ -17,11 +17,13 @@
 package model_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/crypto"
 	"github.com/tdrn-org/idpd/internal/data/model"
 )
@@ -34,26 +36,38 @@ func TestSigningKey(t *testing.T) {
 	require.NoError(t, err)
 
 	// Select (no signing key)
-	k1, err := model.SelectSigningKeyByAlgorithm(t.Context(), driver, algorithm)
-	require.NoError(t, err)
-	require.Nil(t, k1)
+	var k1 *model.SigningKey
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		k1, err = model.SelectSigningKeyByAlgorithm(ctx, tx, algorithm)
+		require.NoError(t, err)
+		require.Nil(t, k1)
+	})
 
 	// Insert
-	k1, err = model.InsertSigningKey(t.Context(), driver, signingKey)
-	require.NoError(t, err)
-	require.Equal(t, string(algorithm), k1.Algorithm)
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		k1, err = model.InsertSigningKey(ctx, tx, signingKey)
+		require.NoError(t, err)
+		require.Equal(t, string(algorithm), k1.Algorithm)
+	})
 
 	// Select (existing signing key)
-	k2, err := model.SelectSigningKeyByAlgorithm(t.Context(), driver, algorithm)
-	require.NoError(t, err)
-	require.Equal(t, k1, k2)
+	var k2 *model.SigningKey
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		k2, err = model.SelectSigningKeyByAlgorithm(ctx, tx, algorithm)
+		require.NoError(t, err)
+		require.Equal(t, k1, k2)
+	})
 
 	// Delete
-	err = model.DeleteSigningKeyByCreateTime(t.Context(), driver, time.Now())
-	require.NoError(t, err)
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		err = model.DeleteSigningKeyByCreateTime(ctx, tx, time.Now())
+		require.NoError(t, err)
+	})
 
 	// Select (no signing key)
-	signingKey3, err := model.SelectSigningKeyByAlgorithm(t.Context(), driver, algorithm)
-	require.NoError(t, err)
-	require.Nil(t, signingKey3)
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		signingKey3, err := model.SelectSigningKeyByAlgorithm(ctx, tx, algorithm)
+		require.NoError(t, err)
+		require.Nil(t, signingKey3)
+	})
 }

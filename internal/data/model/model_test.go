@@ -17,6 +17,7 @@
 package model_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,4 +34,14 @@ func newTestDB(t *testing.T) *database.Driver {
 	require.Equal(t, database.SchemaNone, from)
 	require.Equal(t, 1, to)
 	return driver
+}
+
+func runInTx(t *testing.T, driver *database.Driver, fn func(ctx context.Context, tx *database.Tx)) {
+	txCtx, tx, err := driver.BeginTx(t.Context())
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, tx.RollbackUncommitedTx(txCtx))
+	}()
+	fn(txCtx, tx)
+	require.NoError(t, tx.CommitTx(txCtx))
 }

@@ -50,16 +50,18 @@ func (s *Store) Close() error {
 
 type AtomicFunc func(txCtx context.Context, tx *database.Tx) error
 
-func (s *Store) Atomic(ctx context.Context, atomic AtomicFunc) error {
+func (s *Store) Atomic(ctx context.Context, atomics ...AtomicFunc) error {
 	txCtx, tx, err := s.driver.BeginTx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.RollbackUncommitedTx(txCtx)
 
-	err = atomic(txCtx, tx)
-	if err != nil {
-		return err
+	for _, atomic := range atomics {
+		err = atomic(txCtx, tx)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.CommitTx(txCtx)
@@ -69,19 +71,7 @@ func (s *Store) CurrentTx(ctx context.Context) (*database.Tx, bool) {
 	return s.driver.CurrentTx(ctx)
 }
 
-func (s *Store) CreateUserSessionRequest(ctx context.Context, handler string) (*domain.UserSessionRequest, error) {
-	return nil, nil
-}
-
-func (s *Store) SelectUserSessionRequestByID(ctx context.Context, id string) (*domain.UserSessionRequest, error) {
-	return nil, nil
-}
-
-func (s *Store) UpdateUserSessionRequest(ctx context.Context, request *domain.UserSessionRequest) error {
-	return nil
-}
-
-func (s *Store) GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*domain.SigningKey, error) {
+func (s *Store) ActiveSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*domain.SigningKey, error) {
 	txCtx, tx, err := s.driver.BeginTx(ctx)
 	if err != nil {
 		return nil, err
@@ -89,12 +79,12 @@ func (s *Store) GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgor
 	defer tx.RollbackUncommitedTx(txCtx)
 
 	deleteBefore := tx.Now().Add(-lifetimeDuration)
-	err = model.DeleteSigningKeyByCreateTime(txCtx, s.driver, deleteBefore)
+	err = model.DeleteSigningKeyByCreateTime(txCtx, tx, deleteBefore)
 	if err != nil {
 		return nil, err
 	}
 	inactiveBefore := tx.Now().Add(-activeDuration)
-	storeSigningKey, err := model.SelectSigningKeyByAlgorithm(txCtx, s.driver, algorithm)
+	storeSigningKey, err := model.SelectSigningKeyByAlgorithm(txCtx, tx, algorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +93,7 @@ func (s *Store) GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgor
 		if err != nil {
 			return nil, err
 		}
-		storeSigningKey, err = model.InsertSigningKey(txCtx, s.driver, signingKey)
+		storeSigningKey, err = model.InsertSigningKey(txCtx, tx, signingKey)
 		if err != nil {
 			return nil, err
 		}
@@ -119,4 +109,24 @@ func (s *Store) GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgor
 	}
 
 	return signingKey, nil
+}
+
+func (s *Store) ActiveIntegrityContext(ctx context.Context, activeDuration, lifetimeDuration time.Duration) (domain.IntegrityContext, error) {
+	return nil, nil
+}
+
+func (s *Store) LookupIntegrityContext(ctx context.Context, keyID string) (domain.IntegrityContext, error) {
+	return nil, nil
+}
+
+func (s *Store) CreateUserSessionRequest(ctx context.Context, handler string) (*domain.UserSessionRequest, error) {
+	return nil, nil
+}
+
+func (s *Store) SelectUserSessionRequestByID(ctx context.Context, id string) (*domain.UserSessionRequest, error) {
+	return nil, nil
+}
+
+func (s *Store) UpdateUserSessionRequest(ctx context.Context, request *domain.UserSessionRequest) error {
+	return nil
 }

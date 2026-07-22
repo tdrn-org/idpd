@@ -31,5 +31,5 @@ type SigningKey struct {
 }
 
 type SigninKeyStore interface {
-	GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*SigningKey, error)
+	ActiveSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*SigningKey, error)
 }
