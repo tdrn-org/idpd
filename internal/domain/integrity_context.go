@@ -24,13 +24,23 @@ import (
 var ErrIntegrityContextKeyNotFound error = errors.New("integrity context key not found")
 var ErrIntegrityContextIntegrityViolated error = errors.New("data integrity violated")
 
-// IntegrityContext encapsualtes the functions needed to save and restore state
+// IntegrityContext encapsulates the functions needed to save and restore state
 // information while ensuring their integrity.
 type IntegrityContext interface {
-	Secure(payload []byte) ([]byte, []byte, string, error)
-	VerifyAndDecrypt(ciphertext []byte, signature []byte, keyID string) ([]byte, error)
+	// Secure encrypts and signs the payload, returning the secured representation.
+	Secure(payload []byte) (*IntegrityPayload, error)
+
+	// VerifyAndDecrypt verifies the integrity of the secured payload and
+	// returns the original plaintext.
+	VerifyAndDecrypt(secured *IntegrityPayload) ([]byte, error)
 }
 
+// IntegrityContextStore provides access to IntegrityContext instances.
+// Implemented by data.Store.
 type IntegrityContextStore interface {
-	GetIntegrityContext(ctx context.Context) (IntegrityContext, error)
+	// ActiveIntegrityContext returns the context backed by the newest key (for Secure operations).
+	ActiveIntegrityContext(ctx context.Context) (IntegrityContext, error)
+
+	// LookupIntegrityContext returns the context for a specific keyID (for VerifyAndDecrypt).
+	LookupIntegrityContext(ctx context.Context, keyID string) (IntegrityContext, error)
 }
