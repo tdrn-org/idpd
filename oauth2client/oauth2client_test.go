@@ -29,7 +29,6 @@ import (
 )
 
 func TestOIDCCodeFlow(t *testing.T) {
-	t.SkipNow()
 	server := runTestServer(t, "testdata/idpd.toml")
 	defer server.Close()
 

@@ -84,7 +84,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/cors v1.11.1
 	github.com/swaggo/swag v1.16.6
-	github.com/tdrn-org/go-database v0.1.0
+	github.com/tdrn-org/go-database v0.1.1
 	github.com/tdrn-org/go-httpserver v0.1.1
 	github.com/tdrn-org/go-log v0.5.7
 	github.com/tdrn-org/go-pool v0.0.2

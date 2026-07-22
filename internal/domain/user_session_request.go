@@ -17,6 +17,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 )
 
@@ -73,4 +74,17 @@ type UserSessionRequest struct {
 
 	// CreateTime is the moment this request was created.
 	CreateTime time.Time
+}
+
+// UserSessionRequestStore is the persistence port for UserSessionRequest.
+// Implemented by data.Store.
+type UserSessionRequestStore interface {
+	// InsertUserSessionRequest persists a new user session request.
+	InsertUserSessionRequest(ctx context.Context, request *UserSessionRequest) error
+
+	// SelectUserSessionRequestByID returns the request with the given ID, or nil if not found.
+	SelectUserSessionRequestByID(ctx context.Context, id string) (*UserSessionRequest, error)
+
+	// UpdateUserSessionRequest persists changes to an existing request.
+	UpdateUserSessionRequest(ctx context.Context, request *UserSessionRequest) error
 }

@@ -48,6 +48,39 @@ func (s *Store) Close() error {
 	return s.driver.Close()
 }
 
+type AtomicFunc func(txCtx context.Context, tx *database.Tx) error
+
+func (s *Store) Atomic(ctx context.Context, atomic AtomicFunc) error {
+	txCtx, tx, err := s.driver.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUncommitedTx(txCtx)
+
+	err = atomic(txCtx, tx)
+	if err != nil {
+		return err
+	}
+
+	return tx.CommitTx(txCtx)
+}
+
+func (s *Store) CurrentTx(ctx context.Context) (*database.Tx, bool) {
+	return s.driver.CurrentTx(ctx)
+}
+
+func (s *Store) CreateUserSessionRequest(ctx context.Context, handler string) (*domain.UserSessionRequest, error) {
+	return nil, nil
+}
+
+func (s *Store) SelectUserSessionRequestByID(ctx context.Context, id string) (*domain.UserSessionRequest, error) {
+	return nil, nil
+}
+
+func (s *Store) UpdateUserSessionRequest(ctx context.Context, request *domain.UserSessionRequest) error {
+	return nil
+}
+
 func (s *Store) GetSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*domain.SigningKey, error) {
 	txCtx, tx, err := s.driver.BeginTx(ctx)
 	if err != nil {

@@ -100,6 +100,13 @@ type URLSpec struct {
 	*url.URL
 }
 
+func (spec *URLSpec) String() string {
+	if spec == nil || spec.URL == nil {
+		return ""
+	}
+	return spec.URL.String()
+}
+
 func (spec *URLSpec) Value() string {
 	if spec.URL == nil {
 		return ""

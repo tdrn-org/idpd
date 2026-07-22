@@ -14,4 +14,28 @@
  * limitations under the License.
  */
 
-package crypto
+package model
+
+import (
+	"context"
+
+	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"github.com/zitadel/oidc/v3/pkg/op"
+)
+
+type AuthRequest struct {
+	ID string `db:"id"`
+}
+
+func (r *AuthRequest) OpAuthRequest() op.AuthRequest {
+	return nil
+}
+
+func InsertAuthRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest, oidcAuthRequest *oidc.AuthRequest) (*AuthRequest, error) {
+	r := &AuthRequest{
+		ID: database.NewID(),
+	}
+	return r, nil
+}
