@@ -12,8 +12,7 @@ CREATE TABLE integrity_context_key(
 --
 CREATE TABLE user_session_request(
     id TEXT NOT NULL,
-    state TEXT NOT NULL,
-    auth_info BLOG NOT NULL,
+    auth_info BLOB NOT NULL,
     create_time INTEGER NOT NULL,
     PRIMARY KEY(id)
 );
@@ -49,19 +48,8 @@ CREATE TABLE oauth2_signing_key(
 CREATE TABLE oauth2_auth_request(
     id TEXT PRIMARY KEY,
     user_session_request_id TEXT NOT NULL,
-    acr TEXT,
-    expiry INTEGER,
-    auth_time INTEGER,
-    client_id TEXT,
-    nonce TEXT,
-    redirect_url TEXT,
-    response_type TEXT,
-    response_mode TEXT,
-    state TEXT,
-    subject TEXT,
-    challenge TEXT,
-    remember INTEGER,
-    done INTEGER,
+    oidc_auth_request BLOB NOT NULL,
+    create_time INTEGER NOT NULL,
     FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
 );
 CREATE TABLE oauth2_auth_request_audience(

@@ -19,6 +19,7 @@ package saml2
 import (
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -125,6 +126,10 @@ func (h *Handler) Mount(instance *httpserver.Instance) {
 	instance.Handle(singleSignOnPath, httpHandler)
 	instance.Handle(singleLogOutPath, httpHandler)
 	instance.Handle(attributePath, httpHandler)
+}
+
+func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request, id string) error {
+	return nil
 }
 
 func (h *Handler) MetadataURL() *url.URL {

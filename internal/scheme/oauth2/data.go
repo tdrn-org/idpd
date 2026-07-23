@@ -24,6 +24,7 @@ import (
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/crypto"
 	"github.com/tdrn-org/idpd/internal/scheme/oauth2/model"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 func (h *Handler) activeSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm) (*crypto.JoseSigningKey, error) {
@@ -39,7 +40,7 @@ func (h *Handler) activeSigningKey(ctx context.Context, algorithm jose.Signature
 		if err != nil {
 			return err
 		}
-		if database.DB2Time(k.CreateTime).Before(inactiveBefore) {
+		if k == nil || database.DB2Time(k.CreateTime).Before(inactiveBefore) {
 			signingKey, err := crypto.NewSigningKey(algorithm)
 			if err != nil {
 				return err
@@ -53,4 +54,49 @@ func (h *Handler) activeSigningKey(ctx context.Context, algorithm jose.Signature
 		return err
 	})
 	return signingKey, err
+}
+
+func (h *Handler) createAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, idTokenHintUserID string) (*opAuthRequest, error) {
+	var authRequest *opAuthRequest
+	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String())
+		if err != nil {
+			return err
+		}
+		r, err := model.InsertAuthRequest(txCtx, tx, userSessionRequest, oidcAuthRequest)
+		if err != nil {
+			return err
+		}
+		authRequest = &opAuthRequest{
+			authRequest:        r,
+			userSessionRequest: userSessionRequest,
+			oidcAuthRequest:    oidcAuthRequest,
+		}
+		return nil
+	})
+	return authRequest, err
+}
+
+func (h *Handler) getAuthRequest(ctx context.Context, id string) (*opAuthRequest, error) {
+	var authRequest *opAuthRequest
+	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		r, oidcAuthRequest, err := model.SelectAuthRequestByID(txCtx, tx, id)
+		if err != nil {
+			return err
+		}
+		userSessionRequest, err := h.runtime.DataStore().GetUserSessionRequest(txCtx, r.UserSessionRequestID)
+		if err != nil {
+			return err
+		}
+		if userSessionRequest == nil {
+			return ErrUnknownAuthRequest
+		}
+		authRequest = &opAuthRequest{
+			authRequest:        r,
+			userSessionRequest: userSessionRequest,
+			oidcAuthRequest:    oidcAuthRequest,
+		}
+		return nil
+	})
+	return authRequest, err
 }

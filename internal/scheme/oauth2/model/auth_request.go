@@ -18,24 +18,66 @@ package model
 
 import (
 	"context"
+	_ "embed"
 
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
-	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
 type AuthRequest struct {
-	ID string `db:"id"`
+	ID                   string `db:"id"`
+	UserSessionRequestID string `db:"user_session_request_id"`
+	OIDCAuthRequest      []byte `db:"oidc_auth_request"`
+	CreateTime           int64  `db:"create_time"`
 }
 
-func (r *AuthRequest) OpAuthRequest() op.AuthRequest {
-	return nil
-}
+//go:embed auth_request.insert.sql
+var insertAuthRequestSQL string
 
 func InsertAuthRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest, oidcAuthRequest *oidc.AuthRequest) (*AuthRequest, error) {
+	oidcAuthRequestBytes, err := marshalJSONPayload(oidcAuthRequest)
+	if err != nil {
+		return nil, err
+	}
 	r := &AuthRequest{
-		ID: database.NewID(),
+		ID:                   database.NewID(),
+		UserSessionRequestID: userSessionRequest.ID,
+		OIDCAuthRequest:      oidcAuthRequestBytes,
+		CreateTime:           database.Time2DB(tx.Now()),
+	}
+	err = tx.ExecTx(ctx, insertAuthRequestSQL,
+		r.ID,
+		r.UserSessionRequestID,
+		r.OIDCAuthRequest,
+		r.CreateTime)
+	if err != nil {
+		return nil, err
 	}
 	return r, nil
+}
+
+//go:embed auth_request.select_by_id.sql
+var selectAuthRequestByIDSQL string
+
+func SelectAuthRequestByID(ctx context.Context, tx *database.Tx, id string) (*AuthRequest, *oidc.AuthRequest, error) {
+	row, err := tx.QueryRowTx(ctx, selectAuthRequestByIDSQL, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	r := &AuthRequest{
+		ID: id,
+	}
+	err = database.ScanRow(row, r, "user_session_request_id", "oidc_auth_request", "create_time")
+	if database.NoRows(err) {
+		r = nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	oidcAuthRequest := &oidc.AuthRequest{}
+	err = unmarshalJSONPayload(oidcAuthRequest, r.OIDCAuthRequest)
+	if err != nil {
+		return nil, nil, err
+	}
+	return r, oidcAuthRequest, nil
 }

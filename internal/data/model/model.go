@@ -17,7 +17,10 @@
 package model
 
 import (
+	"bytes"
 	_ "embed"
+	"encoding/json"
+	"fmt"
 
 	"github.com/tdrn-org/go-database/postgres"
 	"github.com/tdrn-org/go-database/sqlite"
@@ -30,3 +33,20 @@ var SqliteSchemaScriptOption sqlite.ConfigSetter = sqlite.WithSchemaScripts(sche
 //go:embed schema.postgres.1.sql
 var schemaPostgres1Script []byte
 var PostgresSchemaScriptOption postgres.ConfigSetter = postgres.WithSchemaScripts(schemaPostgres1Script)
+
+func marshalJSONPayload(v any) ([]byte, error) {
+	buffer := &bytes.Buffer{}
+	err := json.NewEncoder(buffer).Encode(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode JSON payload (cause: %w)", err)
+	}
+	return buffer.Bytes(), nil
+}
+
+func unmarshalJSONPayload(v any, payload []byte) error {
+	err := json.NewDecoder(bytes.NewBuffer(payload)).Decode(v)
+	if err != nil {
+		return fmt.Errorf("failed to decode JSON payload (cause: %w)", err)
+	}
+	return nil
+}

@@ -52,8 +52,15 @@ func TestIntegrityContextKey(t *testing.T) {
 		require.NotNil(t, k1)
 	})
 
-	// Select (existing key)
+	// Select by ID (existing key)
 	var k2 *model.IntegrityContextKey
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		k2, err = model.SelectIntegrityContextKeyByID(ctx, tx, k1.ID)
+		require.NoError(t, err)
+		require.Equal(t, k1, k2)
+	})
+
+	// Select latest (existing key)
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
 		k2, err = model.SelectIntegrityContextKey(ctx, tx)
 		require.NoError(t, err)

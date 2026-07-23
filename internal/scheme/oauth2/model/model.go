@@ -14,31 +14,27 @@
  * limitations under the License.
  */
 
-package scheme
+package model
 
 import (
-	"log/slog"
-	"net/http"
-	"net/url"
-
-	"github.com/tdrn-org/go-httpserver"
-	"github.com/tdrn-org/idpd/internal/data"
+	"bytes"
+	"encoding/json"
+	"fmt"
 )
 
-type Runtime interface {
-	BaseURL() *url.URL
-	DataStore() *data.Store
-	Logger() *slog.Logger
+func marshalJSONPayload(v any) ([]byte, error) {
+	buffer := &bytes.Buffer{}
+	err := json.NewEncoder(buffer).Encode(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode JSON payload (cause: %w)", err)
+	}
+	return buffer.Bytes(), nil
 }
 
-type Name string
-
-func (n Name) String() string {
-	return string(n)
-}
-
-type Handler interface {
-	Name() Name
-	Mount(instance *httpserver.Instance)
-	RedirectLogin(w http.ResponseWriter, r *http.Request, id string) error
+func unmarshalJSONPayload(v any, payload []byte) error {
+	err := json.NewDecoder(bytes.NewBuffer(payload)).Decode(v)
+	if err != nil {
+		return fmt.Errorf("failed to decode JSON payload (cause: %w)", err)
+	}
+	return nil
 }

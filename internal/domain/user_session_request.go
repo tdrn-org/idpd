@@ -39,53 +39,56 @@ type UserSessionRequest struct {
 	// ID is the unique request identifier.
 	ID string
 
-	// State tracks the request lifecycle.
-	State UserSessionRequestState
-
+	// IntegryContext associated with this request
 	IC IntegrityContext
 
-	// Handler identifies which auth handler owns this request ("oauth2", "saml2", ...).
-	Handler string
-
-	// SessionID is a UUID generated at request creation, carried through the entire flow.
-	SessionID string
-
-	// StrongRequired indicates whether the resulting session must use strong verification.
-	StrongRequired bool
-
-	// Login is the authenticated user identity (set after successful credential check).
-	Login string
-
-	// Verification is the method used to verify the user's identity.
-	Verification Verification
-
-	// VerificationChallenge stores the verification challenge data (e.g. hashed email code).
-	VerificationChallenge []byte
-
-	// Remember indicates whether the user wants a persistent (long-lived) session.
-	Remember bool
-
-	// Tainted flags whether this request has been compromised (wrong password, insufficient verification).
-	Tainted bool
-
-	// VerificationTime records when verification was completed.
-	VerificationTime time.Time
-
-	// AuthInfo carries additional authentication context (e.g. audit metadata).
-	AuthInfo string
+	// AuthInfo payload which protected by the associated IntegrityContext
+	AuthInfo UserSessionRequestAuthInfo
 
 	// CreateTime is the moment this request was created.
 	CreateTime time.Time
 }
 
+type UserSessionRequestAuthInfo struct {
+	// Handler identifies which auth handler owns this request ("oauth2", "saml2", ...).
+	Handler string `json:"handler"`
+
+	// State tracks the request lifecycle.
+	State UserSessionRequestState
+
+	// Login is the authenticated user identity (set after successful credential check).
+	Login string `json:"login"`
+
+	// Remember indicates whether the user wants a persistent (long-lived) session.
+	Remember bool `json:"remember"`
+
+	// StrongVerificationRequired indicates whether the resulting session must use strong verification.
+	StrongVerificationRequired bool `json:"strong_verification_required"`
+
+	// LoginTime records when login was completed.
+	LoginTime time.Time `json:"login_time"`
+
+	// Verification is the method used to verify the user's identity.
+	Verification Verification `json:"verification"`
+
+	// VerificationChallenge stores the verification challenge data (e.g. hashed email code).
+	VerificationChallenge []byte `json:"verification_challenge"`
+
+	// VerificationTime records when verification was completed.
+	VerificationTime time.Time `json:"verificition_time"`
+
+	// SessionID is a UUID generated at request creation, carried through the entire flow.
+	SessionID string `json:"session_id"`
+}
+
 // UserSessionRequestStore is the persistence port for UserSessionRequest.
 // Implemented by data.Store.
 type UserSessionRequestStore interface {
-	// InsertUserSessionRequest persists a new user session request.
-	InsertUserSessionRequest(ctx context.Context, request *UserSessionRequest) error
+	// CreateUserSessionRequest creates and persists a new user session request for the given handler.
+	CreateUserSessionRequest(ctx context.Context, handler string) error
 
-	// SelectUserSessionRequestByID returns the request with the given ID, or nil if not found.
-	SelectUserSessionRequestByID(ctx context.Context, id string) (*UserSessionRequest, error)
+	// GetUserSessionRequest returns the request with the given ID, or nil if not found.
+	GetUserSessionRequest(ctx context.Context, id string) (*UserSessionRequest, error)
 
 	// UpdateUserSessionRequest persists changes to an existing request.
 	UpdateUserSessionRequest(ctx context.Context, request *UserSessionRequest) error

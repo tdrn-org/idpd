@@ -17,10 +17,8 @@
 package model
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
+	_ "embed"
 
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/domain"
@@ -28,44 +26,84 @@ import (
 
 type UserSessionRequest struct {
 	ID         string `db:"id"`
-	State      string `db:"state"`
 	AuthInfo   []byte `db:"auth_info"`
 	CreateTime int64  `db:"create_time"`
 }
 
-type authInfoPayload struct {
-	Handler string `json:"handler"`
-}
-
-func (p *authInfoPayload) Marshal() ([]byte, error) {
-	buffer := &bytes.Buffer{}
-	err := json.NewEncoder(buffer).Encode(p)
+func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.IntegrityContextStore) (*domain.UserSessionRequest, error) {
+	authInfoPayload := &domain.IntegrityPayload{}
+	err := unmarshalJSONPayload(authInfoPayload, r.AuthInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode UserSessionRequest AuthInfo (cause: %w)", err)
+		return nil, err
 	}
-	return buffer.Bytes(), nil
-}
-
-func (usr *UserSessionRequest) ToDomain() (*domain.UserSessionRequest, error) {
+	ic, err := icStore.LookupIntegrityContext(ctx, authInfoPayload.KeyID)
+	if err != nil {
+		return nil, err
+	}
+	authInfoBytes, err := ic.VerifyAndDecrypt(authInfoPayload)
+	if err != nil {
+		return nil, err
+	}
 	userSessionRequest := &domain.UserSessionRequest{
-		ID: usr.ID,
+		ID:         r.ID,
+		IC:         ic,
+		CreateTime: database.DB2Time(r.CreateTime),
+	}
+	err = unmarshalJSONPayload(&userSessionRequest.AuthInfo, authInfoBytes)
+	if err != nil {
+		return nil, err
 	}
 	return userSessionRequest, nil
 }
 
+//go:embed user_session_request.insert.sql
+var insertUserSessionRequestSQL string
+
 func InsertUserSessionRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest) (*UserSessionRequest, error) {
-	authInfo := &authInfoPayload{
-		Handler: userSessionRequest.Handler,
+	authInfoBytes, err := marshalJSONPayload(&userSessionRequest.AuthInfo)
+	if err != nil {
+		return nil, err
 	}
-	authInfoBytes, err := authInfo.Marshal()
+	authInfoPayload, err := userSessionRequest.IC.Secure(authInfoBytes)
+	if err != nil {
+		return nil, err
+	}
+	authInfoBytes, err = marshalJSONPayload(authInfoPayload)
 	if err != nil {
 		return nil, err
 	}
 	r := &UserSessionRequest{
 		ID:         database.NewID(),
-		State:      string(userSessionRequest.State),
 		AuthInfo:   authInfoBytes,
 		CreateTime: database.Time2DB(tx.Now()),
+	}
+	err = tx.ExecTx(ctx, insertUserSessionRequestSQL,
+		r.ID,
+		r.AuthInfo,
+		r.CreateTime)
+	if err != nil {
+		return nil, err
+	}
+	userSessionRequest.ID, userSessionRequest.CreateTime = r.ID, database.DB2Time(r.CreateTime)
+	return r, nil
+}
+
+//go:embed user_session_request.select_by_id.sql
+var selectUserSessionRequestByIDSQL string
+
+func SelectUserSessionRequestByID(ctx context.Context, tx *database.Tx, id string) (*UserSessionRequest, error) {
+	r := &UserSessionRequest{
+		ID: id,
+	}
+	row, err := tx.QueryRowTx(ctx, selectUserSessionRequestByIDSQL, id)
+	if err != nil {
+		return nil, err
+	}
+	err = database.ScanRow(row, r, "auth_info", "create_time")
+	if database.NoRows(err) {
+		r = nil
+	} else if err != nil {
+		return nil, err
 	}
 	return r, nil
 }

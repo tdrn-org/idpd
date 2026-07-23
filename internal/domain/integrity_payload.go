@@ -21,12 +21,12 @@ package domain
 // and are persisted together (e.g. in UserSessionRequest.AuthInfo or
 // dedicated DB columns).
 type IntegrityPayload struct {
+	// KeyID identifies the key and algorithm used (e.g. "nacl-secretbox:v1:<uuid>").
+	KeyID string `json:"key_id"`
+
 	// CipherText is the encrypted payload.
-	CipherText []byte
+	CipherText []byte `json:"cipher_text"`
 
 	// Signature is the detached signature (nil for AEAD schemes like NaCl SecretBox).
-	Signature []byte
-
-	// KeyID identifies the key and algorithm used (e.g. "nacl-secretbox:v1:<uuid>").
-	KeyID string
+	Signature []byte `json:"signature,omitempty"`
 }

@@ -20,13 +20,29 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/idpd/internal/data/model"
+	"github.com/tdrn-org/idpd/internal/domain"
 )
 
 func TestUserSessionRequest(t *testing.T) {
 	driver := newTestDB(t)
 
-	runInTx(t, driver, func(txCtx context.Context, tx *database.Tx) {
+	userSessionRequest := &domain.UserSessionRequest{
+		IC: newNoopIntegrityContext(),
+		AuthInfo: domain.UserSessionRequestAuthInfo{
+			Handler: t.Name(),
+		},
+	}
 
+	// Insert
+	var r1 *model.UserSessionRequest
+	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
+		r, err := model.InsertUserSessionRequest(ctx, tx, userSessionRequest)
+		require.NoError(t, err)
+		require.NotNil(t, r)
+		r1 = r
 	})
+	_ = r1
 }

@@ -64,10 +64,14 @@ func NewNaClSecretBoxContext(key *Key) (*NaClSecretBoxContext, error) {
 	return secretBoxContext, nil
 }
 
+func (c *NaClSecretBoxContext) KeyID() string {
+	return string(c.id)
+}
+
 func (c *NaClSecretBoxContext) Key() Key {
 	return Key{
 		ID:     c.id,
-		Secret: fmt.Append([]byte(nil), c.secret),
+		Secret: append([]byte(nil), c.secret[:]...),
 	}
 }
 

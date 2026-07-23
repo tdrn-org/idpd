@@ -23,9 +23,9 @@ const docTemplate = `{
     "paths": {
         "/api/v1/info": {
             "get": {
-                "description": "Ping the server to check general health",
+                "description": "Retrieve basic server info like version and configuration options",
                 "produces": [
-                    "text/plain"
+                    "application/json"
                 ],
                 "summary": "Query server info",
                 "responses": {
@@ -33,6 +33,45 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/rest.ServerInfo"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/login": {
+            "get": {
+                "description": "Initiate the login flow using the given handler and auth request",
+                "produces": [
+                    "text/plain"
+                ],
+                "summary": "Initiate login flow",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "auth handler",
+                        "name": "handler",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "auth request id",
+                        "name": "id",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "Redirect to Login UI",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "500": {

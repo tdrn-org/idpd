@@ -76,6 +76,27 @@ func SelectIntegrityContextKey(ctx context.Context, tx *database.Tx) (*Integrity
 	return k, nil
 }
 
+//go:embed integrity_context_key.select_by_id.sql
+var selectIntegrityContextKeyByIDSQL string
+
+func SelectIntegrityContextKeyByID(ctx context.Context, tx *database.Tx, id string) (*IntegrityContextKey, error) {
+	var k *IntegrityContextKey
+	row, err := tx.QueryRowTx(ctx, selectIntegrityContextKeyByIDSQL, id)
+	if err != nil {
+		return nil, err
+	}
+	k = &IntegrityContextKey{
+		ID: id,
+	}
+	err = database.ScanRow(row, k, "secret", "create_time")
+	if database.NoRows(err) {
+		k = nil
+	} else if err != nil {
+		return nil, err
+	}
+	return k, nil
+}
+
 //go:embed integrity_context_key.delete_by_create_time.sql
 var deleteIntegrityContextKeyByCreateTimeSQL string
 

@@ -24,6 +24,7 @@ import (
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/go-database/memory"
 	"github.com/tdrn-org/idpd/internal/data/model"
+	"github.com/tdrn-org/idpd/internal/domain"
 )
 
 func newTestDB(t *testing.T) *database.Driver {
@@ -44,4 +45,26 @@ func runInTx(t *testing.T, driver *database.Driver, fn func(ctx context.Context,
 	}()
 	fn(txCtx, tx)
 	require.NoError(t, tx.CommitTx(txCtx))
+}
+
+func newNoopIntegrityContext() domain.IntegrityContext {
+	return &noopIntegrityContext{}
+}
+
+type noopIntegrityContext struct{}
+
+func (*noopIntegrityContext) KeyID() string {
+	return "KeyID"
+}
+
+func (c *noopIntegrityContext) Secure(payload []byte) (*domain.IntegrityPayload, error) {
+	integrityPayload := &domain.IntegrityPayload{
+		KeyID:      c.KeyID(),
+		CipherText: payload,
+	}
+	return integrityPayload, nil
+}
+
+func (c *noopIntegrityContext) VerifyAndDecrypt(secured *domain.IntegrityPayload) ([]byte, error) {
+	return secured.CipherText, nil
 }

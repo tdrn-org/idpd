@@ -19,18 +19,21 @@ package rest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/buildinfo"
+	"github.com/tdrn-org/idpd/internal/scheme"
 )
 
 type Runtime interface {
 	BaseURL() *url.URL
 	Logger() *slog.Logger
 	Ping(ctx context.Context) error
+	GetHandler(name string) scheme.Handler
 }
 
 //	@title			IdPD REST API
@@ -58,10 +61,12 @@ func NewAPI(runtime Runtime) *API {
 const basePath string = "/api/v1"
 const PathPing string = basePath + "/ping"
 const PathInfo string = basePath + "/info"
+const PathLogin string = basePath + "/login"
 
 func (api *API) Mount(server *httpserver.Instance) {
 	server.HandleFunc("GET "+PathPing, api.PingGet)
 	server.HandleFunc("GET "+PathInfo, api.InfoGet)
+	server.HandleFunc("GET "+PathLogin, api.LoginGet)
 }
 
 const responseOK string = "ok"
@@ -87,8 +92,8 @@ func (api *API) PingGet(w http.ResponseWriter, r *http.Request) {
 // GET @BasePath/info
 //
 //	@Summary		Query server info
-//	@Description	Ping the server to check general health
-//	@Produce		text/plain
+//	@Description	Retrieve basic server info like version and configuration options
+//	@Produce		json
 //	@Success		200	{object}	ServerInfo
 //	@Failure		500	{string}	string	"server error"
 //	@Router			/api/v1/info [get]
@@ -102,6 +107,32 @@ func (api *API) InfoGet(w http.ResponseWriter, r *http.Request) {
 type ServerInfo struct {
 	// The server version
 	Version string `json:"version"`
+}
+
+// GET @BasePath/login
+//
+//	@Summary		Initiate login flow
+//	@Description	Initiate the login flow using the given handler and auth request
+//	@Produce		text/plain
+//	@Param			handler	query		string	true	"auth handler"
+//	@Param			id		query		string	true	"auth request id"
+//	@Success		302		{string}	string.	"Redirect to Login UI"
+//	@Failure		500		{string}	string	"server error"
+//	@Router			/api/v1/login [get]
+func (api *API) LoginGet(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	handlerName := query.Get("handler")
+	handler := api.runtime.GetHandler(handlerName)
+	id := query.Get("id")
+	if handler == nil || id == "" {
+		api.sendError(w, r, http.StatusBadRequest, fmt.Errorf("invalid login request", slog.String("handler", handlerName), slog.String("id", id)))
+		return
+	}
+	err := handler.RedirectLogin(w, r, id)
+	if err != nil {
+		api.sendError(w, r, http.StatusInternalServerError, err)
+		return
+	}
 }
 
 func (api *API) sendApplicationJSONResponse(w http.ResponseWriter, r *http.Request, status int, content any) {

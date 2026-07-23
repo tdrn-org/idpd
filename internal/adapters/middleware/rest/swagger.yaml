@@ -19,9 +19,9 @@ info:
 paths:
   /api/v1/info:
     get:
-      description: Ping the server to check general health
+      description: Retrieve basic server info like version and configuration options
       produces:
-      - text/plain
+      - application/json
       responses:
         "200":
           description: OK
@@ -32,6 +32,32 @@ paths:
           schema:
             type: string
       summary: Query server info
+  /api/v1/login:
+    get:
+      description: Initiate the login flow using the given handler and auth request
+      parameters:
+      - description: auth handler
+        in: query
+        name: handler
+        required: true
+        type: string
+      - description: auth request id
+        in: query
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "302":
+          description: Redirect to Login UI
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Initiate login flow
   /api/v1/ping:
     get:
       description: Ping the server to check general health

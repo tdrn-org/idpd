@@ -22,6 +22,7 @@ import (
 	"net/url"
 
 	"github.com/tdrn-org/idpd/internal/data"
+	"github.com/tdrn-org/idpd/internal/scheme"
 )
 
 func (s *Server) runtime() *serverRuntime {
@@ -46,4 +47,8 @@ func (runtime *serverRuntime) Logger() *slog.Logger {
 
 func (runtime *serverRuntime) Ping(ctx context.Context) error {
 	return runtime.server.Ping(ctx)
+}
+
+func (runtime *serverRuntime) GetHandler(name string) scheme.Handler {
+	return runtime.server.schemeHandlers[scheme.Name(name)]
 }

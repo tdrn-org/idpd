@@ -17,8 +17,10 @@
 package oauth2
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -27,6 +29,7 @@ import (
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/idpd/internal/adapters/middleware/rest"
 	"github.com/tdrn-org/idpd/internal/i18n"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -35,6 +38,8 @@ import (
 )
 
 const Name scheme.Name = "oauth2"
+
+var ErrUnknownAuthRequest error = errors.New("unknown auth request")
 
 const DefaultClientClockSkew time.Duration = 1 * time.Minute
 
@@ -50,7 +55,7 @@ const (
 
 	deviceAuthzEndpoint = "/device_authorization"
 
-	loginEndpoint = "/" + string(Name) + "/login"
+	loginEndpoint = rest.PathLogin
 )
 
 type Handler struct {
@@ -128,6 +133,11 @@ func (h *Handler) Mount(instance *httpserver.Instance) {
 	instance.Handle(endSessionEndpoint, h.opProvider)
 	instance.Handle(keysEndpoint, h.opProvider)
 	instance.Handle(deviceAuthzEndpoint, h.opProvider)
+}
+
+func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request, id string) error {
+	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), id), http.StatusFound)
+	return nil
 }
 
 func (h *Handler) Endpoint() *oauth2.Endpoint {

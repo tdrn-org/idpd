@@ -27,6 +27,9 @@ var ErrIntegrityContextIntegrityViolated error = errors.New("data integrity viol
 // IntegrityContext encapsulates the functions needed to save and restore state
 // information while ensuring their integrity.
 type IntegrityContext interface {
+	// KeyID returns the key ID of this instance.
+	KeyID() string
+
 	// Secure encrypts and signs the payload, returning the secured representation.
 	Secure(payload []byte) (*IntegrityPayload, error)
 

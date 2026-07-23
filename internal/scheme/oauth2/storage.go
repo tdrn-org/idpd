@@ -24,8 +24,6 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
-	"github.com/tdrn-org/go-database"
-	"github.com/tdrn-org/idpd/internal/scheme/oauth2/model"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -36,27 +34,12 @@ type opStorage struct {
 
 // op.AuthStorage
 func (s *opStorage) CreateAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, idTokenHintUserID string) (op.AuthRequest, error) {
-	dataStore := s.handler.runtime.DataStore()
-	var opAuthRequest op.AuthRequest
-	err := s.handler.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
-		userSessionRequest, err := dataStore.CreateUserSessionRequest(txCtx, s.handler.Name().String())
-		if err != nil {
-			return err
-		}
-		authRequest, err := model.InsertAuthRequest(txCtx, tx, userSessionRequest, oidcAuthRequest)
-		if err != nil {
-			return err
-		}
-		opAuthRequest = authRequest.OpAuthRequest()
-		return nil
-	})
-	return opAuthRequest, err
+	return s.handler.createAuthRequest(ctx, oidcAuthRequest, idTokenHintUserID)
 }
 
 // op.AuthStorage
-func (s *opStorage) AuthRequestByID(context.Context, string) (op.AuthRequest, error) {
-	s.logStub()
-	return nil, nil
+func (s *opStorage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
+	return s.handler.getAuthRequest(ctx, id)
 }
 
 // op.AuthStorage
