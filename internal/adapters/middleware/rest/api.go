@@ -125,7 +125,7 @@ func (api *API) LoginGet(w http.ResponseWriter, r *http.Request) {
 	handler := api.runtime.GetHandler(handlerName)
 	id := query.Get("id")
 	if handler == nil || id == "" {
-		api.sendError(w, r, http.StatusBadRequest, fmt.Errorf("invalid login request", slog.String("handler", handlerName), slog.String("id", id)))
+		api.sendError(w, r, http.StatusBadRequest, fmt.Errorf("invalid login request handler: '%s' id: '%s'", handlerName, id))
 		return
 	}
 	err := handler.RedirectLogin(w, r, id)
