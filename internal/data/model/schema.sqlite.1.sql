@@ -53,8 +53,8 @@ CREATE TABLE oauth2_auth_request(
     FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
 );
 CREATE TABLE oauth2_auth_code(
-    auth_request_id TEXT,
     code TEXT PRIMARY KEY,
+    auth_request_id TEXT,
     FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
 CREATE TABLE oauth2_token(

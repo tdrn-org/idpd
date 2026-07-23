@@ -1,7 +1,7 @@
 INSERT INTO
     oauth2_auth_code(
-        auth_request_id,
-        code
+        code,
+        auth_request_id
     )
 VALUES(
     $1,

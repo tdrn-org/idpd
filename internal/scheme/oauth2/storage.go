@@ -46,13 +46,13 @@ func (s *opStorage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequ
 
 // op.AuthStorage
 func (s *opStorage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
-	return s.handler.getAuthRequest(ctx, code)
+	return s.handler.getAuthRequestByCode(ctx, code)
 }
 
 // op.AuthStorage
 func (s *opStorage) SaveAuthCode(ctx context.Context, id string, code string) error {
 	return s.handler.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
-		_, err := model.InsertAuthCode(txCtx, tx, id, code)
+		_, err := model.InsertAuthCode(txCtx, tx, code, id)
 		return err
 	})
 }
@@ -130,9 +130,12 @@ func (s *opStorage) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAl
 }
 
 // op.AuthStorage
-func (s *opStorage) KeySet(context.Context) ([]op.Key, error) {
-	s.logStub()
-	return nil, nil
+func (s *opStorage) KeySet(ctx context.Context) ([]op.Key, error) {
+	signingKey, err := s.handler.activeSigningKey(ctx, jose.SignatureAlgorithm(s.handler.cfg.SigningKeyAlgorithm))
+	if err != nil {
+		return nil, err
+	}
+	return []op.Key{&opKey{signingKey: signingKey}}, nil
 }
 
 // op.CanTerminateSessionFromRequest

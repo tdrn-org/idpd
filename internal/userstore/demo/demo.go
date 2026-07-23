@@ -29,10 +29,6 @@ import (
 
 const Type userstore.Type = "demo"
 
-type userData struct {
-	Users []*tomlfile.User `toml:"user"`
-}
-
 type User struct {
 	Login          string            `toml:"login"`
 	Password       string            `toml:"password"`

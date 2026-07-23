@@ -24,21 +24,21 @@ import (
 )
 
 type AuthCode struct {
-	AuthRequestID string `db:"auth_request_id"`
 	Code          string `db:"code"`
+	AuthRequestID string `db:"auth_request_id"`
 }
 
 //go:embed auth_code.insert.sql
 var insertAuthCodeSQL string
 
-func InsertAuthCode(ctx context.Context, tx *database.Tx, authRequestID, code string) (*AuthCode, error) {
+func InsertAuthCode(ctx context.Context, tx *database.Tx, code, authRequestID string) (*AuthCode, error) {
 	c := &AuthCode{
-		AuthRequestID: authRequestID,
 		Code:          code,
+		AuthRequestID: authRequestID,
 	}
 	err := tx.ExecTx(ctx, insertAuthCodeSQL,
-		c.AuthRequestID,
-		c.Code)
+		c.Code,
+		c.AuthRequestID)
 	if err != nil {
 		return nil, err
 	}
