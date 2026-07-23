@@ -40,6 +40,8 @@ enabled = true
 claims = []
 scopes = []
 signing_key_algorithm = "RS256"
+signing_key_rotation = "720h"
+signing_key_lifetime = "1440h"
 
 [saml2]
 enabled = true

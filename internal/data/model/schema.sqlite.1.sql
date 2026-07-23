@@ -1,13 +1,6 @@
 --
 -- Keys
 --
-CREATE TABLE signing_key(
-    id TEXT NOT NULL,
-    algorithm TEXT NOT NULL,
-    private_key BLOB NOT NULL,
-    create_time INTEGER NOT NULL,
-    PRIMARY KEY(id)
-);
 --
 -- User Session Request (shared kernel for all auth flows)
 --
@@ -40,6 +33,13 @@ CREATE INDEX idx_session_login ON session(login);
 --
 -- OAuth2
 --
+CREATE TABLE oauth2_signing_key(
+    id TEXT NOT NULL,
+    algorithm TEXT NOT NULL,
+    private_key BLOB NOT NULL,
+    create_time INTEGER NOT NULL,
+    PRIMARY KEY(id)
+);
 CREATE TABLE oauth2_auth_request(
     id TEXT PRIMARY KEY,
     user_session_request_id TEXT NOT NULL,

@@ -23,13 +23,13 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/tdrn-org/idpd/config"
-	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/crypto"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
 type opSigningKey struct {
-	signingKey *domain.SigningKey
+	signingKey *crypto.JoseSigningKey
 }
 
 func (k *opSigningKey) SignatureAlgorithm() jose.SignatureAlgorithm {

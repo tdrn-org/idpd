@@ -24,7 +24,6 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/crypto"
-	"github.com/tdrn-org/idpd/internal/domain"
 )
 
 type SigningKey struct {
@@ -34,7 +33,7 @@ type SigningKey struct {
 	CreateTime int64  `db:"create_time"`
 }
 
-func (k *SigningKey) ToDomain() (*domain.SigningKey, error) {
+func (k *SigningKey) ToJoseSigningKey() (*crypto.JoseSigningKey, error) {
 	if k == nil {
 		return nil, nil
 	}
@@ -43,7 +42,7 @@ func (k *SigningKey) ToDomain() (*domain.SigningKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	signingKey := &domain.SigningKey{
+	signingKey := &crypto.JoseSigningKey{
 		ID:         k.ID,
 		Algorithm:  jose.SignatureAlgorithm(k.Algorithm),
 		Key:        key,
@@ -55,7 +54,7 @@ func (k *SigningKey) ToDomain() (*domain.SigningKey, error) {
 //go:embed signing_key.insert.sql
 var insertSigningKeySQL string
 
-func InsertSigningKey(ctx context.Context, tx *database.Tx, signingKey *domain.SigningKey) (*SigningKey, error) {
+func InsertSigningKey(ctx context.Context, tx *database.Tx, signingKey *crypto.JoseSigningKey) (*SigningKey, error) {
 	algorithm, privateKey, err := crypto.MarshalSigningKey(signingKey)
 	if err != nil {
 		return nil, err

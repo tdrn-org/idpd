@@ -21,10 +21,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/tdrn-org/go-database"
-	"github.com/tdrn-org/idpd/internal/crypto"
-	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/domain"
 )
 
@@ -69,46 +66,6 @@ func (s *Store) Atomic(ctx context.Context, atomics ...AtomicFunc) error {
 
 func (s *Store) CurrentTx(ctx context.Context) (*database.Tx, bool) {
 	return s.driver.CurrentTx(ctx)
-}
-
-func (s *Store) ActiveSigningKey(ctx context.Context, algorithm jose.SignatureAlgorithm, activeDuration, lifetimeDuration time.Duration) (*domain.SigningKey, error) {
-	txCtx, tx, err := s.driver.BeginTx(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.RollbackUncommitedTx(txCtx)
-
-	deleteBefore := tx.Now().Add(-lifetimeDuration)
-	err = model.DeleteSigningKeyByCreateTime(txCtx, tx, deleteBefore)
-	if err != nil {
-		return nil, err
-	}
-	inactiveBefore := tx.Now().Add(-activeDuration)
-	storeSigningKey, err := model.SelectSigningKeyByAlgorithm(txCtx, tx, algorithm)
-	if err != nil {
-		return nil, err
-	}
-	if database.DB2Time(storeSigningKey.CreateTime).Before(inactiveBefore) {
-		signingKey, err := crypto.NewSigningKey(algorithm)
-		if err != nil {
-			return nil, err
-		}
-		storeSigningKey, err = model.InsertSigningKey(txCtx, tx, signingKey)
-		if err != nil {
-			return nil, err
-		}
-	}
-	signingKey, err := storeSigningKey.ToDomain()
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.CommitTx(txCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	return signingKey, nil
 }
 
 func (s *Store) ActiveIntegrityContext(ctx context.Context, activeDuration, lifetimeDuration time.Duration) (domain.IntegrityContext, error) {

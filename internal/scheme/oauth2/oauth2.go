@@ -36,8 +36,6 @@ import (
 
 const Name scheme.Name = "oauth2"
 
-const DefaultSigningKeyActiveDuration time.Duration = 30 * 24 * time.Hour
-const DefaultSigningKeyLifetimeDuration time.Duration = 60 * 24 * time.Hour
 const DefaultClientClockSkew time.Duration = 1 * time.Minute
 
 const (

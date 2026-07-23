@@ -25,12 +25,19 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
+	"time"
 
 	"github.com/go-jose/go-jose/v4"
-	"github.com/tdrn-org/idpd/internal/domain"
 )
 
-func NewSigningKey(algorithm jose.SignatureAlgorithm) (*domain.SigningKey, error) {
+type JoseSigningKey struct {
+	ID         string
+	Algorithm  jose.SignatureAlgorithm
+	Key        any
+	CreateTime time.Time
+}
+
+func NewSigningKey(algorithm jose.SignatureAlgorithm) (*JoseSigningKey, error) {
 	var key any
 	var err error
 
@@ -60,14 +67,14 @@ func NewSigningKey(algorithm jose.SignatureAlgorithm) (*domain.SigningKey, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to generated signature key (cause: %w)", err)
 	}
-	sigingKey := &domain.SigningKey{
+	sigingKey := &JoseSigningKey{
 		Algorithm: algorithm,
 		Key:       key,
 	}
 	return sigingKey, nil
 }
 
-func MarshalSigningKey(signingKey *domain.SigningKey) (jose.SignatureAlgorithm, []byte, error) {
+func MarshalSigningKey(signingKey *JoseSigningKey) (jose.SignatureAlgorithm, []byte, error) {
 	switch key := signingKey.Key.(type) {
 	case []byte:
 		return signingKey.Algorithm, key, nil
@@ -90,7 +97,7 @@ func marshalPrivateSigningKey(algorithm jose.SignatureAlgorithm, privateKey cryp
 	return algorithm, privateKeyBytes, nil
 }
 
-func UnmarshalSigningKey(algorithm jose.SignatureAlgorithm, encoded []byte) (*domain.SigningKey, error) {
+func UnmarshalSigningKey(algorithm jose.SignatureAlgorithm, encoded []byte) (*JoseSigningKey, error) {
 	var key interface{}
 	var err error
 
@@ -117,7 +124,7 @@ func UnmarshalSigningKey(algorithm jose.SignatureAlgorithm, encoded []byte) (*do
 	if err != nil {
 		return nil, err
 	}
-	sigingKey := &domain.SigningKey{
+	sigingKey := &JoseSigningKey{
 		Algorithm: algorithm,
 		Key:       key,
 	}

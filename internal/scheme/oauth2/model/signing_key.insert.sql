@@ -1,5 +1,5 @@
 INSERT INTO
-    signing_key(
+    oauth2_signing_key(
         id,
         algorithm,
         private_key,

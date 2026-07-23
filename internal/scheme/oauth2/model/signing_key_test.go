@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/crypto"
-	"github.com/tdrn-org/idpd/internal/data/model"
+	"github.com/tdrn-org/idpd/internal/scheme/oauth2/model"
 )
 
 func TestSigningKey(t *testing.T) {

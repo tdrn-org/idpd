@@ -1,4 +1,4 @@
 DELETE FROM
-    signing_key
+    oauth2_signing_key
 WHERE
     create_time < $1

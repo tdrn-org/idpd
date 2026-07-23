@@ -30,6 +30,8 @@ type OAuth2Config struct {
 	Claims              []string             `toml:"claims"`
 	Scopes              []string             `toml:"scopes"`
 	SigningKeyAlgorithm SignatureAlgorithm   `toml:"signing_key_algorithm"`
+	SigningKeyRotation  DurationSpec         `toml:"signing_key_rotation"`
+	SigningKeyLifetime  DurationSpec         `toml:"signing_key_lifetime"`
 	Clients             []OAuth2ClientConfig `toml:"client"`
 }
 
