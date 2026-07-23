@@ -22,6 +22,7 @@ import (
 
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/encoding"
 )
 
 type UserSessionRequest struct {
@@ -32,7 +33,7 @@ type UserSessionRequest struct {
 
 func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.IntegrityContextStore) (*domain.UserSessionRequest, error) {
 	authInfoPayload := &domain.IntegrityPayload{}
-	err := unmarshalJSONPayload(authInfoPayload, r.AuthInfo)
+	err := encoding.UnmarshalJSONPayload(authInfoPayload, r.AuthInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +50,7 @@ func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.Integr
 		IC:         ic,
 		CreateTime: database.DB2Time(r.CreateTime),
 	}
-	err = unmarshalJSONPayload(&userSessionRequest.AuthInfo, authInfoBytes)
+	err = encoding.UnmarshalJSONPayload(&userSessionRequest.AuthInfo, authInfoBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.Integr
 var insertUserSessionRequestSQL string
 
 func InsertUserSessionRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest) (*UserSessionRequest, error) {
-	authInfoBytes, err := marshalJSONPayload(&userSessionRequest.AuthInfo)
+	authInfoBytes, err := encoding.MarshalJSONPayload(&userSessionRequest.AuthInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func InsertUserSessionRequest(ctx context.Context, tx *database.Tx, userSessionR
 	if err != nil {
 		return nil, err
 	}
-	authInfoBytes, err = marshalJSONPayload(authInfoPayload)
+	authInfoBytes, err = encoding.MarshalJSONPayload(authInfoPayload)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func SelectUserSessionRequestByID(ctx context.Context, tx *database.Tx, id strin
 	}
 	err = database.ScanRow(row, r, "auth_info", "create_time")
 	if database.NoRows(err) {
-		r = nil
+		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}

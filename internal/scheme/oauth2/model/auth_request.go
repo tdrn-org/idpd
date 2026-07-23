@@ -22,6 +22,7 @@ import (
 
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/encoding"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
@@ -36,7 +37,7 @@ type AuthRequest struct {
 var insertAuthRequestSQL string
 
 func InsertAuthRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest, oidcAuthRequest *oidc.AuthRequest) (*AuthRequest, error) {
-	oidcAuthRequestBytes, err := marshalJSONPayload(oidcAuthRequest)
+	oidcAuthRequestBytes, err := encoding.MarshalJSONPayload(oidcAuthRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +71,12 @@ func SelectAuthRequestByID(ctx context.Context, tx *database.Tx, id string) (*Au
 	}
 	err = database.ScanRow(row, r, "user_session_request_id", "oidc_auth_request", "create_time")
 	if database.NoRows(err) {
-		r = nil
+		return nil, nil, nil
 	} else if err != nil {
 		return nil, nil, err
 	}
 	oidcAuthRequest := &oidc.AuthRequest{}
-	err = unmarshalJSONPayload(oidcAuthRequest, r.OIDCAuthRequest)
+	err = encoding.UnmarshalJSONPayload(oidcAuthRequest, r.OIDCAuthRequest)
 	if err != nil {
 		return nil, nil, err
 	}

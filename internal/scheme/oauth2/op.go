@@ -141,11 +141,17 @@ func (r *opAuthRequest) GetID() string {
 
 func (r *opAuthRequest) GetACR() string {
 	//TODO: Determine correct ACR
+	if len(r.oidcAuthRequest.ACRValues) == 0 {
+		return ""
+	}
 	return r.oidcAuthRequest.ACRValues[0]
 }
 
 func (r *opAuthRequest) GetAMR() []string {
 	amr := make([]string, 0)
+	if r.userSessionRequest.AuthInfo.State != domain.UserSessionRequestStateDone {
+		return amr
+	}
 	amr = append(amr, "pwd", "mfa")
 	switch r.userSessionRequest.AuthInfo.Verification {
 	case domain.VerificationEmail, domain.VerificationTOTP:

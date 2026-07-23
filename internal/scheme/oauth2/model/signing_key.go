@@ -86,7 +86,7 @@ func SelectSigningKeyByAlgorithm(ctx context.Context, tx *database.Tx, algorithm
 	}
 	err = database.ScanRow(row, k, "id", "private_key", "create_time")
 	if database.NoRows(err) {
-		k = nil
+		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}

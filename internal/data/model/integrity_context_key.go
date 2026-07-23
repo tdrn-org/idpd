@@ -69,7 +69,7 @@ func SelectIntegrityContextKey(ctx context.Context, tx *database.Tx) (*Integrity
 	k = &IntegrityContextKey{}
 	err = database.ScanRow(row, k, "id", "secret", "create_time")
 	if database.NoRows(err) {
-		k = nil
+		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}

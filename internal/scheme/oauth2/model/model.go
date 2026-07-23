@@ -15,26 +15,3 @@
  */
 
 package model
-
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-)
-
-func marshalJSONPayload(v any) ([]byte, error) {
-	buffer := &bytes.Buffer{}
-	err := json.NewEncoder(buffer).Encode(v)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode JSON payload (cause: %w)", err)
-	}
-	return buffer.Bytes(), nil
-}
-
-func unmarshalJSONPayload(v any, payload []byte) error {
-	err := json.NewDecoder(bytes.NewBuffer(payload)).Decode(v)
-	if err != nil {
-		return fmt.Errorf("failed to decode JSON payload (cause: %w)", err)
-	}
-	return nil
-}
