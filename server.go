@@ -140,7 +140,7 @@ func (s *Server) startStore(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return errors.Join(err, driver.Close())
 	}
-	s.dataStore = data.NewStore(driver, databaseConfig.RedactedDSN())
+	s.dataStore = data.NewStore(driver, databaseConfig.RedactedDSN(), &cfg.General)
 	return nil
 }
 

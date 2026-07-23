@@ -22,15 +22,19 @@ import (
 	"time"
 
 	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/idpd/internal/crypto"
+	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/domain"
 )
 
 type Store struct {
+	cfg    *config.GeneralConfig
 	driver *database.Driver
 	logger *slog.Logger
 }
 
-func NewStore(driver *database.Driver, name string) *Store {
+func NewStore(driver *database.Driver, name string, cfg *config.GeneralConfig) *Store {
 	return &Store{
 		driver: driver,
 		logger: slog.With(slog.String("name", name)),
@@ -68,8 +72,45 @@ func (s *Store) CurrentTx(ctx context.Context) (*database.Tx, bool) {
 	return s.driver.CurrentTx(ctx)
 }
 
-func (s *Store) ActiveIntegrityContext(ctx context.Context, activeDuration, lifetimeDuration time.Duration) (domain.IntegrityContext, error) {
-	return nil, nil
+func (s *Store) ActiveIntegrityContext(ctx context.Context) (domain.IntegrityContext, error) {
+	txCtx, tx, err := s.driver.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.RollbackUncommitedTx(txCtx)
+
+	deleteBefore := tx.Now().Add(-time.Duration(s.cfg.IntegrityContextKeyLifetime))
+	err = model.DeleteIntegrityContextKeyByCreateTime(txCtx, tx, deleteBefore)
+	if err != nil {
+		return nil, err
+	}
+	inactiveBefore := tx.Now().Add(-time.Duration(s.cfg.IntegrityContextKeyRotation))
+	k, err := model.SelectIntegrityContextKey(txCtx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if database.DB2Time(k.CreateTime).Before(inactiveBefore) {
+		integrityContext, err := crypto.NewNaClSecretBoxContext(nil)
+		if err != nil {
+			return nil, err
+		}
+		integrityContextKey := integrityContext.Key()
+		k, err = model.InsertIntegrityContextKey(txCtx, tx, &integrityContextKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	integrityContext, err := crypto.NewNaClSecretBoxContext(k.ToKey())
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.CommitTx(txCtx)
+	if err != nil {
+		return nil, nil
+	}
+
+	return integrityContext, nil
 }
 
 func (s *Store) LookupIntegrityContext(ctx context.Context, keyID string) (domain.IntegrityContext, error) {

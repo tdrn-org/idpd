@@ -25,16 +25,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
-	"time"
 
 	"github.com/go-jose/go-jose/v4"
 )
 
 type JoseSigningKey struct {
-	ID         string
-	Algorithm  jose.SignatureAlgorithm
-	Key        any
-	CreateTime time.Time
+	ID        string
+	Algorithm jose.SignatureAlgorithm
+	Key       any
 }
 
 func NewSigningKey(algorithm jose.SignatureAlgorithm) (*JoseSigningKey, error) {

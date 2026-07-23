@@ -19,7 +19,6 @@ package domain
 import (
 	"context"
 	"errors"
-	"time"
 )
 
 var ErrIntegrityContextKeyNotFound error = errors.New("integrity context key not found")
@@ -40,7 +39,7 @@ type IntegrityContext interface {
 // Implemented by data.Store.
 type IntegrityContextStore interface {
 	// ActiveIntegrityContext returns the context backed by the newest key (for Secure operations).
-	ActiveIntegrityContext(ctx context.Context, activeDuration, lifetimeDuration time.Duration) (IntegrityContext, error)
+	ActiveIntegrityContext(ctx context.Context) (IntegrityContext, error)
 
 	// LookupIntegrityContext returns the context for a specific keyID (for VerifyAndDecrypt).
 	LookupIntegrityContext(ctx context.Context, keyID string) (IntegrityContext, error)

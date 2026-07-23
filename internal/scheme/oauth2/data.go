@@ -35,21 +35,21 @@ func (h *Handler) activeSigningKey(ctx context.Context, algorithm jose.Signature
 			return err
 		}
 		inactiveBefore := tx.Now().Add(-time.Duration(h.cfg.SigningKeyRotation))
-		storeSigningKey, err := model.SelectSigningKeyByAlgorithm(txCtx, tx, algorithm)
+		k, err := model.SelectSigningKeyByAlgorithm(txCtx, tx, algorithm)
 		if err != nil {
 			return err
 		}
-		if database.DB2Time(storeSigningKey.CreateTime).Before(inactiveBefore) {
+		if database.DB2Time(k.CreateTime).Before(inactiveBefore) {
 			signingKey, err := crypto.NewSigningKey(algorithm)
 			if err != nil {
 				return err
 			}
-			storeSigningKey, err = model.InsertSigningKey(txCtx, tx, signingKey)
+			k, err = model.InsertSigningKey(txCtx, tx, signingKey)
 			if err != nil {
 				return err
 			}
 		}
-		signingKey, err = storeSigningKey.ToJoseSigningKey()
+		signingKey, err = k.ToJoseSigningKey()
 		return err
 	})
 	return signingKey, err

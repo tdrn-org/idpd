@@ -24,29 +24,50 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-// NewIntegrityKey generates a new random 32-byte key for NaCl SecretBox.
-func NewIntegrityKey() ([32]byte, error) {
-	var key [32]byte
-	_, err := rand.Read(key[:])
-	if err != nil {
-		return key, fmt.Errorf("failed to generate integrity key (cause: %w)", err)
-	}
-	return key, nil
-}
-
 // NaClSecretBoxContext implements domain.IntegrityContext using NaCl SecretBox
 // (XSalsa20-Poly1305). This provides both encryption and authentication in a
 // single AEAD operation — no separate signature is needed.
 type NaClSecretBoxContext struct {
-	key   [32]byte
-	keyID string
+	id     KeyID
+	secret [32]byte
 }
 
+const KeyTypeNaCl string = "nacl-v1"
+
 // NewNaClSecretBoxContext creates a new context backed by the given key.
-func NewNaClSecretBoxContext(key [32]byte, keyID string) *NaClSecretBoxContext {
-	return &NaClSecretBoxContext{
-		key:   key,
-		keyID: keyID,
+// If the given key is nil a new one is created.
+func NewNaClSecretBoxContext(key *Key) (*NaClSecretBoxContext, error) {
+	validatedKey := key
+	if validatedKey != nil {
+		keyType, _, err := DecodeKeyID(key.ID)
+		if err != nil {
+			return nil, err
+		}
+		if keyType != KeyTypeNaCl {
+			return nil, fmt.Errorf("invalid key type: '%s'", keyType)
+		}
+		secretLen := len(key.Secret)
+		if secretLen != 32 {
+			return nil, fmt.Errorf("invalid secret length: '%d'", secretLen)
+		}
+	} else {
+		newKey, err := NewKey32(KeyTypeNaCl)
+		if err != nil {
+			return nil, err
+		}
+		validatedKey = newKey
+	}
+	secretBoxContext := &NaClSecretBoxContext{
+		id:     validatedKey.ID,
+		secret: [32]byte(append([]byte(nil), validatedKey.Secret...)),
+	}
+	return secretBoxContext, nil
+}
+
+func (c *NaClSecretBoxContext) Key() Key {
+	return Key{
+		ID:     c.id,
+		Secret: fmt.Append([]byte(nil), c.secret),
 	}
 }
 
@@ -62,12 +83,12 @@ func (c *NaClSecretBoxContext) Secure(payload []byte) (*domain.IntegrityPayload,
 
 	// secretbox.Seal appends the encrypted payload to the (empty) nonce slice.
 	// Result layout: [nonce:24][encrypted:len(payload)+Overhead]
-	ciphertext := secretbox.Seal(nonce[:], payload, &nonce, &c.key)
+	ciphertext := secretbox.Seal(nonce[:], payload, &nonce, &c.secret)
 
 	return &domain.IntegrityPayload{
 		CipherText: ciphertext,
 		Signature:  nil, // AEAD — no detached signature needed
-		KeyID:      c.keyID,
+		KeyID:      string(c.id),
 	}, nil
 }
 
@@ -82,7 +103,7 @@ func (c *NaClSecretBoxContext) VerifyAndDecrypt(secured *domain.IntegrityPayload
 	copy(nonce[:], secured.CipherText[:24])
 	ciphertext := secured.CipherText[24:]
 
-	plaintext, ok := secretbox.Open(nil, ciphertext, &nonce, &c.key)
+	plaintext, ok := secretbox.Open(nil, ciphertext, &nonce, &c.secret)
 	if !ok {
 		return nil, domain.ErrIntegrityContextIntegrityViolated
 	}

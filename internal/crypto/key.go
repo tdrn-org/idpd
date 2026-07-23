@@ -17,16 +17,41 @@
 package crypto
 
 import (
-	"crypto/rand"
-	"fmt"
+	"errors"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
-// Rand32 generates a new random 32-byte array for cryptographic operations.
-func Rand32() ([32]byte, error) {
-	var key [32]byte
-	_, err := rand.Read(key[:])
+var ErrInvalidKeyID error = errors.New("invalid key id")
+
+type KeyID string
+
+func NewKeyID(keyType string) string {
+	return keyType + ":" + uuid.NewString()
+}
+
+func DecodeKeyID(keyID KeyID) (string, string, error) {
+	split := strings.Split(string(keyID), ":")
+	if len(split) != 2 {
+		return "", "", ErrInvalidKeyID
+	}
+	return split[0], split[1], nil
+}
+
+type Key struct {
+	ID     KeyID
+	Secret []byte
+}
+
+func NewKey32(keyType string) (*Key, error) {
+	secret, err := Rand32()
 	if err != nil {
-		return key, fmt.Errorf("failed to generate random bytes (cause: %w)", err)
+		return nil, err
+	}
+	key := &Key{
+		ID:     KeyID(NewKeyID(keyType)),
+		Secret: secret[:],
 	}
 	return key, nil
 }

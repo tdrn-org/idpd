@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package crypto
+package model_test
 
 import (
-	"crypto/rand"
-	"fmt"
+	"context"
+	"testing"
+
+	"github.com/tdrn-org/go-database"
 )
 
-// Rand32 generates a new random 32-byte array for cryptographic operations.
-func Rand32() ([32]byte, error) {
-	var key [32]byte
-	_, err := rand.Read(key[:])
-	if err != nil {
-		return key, fmt.Errorf("failed to generate random bytes (cause: %w)", err)
-	}
-	return key, nil
+func TestUserSessionRequest(t *testing.T) {
+	driver := newTestDB(t)
+
+	runInTx(t, driver, func(txCtx context.Context, tx *database.Tx) {
+
+	})
 }

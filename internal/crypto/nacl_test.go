@@ -14,26 +14,25 @@
  * limitations under the License.
  */
 
-package crypto
+package crypto_test
 
 import (
 	"bytes"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/idpd/internal/crypto"
 	"github.com/tdrn-org/idpd/internal/domain"
 )
 
 func TestNaClSecretBoxContextRoundTrip(t *testing.T) {
-	key, err := NewIntegrityKey()
-	if err != nil {
-		t.Fatalf("NewIntegrityKey failed: %v", err)
-	}
+	secretBoxContext, err := crypto.NewNaClSecretBoxContext(nil)
+	require.NoError(t, err)
 
-	ctx := NewNaClSecretBoxContext(key, "nacl-secretbox:v1:test-key")
 	payload := []byte("Hello, idpd!")
 
 	// Encrypt
-	secured, err := ctx.Secure(payload)
+	secured, err := secretBoxContext.Secure(payload)
 	if err != nil {
 		t.Fatalf("Secure failed: %v", err)
 	}
@@ -45,12 +44,12 @@ func TestNaClSecretBoxContextRoundTrip(t *testing.T) {
 	if secured.Signature != nil {
 		t.Fatal("Expected nil Signature for AEAD scheme")
 	}
-	if secured.KeyID != "nacl-secretbox:v1:test-key" {
+	if secured.KeyID != string(secretBoxContext.Key().ID) {
 		t.Fatalf("KeyID mismatch: got %q", secured.KeyID)
 	}
 
 	// Decrypt
-	plaintext, err := ctx.VerifyAndDecrypt(secured)
+	plaintext, err := secretBoxContext.VerifyAndDecrypt(secured)
 	if err != nil {
 		t.Fatalf("VerifyAndDecrypt failed: %v", err)
 	}
@@ -61,15 +60,12 @@ func TestNaClSecretBoxContextRoundTrip(t *testing.T) {
 }
 
 func TestNaClSecretBoxContextTampered(t *testing.T) {
-	key, err := NewIntegrityKey()
-	if err != nil {
-		t.Fatalf("NewIntegrityKey failed: %v", err)
-	}
+	secretBoxContext, err := crypto.NewNaClSecretBoxContext(nil)
+	require.NoError(t, err)
 
-	ctx := NewNaClSecretBoxContext(key, "nacl-secretbox:v1:test-key")
 	payload := []byte("tamper me")
 
-	secured, err := ctx.Secure(payload)
+	secured, err := secretBoxContext.Secure(payload)
 	if err != nil {
 		t.Fatalf("Secure failed: %v", err)
 	}
@@ -83,35 +79,35 @@ func TestNaClSecretBoxContextTampered(t *testing.T) {
 	copy(tampered.CipherText, secured.CipherText)
 	tampered.CipherText[30] ^= 0x01
 
-	_, err = ctx.VerifyAndDecrypt(tampered)
+	_, err = secretBoxContext.VerifyAndDecrypt(tampered)
 	if err != domain.ErrIntegrityContextIntegrityViolated {
 		t.Fatalf("Expected ErrIntegrityContextIntegrityViolated, got %v", err)
 	}
 }
 
 func TestNaClSecretBoxContextWrongKey(t *testing.T) {
-	key1, _ := NewIntegrityKey()
-	key2, _ := NewIntegrityKey()
+	secretBoxContext1, err := crypto.NewNaClSecretBoxContext(nil)
+	require.NoError(t, err)
 
-	ctx1 := NewNaClSecretBoxContext(key1, "key-1")
-	ctx2 := NewNaClSecretBoxContext(key2, "key-1")
+	secretBoxContext2, err := crypto.NewNaClSecretBoxContext(nil)
+	require.NoError(t, err)
 
-	secured, err := ctx1.Secure([]byte("secret"))
+	secured, err := secretBoxContext1.Secure([]byte("secret"))
 	if err != nil {
 		t.Fatalf("Secure failed: %v", err)
 	}
 
-	_, err = ctx2.VerifyAndDecrypt(secured)
+	_, err = secretBoxContext2.VerifyAndDecrypt(secured)
 	if err != domain.ErrIntegrityContextIntegrityViolated {
 		t.Fatalf("Expected ErrIntegrityContextIntegrityViolated with wrong key, got %v", err)
 	}
 }
 
 func TestNaClSecretBoxContextTruncated(t *testing.T) {
-	key, _ := NewIntegrityKey()
-	ctx := NewNaClSecretBoxContext(key, "test")
+	secretBoxContext, err := crypto.NewNaClSecretBoxContext(nil)
+	require.NoError(t, err)
 
-	_, err := ctx.VerifyAndDecrypt(&domain.IntegrityPayload{
+	_, err = secretBoxContext.VerifyAndDecrypt(&domain.IntegrityPayload{
 		CipherText: []byte("too-short"),
 	})
 	if err != domain.ErrIntegrityContextIntegrityViolated {

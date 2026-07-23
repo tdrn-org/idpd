@@ -43,10 +43,9 @@ func (k *SigningKey) ToJoseSigningKey() (*crypto.JoseSigningKey, error) {
 		return nil, err
 	}
 	signingKey := &crypto.JoseSigningKey{
-		ID:         k.ID,
-		Algorithm:  jose.SignatureAlgorithm(k.Algorithm),
-		Key:        key,
-		CreateTime: database.DB2Time(k.CreateTime),
+		ID:        k.ID,
+		Algorithm: jose.SignatureAlgorithm(k.Algorithm),
+		Key:       key,
 	}
 	return signingKey, nil
 }
@@ -69,7 +68,7 @@ func InsertSigningKey(ctx context.Context, tx *database.Tx, signingKey *crypto.J
 	if err != nil {
 		return nil, err
 	}
-	signingKey.ID, signingKey.CreateTime = k.ID, database.DB2Time(k.CreateTime)
+	signingKey.ID = k.ID
 	return k, nil
 }
 

@@ -35,6 +35,10 @@ db = "idpd"
 user = "idpd"
 password = ""
 
+[general]
+integrity_context_key_rotation = "720h"
+integrity_context_key_lifetime = "1440h"
+
 [oauth2]
 enabled = true
 claims = []

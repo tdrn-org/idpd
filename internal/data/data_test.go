@@ -18,10 +18,12 @@ package data_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/go-database/memory"
+	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/internal/data"
 	"github.com/tdrn-org/idpd/internal/data/model"
 )
@@ -39,5 +41,9 @@ func newDataStore(t *testing.T) *data.Store {
 	require.NoError(t, err)
 	require.Equal(t, database.SchemaNone, from)
 	require.Equal(t, 1, to)
-	return data.NewStore(driver, t.Name())
+	cfg := &config.GeneralConfig{
+		IntegrityContextKeyRotation: config.DurationSpec(1 * time.Minute),
+		IntegrityContextKeyLifetime: config.DurationSpec(5 * time.Minute),
+	}
+	return data.NewStore(driver, t.Name(), cfg)
 }

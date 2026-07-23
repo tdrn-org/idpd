@@ -1,6 +1,12 @@
 --
--- Keys
+-- Integrity Context Key
 --
+CREATE TABLE integrity_context_key(
+    id TEXT NOT NULL,
+    secret BLOB NOT NULL,
+    create_time INTEGER NOT NULL,
+    PRIMARY KEY(id)
+);
 --
 -- User Session Request (shared kernel for all auth flows)
 --

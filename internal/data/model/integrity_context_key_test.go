@@ -21,53 +21,55 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/crypto"
-	"github.com/tdrn-org/idpd/internal/scheme/oauth2/model"
+	"github.com/tdrn-org/idpd/internal/data/model"
 )
 
-func TestSigningKey(t *testing.T) {
+func TestIntegrityContextKey(t *testing.T) {
 	driver := newTestDB(t)
 
-	algorithm := jose.RS256
-	signingKey, err := crypto.NewSigningKey(algorithm)
+	cryptoKeySecret, err := crypto.Rand32()
 	require.NoError(t, err)
+	cryptoKey := &crypto.Key{
+		ID:     crypto.KeyID(crypto.NewKeyID(t.Name())),
+		Secret: cryptoKeySecret[:],
+	}
 
-	// Select (no signing key)
-	var k1 *model.SigningKey
+	// Select (no keys)
+	var k1 *model.IntegrityContextKey
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		k1, err = model.SelectSigningKeyByAlgorithm(ctx, tx, algorithm)
+		k1, err = model.SelectIntegrityContextKey(ctx, tx)
 		require.NoError(t, err)
 		require.Nil(t, k1)
 	})
 
 	// Insert
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		k1, err = model.InsertSigningKey(ctx, tx, signingKey)
+		k1, err = model.InsertIntegrityContextKey(ctx, tx, cryptoKey)
 		require.NoError(t, err)
-		require.Equal(t, string(algorithm), k1.Algorithm)
+		require.NotNil(t, k1)
 	})
 
-	// Select (existing signing key)
-	var k2 *model.SigningKey
+	// Select (existing key)
+	var k2 *model.IntegrityContextKey
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		k2, err = model.SelectSigningKeyByAlgorithm(ctx, tx, algorithm)
+		k2, err = model.SelectIntegrityContextKey(ctx, tx)
 		require.NoError(t, err)
 		require.Equal(t, k1, k2)
 	})
 
 	// Delete (by create time)
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		err = model.DeleteSigningKeyByCreateTime(ctx, tx, time.Now())
+		err := model.DeleteIntegrityContextKeyByCreateTime(ctx, tx, time.Now())
 		require.NoError(t, err)
 	})
 
-	// Select (no signing key)
+	// Select (no keys)
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		signingKey3, err := model.SelectSigningKeyByAlgorithm(ctx, tx, algorithm)
+		k1, err = model.SelectIntegrityContextKey(ctx, tx)
 		require.NoError(t, err)
-		require.Nil(t, signingKey3)
+		require.Nil(t, k1)
 	})
 }

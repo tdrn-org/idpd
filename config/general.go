@@ -14,19 +14,9 @@
  * limitations under the License.
  */
 
-package crypto
+package config
 
-import (
-	"crypto/rand"
-	"fmt"
-)
-
-// Rand32 generates a new random 32-byte array for cryptographic operations.
-func Rand32() ([32]byte, error) {
-	var key [32]byte
-	_, err := rand.Read(key[:])
-	if err != nil {
-		return key, fmt.Errorf("failed to generate random bytes (cause: %w)", err)
-	}
-	return key, nil
+type GeneralConfig struct {
+	IntegrityContextKeyRotation DurationSpec `toml:"integrity_context_key_rotation"`
+	IntegrityContextKeyLifetime DurationSpec `toml:"integrity_context_key_lifetime"`
 }
