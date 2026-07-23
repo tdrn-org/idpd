@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/idpd/internal/scheme/oauth2/model"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -43,27 +45,40 @@ func (s *opStorage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequ
 }
 
 // op.AuthStorage
-func (s *opStorage) AuthRequestByCode(context.Context, string) (op.AuthRequest, error) {
-	s.logStub()
-	return nil, nil
+func (s *opStorage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
+	return s.handler.getAuthRequest(ctx, code)
 }
 
 // op.AuthStorage
-func (s *opStorage) SaveAuthCode(context.Context, string, string) error {
+func (s *opStorage) SaveAuthCode(ctx context.Context, id string, code string) error {
+	return s.handler.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		_, err := model.InsertAuthCode(txCtx, tx, id, code)
+		return err
+	})
+}
+
+// op.AuthStorage
+func (s *opStorage) DeleteAuthRequest(ctx context.Context, id string) error {
 	s.logStub()
 	return nil
 }
 
 // op.AuthStorage
-func (s *opStorage) DeleteAuthRequest(context.Context, string) error {
-	s.logStub()
-	return nil
-}
-
-// op.AuthStorage
-func (s *opStorage) CreateAccessToken(context.Context, op.TokenRequest) (accessTokenID string, expiration time.Time, err error) {
-	s.logStub()
-	return "", time.Time{}, nil
+func (s *opStorage) CreateAccessToken(ctx context.Context, request op.TokenRequest) (string, time.Time, error) {
+	var tokenID string
+	var tokenExpiryTime time.Time
+	var err error
+	switch request := request.(type) {
+	case *opAuthRequest:
+		tokenID, tokenExpiryTime, err = s.handler.createTokenFromAuthRequest(ctx, request, "")
+	case op.TokenExchangeRequest:
+		s.logStub()
+	case *oidc.JWTTokenRequest:
+		s.logStub()
+	default:
+		err = fmt.Errorf("unexpected access token request type: %T", request)
+	}
+	return tokenID, tokenExpiryTime, err
 }
 
 // op.AuthStorage
@@ -106,8 +121,12 @@ func (s *opStorage) SigningKey(ctx context.Context) (op.SigningKey, error) {
 }
 
 // op.AuthStorage
-func (s *opStorage) SignatureAlgorithms(context.Context) ([]jose.SignatureAlgorithm, error) {
-	return []jose.SignatureAlgorithm{jose.SignatureAlgorithm(s.handler.cfg.SigningKeyAlgorithm)}, nil
+func (s *opStorage) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
+	signingKey, err := s.handler.activeSigningKey(ctx, jose.SignatureAlgorithm(s.handler.cfg.SigningKeyAlgorithm))
+	if err != nil {
+		return nil, err
+	}
+	return []jose.SignatureAlgorithm{signingKey.Algorithm}, nil
 }
 
 // op.AuthStorage
@@ -177,14 +196,23 @@ func (s *opStorage) GetClientByClientID(_ context.Context, clientID string) (op.
 
 	client := s.handler.clients[clientID]
 	if client == nil {
-		return nil, fmt.Errorf("unknown client id '%s'", clientID)
+		return nil, fmt.Errorf("%w;client id '%s'", ErrUnknownClient, clientID)
 	}
 	return client, nil
 }
 
 // op.OPStorage
 func (s *opStorage) AuthorizeClientIDSecret(ctx context.Context, clientID, clientSecret string) error {
-	s.logStub()
+	s.handler.mutex.RLock()
+	defer s.handler.mutex.RUnlock()
+
+	client := s.handler.clients[clientID]
+	if client == nil {
+		return fmt.Errorf("%w;client id '%s'", ErrUnknownClient, clientID)
+	}
+	if client.cfg.Secret != clientSecret {
+		return ErrInvalidClientSecret
+	}
 	return nil
 }
 
@@ -192,7 +220,6 @@ func (s *opStorage) AuthorizeClientIDSecret(ctx context.Context, clientID, clien
 func (s *opStorage) SetUserinfoFromScopes(ctx context.Context, userinfo *oidc.UserInfo, userID, clientID string, scopes []string) error {
 	// SetUserinfoFromScopes is deprecated and should have an empty implementation for now.
 	// Implement SetUserinfoFromRequest instead.
-	s.logStub()
 	return nil
 }
 
@@ -234,8 +261,7 @@ func (s *opStorage) JWTProfileTokenType(ctx context.Context, request op.TokenReq
 
 // op.CanSetUserinfoFromRequest
 func (s *opStorage) SetUserinfoFromRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.IDTokenRequest, scopes []string) error {
-	s.logStub()
-	return nil
+	return s.handler.populateUserinfo(ctx, userinfo, request.GetSubject(), scopes)
 }
 
 // op.CanGetPrivateClaimsFromRequest
@@ -245,8 +271,7 @@ func (s *opStorage) GetPrivateClaimsFromRequest(ctx context.Context, request op.
 }
 
 // op.Storage
-func (s *opStorage) Health(context.Context) error {
-	s.logStub()
+func (s *opStorage) Health(_ context.Context) error {
 	return nil
 }
 

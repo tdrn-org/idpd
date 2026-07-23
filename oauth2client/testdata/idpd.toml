@@ -3,3 +3,9 @@ level = "debug"
 
 [server]
 access_log = "stdout"
+
+[userstore]
+type = "demo"
+
+[userstore.demo.user]
+login = "testuser"

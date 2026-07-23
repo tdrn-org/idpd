@@ -32,8 +32,12 @@ func TestOIDCCodeFlow(t *testing.T) {
 	server := runTestServer(t, "testdata/idpd.toml")
 	defer server.Close()
 
+	var flow *oauth2client.OIDCCodeFlow
+	var flowSessionData *oauth2client.NonceSessionData
 	redirectURL := server.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r)
+		authResult, err := flow.Callback(r.Context(), r, flowSessionData)
+		require.NoError(t, err)
+		fmt.Println(authResult)
 	})
 	clientConfig := oauth2client.NewOIDCCodeFlowClientConfig("testclient", "testsecret", false, redirectURL)
 	server.OAuth2().AddClient(clientConfig)
@@ -44,9 +48,10 @@ func TestOIDCCodeFlow(t *testing.T) {
 		RedirectURL:  clientConfig.RedirectURLStrings()[0],
 		Scopes:       clientConfig.AllowedScopes,
 	}
-	flow := oauth2client.NewOIDCCodeFLow(oauth2Config)
-	authURL, _, err := flow.Init(t.Context())
+	flow = oauth2client.NewOIDCCodeFLow(oauth2Config)
+	authURL, sessionData, err := flow.Init(t.Context())
 	require.NoError(t, err)
+	flowSessionData = sessionData
 	rsp, err := http.Get(authURL)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rsp.StatusCode)

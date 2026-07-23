@@ -30,14 +30,14 @@ import (
 var ErrUserNotFound error = errors.New("user not found")
 var ErrNotAuthenticated error = errors.New("not authenticated")
 
-type Name string
+type Type string
 
-func (n Name) String() string {
-	return string(n)
+func (t Type) String() string {
+	return string(t)
 }
 
 type Config interface {
-	Name() Name
+	Type() Type
 	StoreName() string
 }
 
@@ -51,17 +51,17 @@ type Backend interface {
 
 type OpenFunc func(config Config) (Backend, error)
 
-var backends map[Name]OpenFunc = make(map[Name]OpenFunc)
+var backends map[Type]OpenFunc = make(map[Type]OpenFunc)
 
-func RegisterBackend(name Name, open OpenFunc) {
-	backends[name] = open
+func RegisterBackend(backendType Type, open OpenFunc) {
+	backends[backendType] = open
 }
 
 func Open(config Config) (Backend, error) {
-	name := config.Name()
-	open, ok := backends[name]
+	backendType := config.Type()
+	open, ok := backends[backendType]
 	if !ok {
-		return nil, fmt.Errorf("unknown userstore backend name '%s'", name)
+		return nil, fmt.Errorf("unknown userstore backend type '%s'", backendType)
 	}
 	return open(config)
 }

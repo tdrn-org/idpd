@@ -39,7 +39,9 @@ import (
 
 const Name scheme.Name = "oauth2"
 
-var ErrUnknownAuthRequest error = errors.New("unknown auth request")
+var ErrUnknownClient error = errors.New("unknown OAuth2 client")
+var ErrInvalidClientSecret error = errors.New("invalid OAuth2 client secret")
+var ErrUnknownAuthRequest error = errors.New("unknown OAuth2 auth request")
 
 const DefaultClientClockSkew time.Duration = 1 * time.Minute
 

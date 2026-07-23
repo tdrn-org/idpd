@@ -38,6 +38,9 @@ import (
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/scheme/oauth2"
 	"github.com/tdrn-org/idpd/internal/scheme/saml2"
+	"github.com/tdrn-org/idpd/internal/userstore"
+	"github.com/tdrn-org/idpd/internal/userstore/demo"
+	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 )
 
 const serverJobTickerSchedule time.Duration = 5 * time.Minute
@@ -45,6 +48,7 @@ const serverJobTickerSchedule time.Duration = 5 * time.Minute
 type Server struct {
 	cfg                 *config.Config
 	dataStore           *data.Store
+	users               userstore.Backend
 	httpServer          *httpserver.Instance
 	baseURL             *url.URL
 	schemeHandlers      map[scheme.Name]scheme.Handler
@@ -67,6 +71,7 @@ func StartServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	}
 	startFuncs := []func(context.Context, *config.Config) error{
 		s.startStore,
+		s.startUserstore,
 		s.startHttpServer,
 		s.startRestAPI,
 		s.startSchemeHandlers,
@@ -106,6 +111,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) Close() error {
 	closeFuncs := []func() error{
 		s.closeHttpServer,
+		s.closeUserstore,
 		s.closeStore,
 	}
 	closeErrs := make([]error, 0, len(closeFuncs))
@@ -150,6 +156,33 @@ func (s *Server) closeStore() error {
 	}
 	s.logger.Info("closing data store")
 	return s.dataStore.Close()
+}
+
+func (s *Server) startUserstore(ctx context.Context, cfg *config.Config) error {
+	s.logger.Info("starting userstore...", slog.String("type", string(cfg.Userstore.Type)))
+	var users userstore.Backend
+	var err error
+	switch cfg.Userstore.Type {
+	//	case config.UserstoreType(ldap.Type):
+	case config.UserstoreType(tomlfile.Type):
+		users, err = userstore.Open(fileUserstoreConfig(&cfg.Userstore))
+	case config.UserstoreType(demo.Type):
+		users, err = userstore.Open(demoUserstoreConfig(&cfg.Userstore))
+	default:
+		err = fmt.Errorf("unrecognized userstore type '%s'", cfg.Userstore.Type)
+	}
+	if err != nil {
+		return err
+	}
+	s.users = users
+	return nil
+}
+
+func (s *Server) closeUserstore() error {
+	if s.users == nil {
+		return nil
+	}
+	return s.users.Close()
 }
 
 func (s *Server) startHttpServer(ctx context.Context, cfg *config.Config) error {

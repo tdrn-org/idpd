@@ -34,15 +34,40 @@ type opSigningKey struct {
 	signingKey *crypto.JoseSigningKey
 }
 
+func (k *opSigningKey) ID() string {
+	return k.signingKey.ID
+}
+
 func (k *opSigningKey) SignatureAlgorithm() jose.SignatureAlgorithm {
 	return k.signingKey.Algorithm
 }
+
 func (k *opSigningKey) Key() any {
-	return k.signingKey.Key
+	return k.signingKey.PrivateKey
 }
 
-func (k *opSigningKey) ID() string {
+type opKey struct {
+	signingKey *crypto.JoseSigningKey
+}
+
+func (k *opKey) ID() string {
 	return k.signingKey.ID
+}
+
+func (k *opKey) Algorithm() jose.SignatureAlgorithm {
+	return k.signingKey.Algorithm
+}
+
+func (k *opKey) Use() string {
+	return "sig"
+}
+
+func (k *opKey) Key() any {
+	switch k.signingKey.PrivateKey.(type) {
+
+	default:
+		return k.signingKey.PrivateKey
+	}
 }
 
 type opClient struct {

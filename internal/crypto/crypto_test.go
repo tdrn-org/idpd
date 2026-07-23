@@ -47,7 +47,7 @@ func TestSigningKey(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, algorithm, signingKey.Algorithm)
 			// Marshal
-			algorithm2, encoded, err := crypto.MarshalSigningKey(signingKey)
+			algorithm2, encoded, err := signingKey.MarshalSigningKey()
 			require.NoError(t, err)
 			// Unmarshal
 			signingKey2, err := crypto.UnmarshalSigningKey(algorithm2, encoded)

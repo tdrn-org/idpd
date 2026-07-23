@@ -23,11 +23,14 @@ import (
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/data"
+	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
 type Runtime interface {
 	BaseURL() *url.URL
 	DataStore() *data.Store
+	Users() userstore.Backend
+	DemoUser() *userstore.User
 	Logger() *slog.Logger
 }
 

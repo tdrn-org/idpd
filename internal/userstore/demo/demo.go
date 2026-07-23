@@ -14,24 +14,23 @@
  * limitations under the License.
  */
 
-package tomlfile
+package demo
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/tdrn-org/idpd/internal/userstore"
+	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 	"golang.org/x/text/language"
 )
 
-const Type userstore.Type = "file"
+const Type userstore.Type = "demo"
 
 type userData struct {
-	Users []*User `toml:"user"`
+	Users []*tomlfile.User `toml:"user"`
 }
 
 type User struct {
@@ -67,8 +66,7 @@ type Group struct {
 }
 
 type Config struct {
-	File  string
-	Users []*User
+	User *tomlfile.User
 }
 
 func (*Config) Type() userstore.Type {
@@ -76,81 +74,54 @@ func (*Config) Type() userstore.Type {
 }
 
 func (c *Config) StoreName() string {
-	return "'" + c.File + "'"
+	return "'demo'"
 }
 
-type fileBackend struct {
+type demoBackend struct {
 	config *Config
-	users  map[string]*User
 	logger *slog.Logger
 }
 
 func open(config userstore.Config) (userstore.Backend, error) {
-	fileConfig, ok := config.(*Config)
+	demoConfig, ok := config.(*Config)
 	if !ok {
-		return nil, fmt.Errorf("not a tomlfile configuration")
+		return nil, fmt.Errorf("not a demo configuration")
 	}
 	logger := slog.With(slog.String("userstore", fmt.Sprintf("%s/%s", config.Type(), config.StoreName())))
-	data := &userData{}
-	if fileConfig.File != "" {
-		meta, err := toml.DecodeFile(fileConfig.File, data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load user data from file '%s' (cause: %w)", fileConfig.File, err)
-		}
-		for _, key := range meta.Undecoded() {
-			logger.Warn("unexpected user data key", slog.Any("key", key))
-		}
-	}
-	data.Users = slices.Concat(data.Users, fileConfig.Users)
-	users := make(map[string]*User)
-	for _, user := range data.Users {
-		_, exists := users[user.Login]
-		if exists {
-			logger.Warn("duplicate user login", slog.String("login", user.Login))
-			continue
-		}
-		users[user.Login] = user
-	}
-
-	backend := &fileBackend{
-		config: fileConfig,
-		users:  users,
+	backend := &demoBackend{
+		config: demoConfig,
 		logger: logger,
 	}
 	return backend, nil
 }
 
-func (b *fileBackend) Type() userstore.Type {
+func (b *demoBackend) Type() userstore.Type {
 	return b.config.Type()
 }
 
-func (b *fileBackend) StoreName() string {
+func (b *demoBackend) StoreName() string {
 	return b.config.StoreName()
 }
 
-func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.User, error) {
-	user, ok := b.users[login]
-	if !ok {
-		return nil, userstore.ErrUserNotFound
-	}
+func (b *demoBackend) LookupUser(_ context.Context, _ string) (*userstore.User, error) {
 	userstoreUser := &userstore.User{
-		ID:             user.Login,
-		Login:          user.Login,
-		Name:           user.Name,
-		GivenName:      user.GivenName,
-		FamilyName:     user.FamilyName,
-		MiddleName:     user.MiddleName,
-		Nickname:       user.Nickname,
-		Picture:        user.Picture,
-		Website:        user.Website,
-		Birthdate:      user.Birthdate,
-		Timezone:       user.Timezone,
-		Locale:         user.Locale,
-		EmailAddresses: user.EmailAddresses,
-		PhoneNumbers:   user.PhoneNumbers,
-		Groups:         make(map[string]*userstore.Group, len(user.Groups)),
+		ID:             b.config.User.Login,
+		Login:          b.config.User.Login,
+		Name:           b.config.User.Name,
+		GivenName:      b.config.User.GivenName,
+		FamilyName:     b.config.User.FamilyName,
+		MiddleName:     b.config.User.MiddleName,
+		Nickname:       b.config.User.Nickname,
+		Picture:        b.config.User.Picture,
+		Website:        b.config.User.Website,
+		Birthdate:      b.config.User.Birthdate,
+		Timezone:       b.config.User.Timezone,
+		Locale:         b.config.User.Locale,
+		EmailAddresses: b.config.User.EmailAddresses,
+		PhoneNumbers:   b.config.User.PhoneNumbers,
+		Groups:         make(map[string]*userstore.Group, len(b.config.User.Groups)),
 	}
-	for _, address := range user.Addresses {
+	for _, address := range b.config.User.Addresses {
 		userstoreUserAddress := &userstore.UserAddress{
 			Formatted:  address.Formatted,
 			Street:     address.Street,
@@ -161,7 +132,7 @@ func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.
 		}
 		userstoreUser.Addresses = append(userstoreUser.Addresses, userstoreUserAddress)
 	}
-	for groupID, group := range user.Groups {
+	for groupID, group := range b.config.User.Groups {
 		userstoreUserGroup := &userstore.Group{
 			ID:   groupID,
 			Name: group.Name,
@@ -171,22 +142,15 @@ func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.
 	return userstoreUser, nil
 }
 
-func (b *fileBackend) AuthenticateUser(ctx context.Context, login, password string) error {
-	user, ok := b.users[login]
-	if !ok {
-		return userstore.ErrUserNotFound
-	}
-	if user.Password != password {
-		return userstore.ErrNotAuthenticated
-	}
+func (b *demoBackend) AuthenticateUser(_ context.Context, _, _ string) error {
 	return nil
 }
 
-func (*fileBackend) Ping(_ context.Context) error {
+func (*demoBackend) Ping(_ context.Context) error {
 	return nil
 }
 
-func (*fileBackend) Close() error {
+func (*demoBackend) Close() error {
 	return nil
 }
 

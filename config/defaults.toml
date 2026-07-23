@@ -46,6 +46,9 @@ scopes = []
 signing_key_algorithm = "RS256"
 signing_key_rotation = "720h"
 signing_key_lifetime = "1440h"
+access_token_lifetime = "1h"
+refresh_token_lifetime = "720h"
+default_id_token_lifetime = "10m"
 
 [saml2]
 enabled = true

@@ -18,12 +18,15 @@ package data
 
 import (
 	"context"
+	"log/slog"
+	"time"
 
 	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
-func (s *Store) CreateUserSessionRequest(ctx context.Context, handler string) (*domain.UserSessionRequest, error) {
+func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint string, demoUser *userstore.User) (*domain.UserSessionRequest, error) {
 	ic, err := s.ActiveIntegrityContext(ctx)
 	if err != nil {
 		return nil, err
@@ -33,7 +36,15 @@ func (s *Store) CreateUserSessionRequest(ctx context.Context, handler string) (*
 		AuthInfo: domain.UserSessionRequestAuthInfo{
 			Handler: handler,
 			State:   domain.UserSessionRequestStateCreated,
+			Login:   loginHint,
 		},
+	}
+	if demoUser != nil {
+		s.logger.Warn("demo mode aktivated", slog.String("login", demoUser.Login))
+		userSessionRequest.AuthInfo.State = domain.UserSessionRequestStateDone
+		userSessionRequest.AuthInfo.Login = demoUser.Login
+		userSessionRequest.AuthInfo.LoginTime = time.Now()
+		userSessionRequest.AuthInfo.VerificationTime = time.Now()
 	}
 
 	txCtx, tx, err := s.driver.BeginTx(ctx)

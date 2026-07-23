@@ -59,7 +59,7 @@ func (h *Handler) activeSigningKey(ctx context.Context, algorithm jose.Signature
 func (h *Handler) createAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, idTokenHintUserID string) (*opAuthRequest, error) {
 	var authRequest *opAuthRequest
 	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
-		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String())
+		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String(), idTokenHintUserID, h.runtime.DemoUser())
 		if err != nil {
 			return err
 		}
@@ -99,4 +99,43 @@ func (h *Handler) getAuthRequest(ctx context.Context, id string) (*opAuthRequest
 		return nil
 	})
 	return authRequest, err
+}
+
+func (h *Handler) getAuthRequestByCode(ctx context.Context, code string) (*opAuthRequest, error) {
+	var authRequest *opAuthRequest
+	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		r, oidcAuthRequest, err := model.SelectAuthRequestByCode(txCtx, tx, code)
+		if err != nil {
+			return err
+		}
+		userSessionRequest, err := h.runtime.DataStore().GetUserSessionRequest(txCtx, r.UserSessionRequestID)
+		if err != nil {
+			return err
+		}
+		if userSessionRequest == nil {
+			return ErrUnknownAuthRequest
+		}
+		authRequest = &opAuthRequest{
+			authRequest:        r,
+			userSessionRequest: userSessionRequest,
+			oidcAuthRequest:    oidcAuthRequest,
+		}
+		return nil
+	})
+	return authRequest, err
+}
+
+func (h *Handler) createTokenFromAuthRequest(ctx context.Context, request *opAuthRequest, refreshTokenID string) (string, time.Time, error) {
+	var tokenID string
+	var tokenExpiryTime time.Time
+	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		t, err := model.InsertTokenFromAuthRequest(txCtx, tx, request, refreshTokenID, time.Duration(h.cfg.AccessTokenLifetime))
+		if err != nil {
+			return err
+		}
+		tokenID = t.ID
+		tokenExpiryTime = database.DB2Time(t.ExpiryTime)
+		return err
+	})
+	return tokenID, tokenExpiryTime, err
 }

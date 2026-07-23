@@ -82,3 +82,26 @@ func SelectAuthRequestByID(ctx context.Context, tx *database.Tx, id string) (*Au
 	}
 	return r, oidcAuthRequest, nil
 }
+
+//go:embed auth_request.select_by_code.sql
+var selectAuthRequestByCodeSQL string
+
+func SelectAuthRequestByCode(ctx context.Context, tx *database.Tx, code string) (*AuthRequest, *oidc.AuthRequest, error) {
+	row, err := tx.QueryRowTx(ctx, selectAuthRequestByCodeSQL, code)
+	if err != nil {
+		return nil, nil, err
+	}
+	r := &AuthRequest{}
+	err = database.ScanRow(row, r, "id", "user_session_request_id", "oidc_auth_request", "create_time")
+	if database.NoRows(err) {
+		return nil, nil, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	oidcAuthRequest := &oidc.AuthRequest{}
+	err = encoding.UnmarshalJSONPayload(oidcAuthRequest, r.OIDCAuthRequest)
+	if err != nil {
+		return nil, nil, err
+	}
+	return r, oidcAuthRequest, nil
+}

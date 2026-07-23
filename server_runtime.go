@@ -23,6 +23,8 @@ import (
 
 	"github.com/tdrn-org/idpd/internal/data"
 	"github.com/tdrn-org/idpd/internal/scheme"
+	"github.com/tdrn-org/idpd/internal/userstore"
+	"github.com/tdrn-org/idpd/internal/userstore/demo"
 )
 
 func (s *Server) runtime() *serverRuntime {
@@ -39,6 +41,18 @@ func (runtime *serverRuntime) BaseURL() *url.URL {
 
 func (runtime *serverRuntime) DataStore() *data.Store {
 	return runtime.server.dataStore
+}
+
+func (runtime *serverRuntime) Users() userstore.Backend {
+	return runtime.server.users
+}
+
+func (runtime *serverRuntime) DemoUser() *userstore.User {
+	if runtime.server.users.Type() != demo.Type {
+		return nil
+	}
+	user, _ := runtime.server.users.LookupUser(context.Background(), "")
+	return user
 }
 
 func (runtime *serverRuntime) Logger() *slog.Logger {

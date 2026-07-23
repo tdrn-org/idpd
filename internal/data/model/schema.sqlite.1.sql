@@ -52,38 +52,19 @@ CREATE TABLE oauth2_auth_request(
     create_time INTEGER NOT NULL,
     FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
 );
-CREATE TABLE oauth2_auth_request_audience(
-    audience TEXT,
-    auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
-);
-CREATE TABLE oauth2_auth_request_amr(
-    amr TEXT,
-    auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
-);
-CREATE TABLE oauth2_auth_request_code_challenge(
-    challenge TEXT,
-    method TEXT,
-    auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
-);
-CREATE TABLE oauth2_auth_request_scope(
-    scope TEXT,
-    auth_request_id TEXT,
-    FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
-);
 CREATE TABLE oauth2_auth_code(
-    code TEXT PRIMARY KEY,
     auth_request_id TEXT,
+    code TEXT PRIMARY KEY,
     FOREIGN KEY(auth_request_id) REFERENCES oauth2_auth_request(id)
 );
 CREATE TABLE oauth2_token(
-    id TEXT PRIMARY KEY,
-    client_id TEXT,
-    subject TEXT,
+    id TEXT NOT NULL,
+    client_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
     refresh_token_id TEXT,
-    expiry INTEGER
+    create_time INTEGER NOT NULL,
+    expiry_time INTEGER NOT NULL,
+    PRIMARY KEY(id)
 );
 CREATE TABLE oauth2_token_audience(
     audience TEXT,

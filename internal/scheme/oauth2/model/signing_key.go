@@ -38,15 +38,11 @@ func (k *SigningKey) ToJoseSigningKey() (*crypto.JoseSigningKey, error) {
 		return nil, nil
 	}
 	algorithm := jose.SignatureAlgorithm(k.Algorithm)
-	key, err := crypto.UnmarshalSigningKey(algorithm, k.PrivateKey)
+	signingKey, err := crypto.UnmarshalSigningKey(algorithm, k.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
-	signingKey := &crypto.JoseSigningKey{
-		ID:        k.ID,
-		Algorithm: jose.SignatureAlgorithm(k.Algorithm),
-		Key:       key,
-	}
+	signingKey.ID = k.ID
 	return signingKey, nil
 }
 
@@ -54,7 +50,7 @@ func (k *SigningKey) ToJoseSigningKey() (*crypto.JoseSigningKey, error) {
 var insertSigningKeySQL string
 
 func InsertSigningKey(ctx context.Context, tx *database.Tx, signingKey *crypto.JoseSigningKey) (*SigningKey, error) {
-	algorithm, privateKey, err := crypto.MarshalSigningKey(signingKey)
+	algorithm, privateKey, err := signingKey.MarshalSigningKey()
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +60,11 @@ func InsertSigningKey(ctx context.Context, tx *database.Tx, signingKey *crypto.J
 		PrivateKey: privateKey,
 		CreateTime: database.Time2DB(tx.Now()),
 	}
-	err = tx.ExecTx(ctx, insertSigningKeySQL, k.ID, k.Algorithm, k.PrivateKey, k.CreateTime)
+	err = tx.ExecTx(ctx, insertSigningKeySQL,
+		k.ID,
+		k.Algorithm,
+		k.PrivateKey,
+		k.CreateTime)
 	if err != nil {
 		return nil, err
 	}

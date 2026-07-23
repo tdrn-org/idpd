@@ -73,18 +73,18 @@ func NewOIDCCodeFLow(config *oauth2.Config) *OIDCCodeFlow {
 	}
 }
 
-func (f *OIDCCodeFlow) Init(ctx context.Context) (string, *NonceSessionDate, error) {
+func (f *OIDCCodeFlow) Init(ctx context.Context) (string, *NonceSessionData, error) {
 	state := randString(32)
 	nonce := randString(32)
 	url := f.oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("nonce", nonce))
-	sessionData := &NonceSessionDate{
+	sessionData := &NonceSessionData{
 		State: state,
 		Nonce: nonce,
 	}
 	return url, sessionData, nil
 }
 
-func (f *OIDCCodeFlow) Callback(ctx context.Context, req *http.Request, session *NonceSessionDate) (*TokenAuthResult, error) {
+func (f *OIDCCodeFlow) Callback(ctx context.Context, req *http.Request, session *NonceSessionData) (*TokenAuthResult, error) {
 	if req.URL.Query().Get("state") != session.State {
 		return nil, http.ErrAbortHandler
 	}

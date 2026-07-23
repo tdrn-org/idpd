@@ -14,36 +14,33 @@
  * limitations under the License.
  */
 
-package oauth2client
+package model
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"net/http"
-	"time"
+	_ "embed"
+
+	"github.com/tdrn-org/go-database"
 )
 
-const DefaultIDTokenLifetime time.Duration = 5 * time.Minute
-
-type Flow[A any, S any] interface {
-	Init(ctx context.Context) (string, S, error)
-	Callback(ctx context.Context, req *http.Request, session S) (A, error)
+type AuthCode struct {
+	AuthRequestID string `db:"auth_request_id"`
+	Code          string `db:"code"`
 }
 
-type NonceSessionData struct {
-	State string
-	Nonce string
-}
+//go:embed auth_code.insert.sql
+var insertAuthCodeSQL string
 
-type TokenAuthResult struct {
-	AccessToken  string
-	RefreshToken string
-	Expiry       time.Time
-}
-
-func randString(n int) string {
-	b := make([]byte, n)
-	rand.Read(b)
-	return base64.URLEncoding.EncodeToString(b)
+func InsertAuthCode(ctx context.Context, tx *database.Tx, authRequestID, code string) (*AuthCode, error) {
+	c := &AuthCode{
+		AuthRequestID: authRequestID,
+		Code:          code,
+	}
+	err := tx.ExecTx(ctx, insertAuthCodeSQL,
+		c.AuthRequestID,
+		c.Code)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }

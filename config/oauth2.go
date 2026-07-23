@@ -26,13 +26,16 @@ import (
 )
 
 type OAuth2Config struct {
-	Enabled             bool                 `toml:"enabled"`
-	Claims              []string             `toml:"claims"`
-	Scopes              []string             `toml:"scopes"`
-	SigningKeyAlgorithm SignatureAlgorithm   `toml:"signing_key_algorithm"`
-	SigningKeyRotation  DurationSpec         `toml:"signing_key_rotation"`
-	SigningKeyLifetime  DurationSpec         `toml:"signing_key_lifetime"`
-	Clients             []OAuth2ClientConfig `toml:"client"`
+	Enabled                bool                 `toml:"enabled"`
+	Claims                 []string             `toml:"claims"`
+	Scopes                 []string             `toml:"scopes"`
+	SigningKeyAlgorithm    SignatureAlgorithm   `toml:"signing_key_algorithm"`
+	SigningKeyRotation     DurationSpec         `toml:"signing_key_rotation"`
+	SigningKeyLifetime     DurationSpec         `toml:"signing_key_lifetime"`
+	AccessTokenLifetime    DurationSpec         `toml:"access_token_lifetime"`
+	RefreshTokenLifetime   DurationSpec         `toml:"refresh_token_lifetime"`
+	DefaultIDTokenLifetime DurationSpec         `toml:"default_id_token_lifetime"`
+	Clients                []OAuth2ClientConfig `toml:"client"`
 }
 
 type OAuth2ClientConfig struct {

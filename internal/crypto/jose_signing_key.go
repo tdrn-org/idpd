@@ -30,9 +30,9 @@ import (
 )
 
 type JoseSigningKey struct {
-	ID        string
-	Algorithm jose.SignatureAlgorithm
-	Key       any
+	ID         string
+	Algorithm  jose.SignatureAlgorithm
+	PrivateKey any
 }
 
 func NewSigningKey(algorithm jose.SignatureAlgorithm) (*JoseSigningKey, error) {
@@ -66,14 +66,29 @@ func NewSigningKey(algorithm jose.SignatureAlgorithm) (*JoseSigningKey, error) {
 		return nil, fmt.Errorf("failed to generated signature key (cause: %w)", err)
 	}
 	sigingKey := &JoseSigningKey{
-		Algorithm: algorithm,
-		Key:       key,
+		Algorithm:  algorithm,
+		PrivateKey: key,
 	}
 	return sigingKey, nil
 }
 
-func MarshalSigningKey(signingKey *JoseSigningKey) (jose.SignatureAlgorithm, []byte, error) {
-	switch key := signingKey.Key.(type) {
+func (signingKey *JoseSigningKey) PublicKey() (any, error) {
+	switch key := signingKey.PrivateKey.(type) {
+	case []byte:
+		return key, nil
+	case *rsa.PrivateKey:
+		return &key.PublicKey, nil
+	case *ecdsa.PrivateKey:
+		return &key.PublicKey, nil
+	case ed25519.PrivateKey:
+		return key.Public(), nil
+	default:
+		return nil, fmt.Errorf("unrecognized key type %T", signingKey.PrivateKey)
+	}
+}
+
+func (signingKey *JoseSigningKey) MarshalSigningKey() (jose.SignatureAlgorithm, []byte, error) {
+	switch key := signingKey.PrivateKey.(type) {
 	case []byte:
 		return signingKey.Algorithm, key, nil
 	case *rsa.PrivateKey:
@@ -83,7 +98,7 @@ func MarshalSigningKey(signingKey *JoseSigningKey) (jose.SignatureAlgorithm, []b
 	case ed25519.PrivateKey:
 		return marshalPrivateSigningKey(signingKey.Algorithm, key)
 	default:
-		return "", nil, fmt.Errorf("unrecognized key type %T", signingKey.Key)
+		return "", nil, fmt.Errorf("unrecognized key type %T", signingKey.PrivateKey)
 	}
 }
 
@@ -123,8 +138,8 @@ func UnmarshalSigningKey(algorithm jose.SignatureAlgorithm, encoded []byte) (*Jo
 		return nil, err
 	}
 	sigingKey := &JoseSigningKey{
-		Algorithm: algorithm,
-		Key:       key,
+		Algorithm:  algorithm,
+		PrivateKey: key,
 	}
 	return sigingKey, nil
 }

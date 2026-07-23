@@ -32,7 +32,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
-const Name userstore.Name = "ldap"
+const Type userstore.Type = "ldap"
 
 var ErrInvalidAttributeMapping error = errors.New("invalid attribute mapping")
 
@@ -82,8 +82,8 @@ type GroupAttributeMappingConfig struct {
 	Members string
 }
 
-func (c *Config) Name() userstore.Name {
-	return Name
+func (c *Config) Type() userstore.Type {
+	return Type
 }
 
 func (c *Config) StoreName() string {
@@ -112,7 +112,7 @@ func open(config userstore.Config) (userstore.Backend, error) {
 	if !ok {
 		return nil, fmt.Errorf("not a ldap configuration")
 	}
-	logger := slog.With(slog.String("userstore", fmt.Sprintf("%s/%s", config.Name(), config.StoreName())))
+	logger := slog.With(slog.String("userstore", fmt.Sprintf("%s/%s", config.Type(), config.StoreName())))
 	if ldapConfig.UserAttributeMapping.Login == "" {
 		return nil, fmt.Errorf("%w: user login attribute not set", ErrInvalidAttributeMapping)
 	}
@@ -134,14 +134,14 @@ func open(config userstore.Config) (userstore.Backend, error) {
 		groupAttributes:        groupAttributeMappings.attributes(),
 		logger:                 logger,
 	}
-	backend.connPool = pool.NewResourcePool(fmt.Sprintf("userstore[%s/%s]", Name.String(), config.StoreName()), backend)
+	backend.connPool = pool.NewResourcePool(fmt.Sprintf("userstore[%s/%s]", Type.String(), config.StoreName()), backend)
 	backend.connPool.SetMaxTotalResources(ldapConfig.ConnectionLimit)
 	backend.connPool.SetResourceMaxLifetime(ldapConfig.KeepAliveTimeout)
 	return backend, nil
 }
 
-func (b *ldapBackend) Name() userstore.Name {
-	return b.config.Name()
+func (b *ldapBackend) Type() userstore.Type {
+	return b.config.Type()
 }
 
 func (b *ldapBackend) StoreName() string {
@@ -298,5 +298,5 @@ func (b *ldapBackend) New(_ context.Context) (*ldap.Conn, error) {
 }
 
 func init() {
-	userstore.RegisterBackend(Name, open)
+	userstore.RegisterBackend(Type, open)
 }

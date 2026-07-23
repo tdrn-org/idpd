@@ -26,6 +26,9 @@ import (
 	"github.com/tdrn-org/go-httpserver/certificate"
 	"github.com/tdrn-org/go-log"
 	"github.com/tdrn-org/idpd/config"
+	"github.com/tdrn-org/idpd/internal/userstore"
+	"github.com/tdrn-org/idpd/internal/userstore/demo"
+	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 )
 
 func applyLoggingConfig(cfg *config.LoggingConfig) {
@@ -95,4 +98,17 @@ func httpServerOptions(cfg *config.ServerConfig) []httpserver.OptionSetter {
 		httpServerOptions = append(httpServerOptions, httpserver.WithAccessLog(accessLogLogger))
 	}
 	return httpServerOptions
+}
+
+func fileUserstoreConfig(cfg *config.UserstoreConfig) userstore.Config {
+	return &tomlfile.Config{
+		File:  cfg.FileConfig.File,
+		Users: cfg.FileConfig.Users,
+	}
+}
+
+func demoUserstoreConfig(cfg *config.UserstoreConfig) userstore.Config {
+	return &demo.Config{
+		User: cfg.DemoConfig.User,
+	}
 }
