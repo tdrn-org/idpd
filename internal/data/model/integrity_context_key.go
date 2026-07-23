@@ -58,11 +58,11 @@ func InsertIntegrityContextKey(ctx context.Context, tx *database.Tx, key *crypto
 }
 
 //go:embed integrity_context_key.select.sql
-var selectIntegrityContextKeyByAlgorithmSQL string
+var selectIntegrityContextKeySQL string
 
 func SelectIntegrityContextKey(ctx context.Context, tx *database.Tx) (*IntegrityContextKey, error) {
 	var k *IntegrityContextKey
-	row, err := tx.QueryRowTx(ctx, selectIntegrityContextKeyByAlgorithmSQL)
+	row, err := tx.QueryRowTx(ctx, selectIntegrityContextKeySQL)
 	if err != nil {
 		return nil, err
 	}

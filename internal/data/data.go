@@ -36,6 +36,7 @@ type Store struct {
 
 func NewStore(driver *database.Driver, name string, cfg *config.GeneralConfig) *Store {
 	return &Store{
+		cfg:    cfg,
 		driver: driver,
 		logger: slog.With(slog.String("name", name)),
 	}
@@ -107,7 +108,7 @@ func (s *Store) ActiveIntegrityContext(ctx context.Context) (domain.IntegrityCon
 
 	err = tx.CommitTx(txCtx)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	return integrityContext, nil
