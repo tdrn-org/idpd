@@ -16,13 +16,26 @@
 
 package forward
 
-import "github.com/tdrn-org/idpd/internal/scheme"
+import (
+	"github.com/tdrn-org/go-httpserver"
+	"github.com/tdrn-org/idpd/internal/scheme"
+)
 
 const Name scheme.Name = "forward"
 
 type Handler struct {
+	runtime scheme.Runtime
+}
+
+func NewHandler(runtime scheme.Runtime) *Handler {
+	return &Handler{
+		runtime: runtime,
+	}
 }
 
 func (h *Handler) Name() scheme.Name {
 	return Name
+}
+
+func (h *Handler) Mount(instance *httpserver.Instance) {
 }

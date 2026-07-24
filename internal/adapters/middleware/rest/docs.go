@@ -10,7 +10,7 @@ const docTemplate = `{
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
         "contact": {
-            "url": "https://github.com/tdrn-org/totem"
+            "url": "https://github.com/tdrn-org/idpd"
         },
         "license": {
             "name": "Apache 2.0",
@@ -21,9 +21,9 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/info": {
+        "/api/info": {
             "get": {
-                "description": "Retrieve basic server info like version and configuration options",
+                "description": "Retrieve basic server info like version and configured options",
                 "produces": [
                     "application/json"
                 ],
@@ -44,29 +44,119 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/login": {
+        "/api/ping": {
             "get": {
-                "description": "Initiate the login flow using the given handler and auth request",
+                "description": "Ping the server to check general health",
                 "produces": [
                     "text/plain"
                 ],
-                "summary": "Initiate login flow",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "auth handler",
-                        "name": "handler",
-                        "in": "query",
-                        "required": true
+                "summary": "Ping the server",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
                     },
-                    {
-                        "type": "string",
-                        "description": "auth request id",
-                        "name": "id",
-                        "in": "query",
-                        "required": true
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
+                }
+            }
+        },
+        "/api/session": {
+            "get": {
+                "description": "Retrieve the current session information (if a session exists)",
+                "produces": [
+                    "application/json"
                 ],
+                "summary": "Get current session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "no session found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Deletes the current session (if a session exists)",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Delete the current session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "no session found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/session/login": {
+            "get": {
+                "description": "Retrieve the current session information (if a session exists)",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Get current session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "no session found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Initiate the authentication flow to create a new session",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Create a new session",
                 "responses": {
                     "302": {
                         "description": "Redirect to Login UI",
@@ -83,16 +173,22 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/ping": {
+        "/api/session/verify": {
             "get": {
-                "description": "Ping the server to check general health",
+                "description": "Retrieve the current session information (if a session exists)",
                 "produces": [
-                    "text/plain"
+                    "application/json"
                 ],
-                "summary": "Ping the server",
+                "summary": "Get current session",
                 "responses": {
                     "200": {
-                        "description": "ok",
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionInfo"
+                        }
+                    },
+                    "404": {
+                        "description": "no session found",
                         "schema": {
                             "type": "string"
                         }
@@ -116,6 +212,14 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "rest.SessionInfo": {
+            "type": "object",
+            "properties": {
+                "strong_auth": {
+                    "type": "boolean"
+                }
+            }
         }
     }
 }`
@@ -124,7 +228,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "localhost:9123",
-	BasePath:         "/api/v1",
+	BasePath:         "/api",
 	Schemes:          []string{},
 	Title:            "IdPD REST API",
 	Description:      "IdPD identity provider server API.",

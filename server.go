@@ -36,6 +36,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/data"
 	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/scheme"
+	"github.com/tdrn-org/idpd/internal/scheme/forward"
 	"github.com/tdrn-org/idpd/internal/scheme/oauth2"
 	"github.com/tdrn-org/idpd/internal/scheme/saml2"
 	"github.com/tdrn-org/idpd/internal/userstore"
@@ -226,6 +227,7 @@ func (s *Server) startRestAPI(_ context.Context, _ *config.Config) error {
 
 func (s *Server) startSchemeHandlers(_ context.Context, cfg *config.Config) error {
 	if cfg.OAuth2.Enabled {
+		s.logger.Info("enabling OAuth2 scheme")
 		handler, err := oauth2.NewHandler(s.runtime(), &cfg.OAuth2)
 		if err != nil {
 			return err
@@ -234,10 +236,17 @@ func (s *Server) startSchemeHandlers(_ context.Context, cfg *config.Config) erro
 		s.schemeHandlers[handler.Name()] = handler
 	}
 	if cfg.SAML2.Enabled {
+		s.logger.Info("enabling SAML2 scheme")
 		handler, err := saml2.NewHandler(s.runtime(), &cfg.SAML2)
 		if err != nil {
 			return err
 		}
+		handler.Mount(s.httpServer)
+		s.schemeHandlers[handler.Name()] = handler
+	}
+	if cfg.Forward.Enabled {
+		s.logger.Info("enabling Forward scheme")
+		handler := forward.NewHandler(s.runtime())
 		handler.Mount(s.httpServer)
 		s.schemeHandlers[handler.Name()] = handler
 	}

@@ -18,14 +18,13 @@ package rest
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/buildinfo"
+	serverhttp "github.com/tdrn-org/idpd/internal/http"
 	"github.com/tdrn-org/idpd/internal/scheme"
 )
 
@@ -40,13 +39,13 @@ type Runtime interface {
 //	@version		1.0
 //	@description	IdPD identity provider server API.
 
-//	@contact.url	https://github.com/tdrn-org/totem
+//	@contact.url	https://github.com/tdrn-org/idpd
 
 //	@license.name	Apache 2.0
 //	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
 
 //	@host		localhost:9123
-//	@BasePath	/api/v1
+//	@BasePath	/api
 
 type API struct {
 	runtime Runtime
@@ -58,19 +57,24 @@ func NewAPI(runtime Runtime) *API {
 	}
 }
 
-const basePath string = "/api/v1"
+const basePath string = "/api"
 const PathPing string = basePath + "/ping"
 const PathInfo string = basePath + "/info"
-const PathLogin string = basePath + "/login"
+const PathSession string = basePath + "/session"
+const PathSessionLogin string = PathSession + "/login"
+const PathSessionVerify string = PathSession + "/verify"
 
 func (api *API) Mount(server *httpserver.Instance) {
 	server.HandleFunc("GET "+PathPing, api.PingGet)
 	server.HandleFunc("GET "+PathInfo, api.InfoGet)
-	server.HandleFunc("GET "+PathLogin, api.LoginGet)
+	server.HandleFunc("GET "+PathSession, api.SessionGet)
+	server.HandleFunc("POST "+PathSession, api.SessionPost)
+	server.HandleFunc("DELETE "+PathSession, api.SessionDelete)
+	server.HandleFunc("GET "+PathSessionLogin, api.SessionLoginGet)
+	server.HandleFunc("POST "+PathSessionLogin, api.SessionLoginPost)
+	server.HandleFunc("GET "+PathSessionVerify, api.SessionVerifyGet)
+	server.HandleFunc("POST "+PathSessionVerify, api.SessionVerifyPost)
 }
-
-const responseOK string = "ok"
-const responseServerError string = "server error"
 
 // GET @BasePath/ping
 //
@@ -79,29 +83,29 @@ const responseServerError string = "server error"
 //	@Produce		text/plain
 //	@Success		200	{string}	string	"ok"
 //	@Failure		500	{string}	string	"server error"
-//	@Router			/api/v1/ping [get]
+//	@Router			/api/ping [get]
 func (api *API) PingGet(w http.ResponseWriter, r *http.Request) {
 	err := api.runtime.Ping(r.Context())
 	if err != nil {
-		api.sendError(w, r, http.StatusInternalServerError, err)
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
 		return
 	}
-	api.sendPlainTextResponse(w, r, http.StatusOK, responseOK)
+	serverhttp.SendPlainTextResponse(api.runtime.Logger(), w, r, http.StatusOK, serverhttp.ResponseOK)
 }
 
 // GET @BasePath/info
 //
 //	@Summary		Query server info
-//	@Description	Retrieve basic server info like version and configuration options
+//	@Description	Retrieve basic server info like version and configured options
 //	@Produce		json
 //	@Success		200	{object}	ServerInfo
 //	@Failure		500	{string}	string	"server error"
-//	@Router			/api/v1/info [get]
+//	@Router			/api/info [get]
 func (api *API) InfoGet(w http.ResponseWriter, r *http.Request) {
 	info := &ServerInfo{
 		Version: buildinfo.Version(),
 	}
-	api.sendApplicationJSONResponse(w, r, http.StatusOK, info)
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, info)
 }
 
 type ServerInfo struct {
@@ -109,53 +113,94 @@ type ServerInfo struct {
 	Version string `json:"version"`
 }
 
-// GET @BasePath/login
+// GET @BasePath/session
 //
-//	@Summary		Initiate login flow
-//	@Description	Initiate the login flow using the given handler and auth request
-//	@Produce		text/plain
-//	@Param			handler	query		string	true	"auth handler"
-//	@Param			id		query		string	true	"auth request id"
-//	@Success		302		{string}	string.	"Redirect to Login UI"
-//	@Failure		500		{string}	string	"server error"
-//	@Router			/api/v1/login [get]
-func (api *API) LoginGet(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	handlerName := query.Get("handler")
-	handler := api.runtime.GetHandler(handlerName)
-	id := query.Get("id")
-	if handler == nil || id == "" {
-		api.sendError(w, r, http.StatusBadRequest, fmt.Errorf("invalid login request handler: '%s' id: '%s'", handlerName, id))
-		return
-	}
-	err := handler.RedirectLogin(w, r, id)
-	if err != nil {
-		api.sendError(w, r, http.StatusInternalServerError, err)
-		return
-	}
+//	@Summary		Get current session
+//	@Description	Retrieve the current session information (if a session exists)
+//	@Produce		json
+//	@Success		200	{object}	SessionInfo
+//	@Failure		404	{string}	string	"no session found"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session [get]
+func (api *API) SessionGet(w http.ResponseWriter, r *http.Request) {
+
 }
 
-func (api *API) sendApplicationJSONResponse(w http.ResponseWriter, r *http.Request, status int, content any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	err := json.NewEncoder(w).Encode(content)
-	if err != nil {
-		api.runtime.Logger().Error("failed to send 'application/json' response", slog.String("path", r.URL.Path), slog.String("method", r.Method), slog.Any("err", err))
-	}
+type SessionInfo struct {
+	StrongAuth bool `json:"strong_auth"`
 }
 
-func (api *API) sendPlainTextResponse(w http.ResponseWriter, r *http.Request, status int, content string) {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(status)
-	_, err := w.Write([]byte(content))
-	if err != nil {
-		api.runtime.Logger().Error("failed to send 'text/plain' response", slog.String("path", r.URL.Path), slog.String("method", r.Method), slog.Any("err", err))
-	}
+// POST @BasePath/session
+//
+//	@Summary		Create a new session
+//	@Description	Initiate the authentication flow to create a new session
+//	@Produce		json
+//	@Success		302	{string}	string.	"Redirect to Login UI"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session [post]
+func (api *API) SessionPost(w http.ResponseWriter, r *http.Request) {
+
 }
 
-func (api *API) sendError(w http.ResponseWriter, r *http.Request, status int, cause error) {
-	if cause != nil {
-		api.runtime.Logger().Error("http handler failure", slog.String("path", r.URL.Path), slog.String("method", r.Method), slog.Any("err", cause))
-	}
-	http.Error(w, responseServerError, status)
+// DELETE @BasePath/session
+//
+//	@Summary		Delete the current session
+//	@Description	Deletes the current session (if a session exists)
+//	@Produce		json
+//	@Success		200	{object}	SessionInfo
+//	@Failure		404	{string}	string	"no session found"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session [post]
+func (api *API) SessionDelete(w http.ResponseWriter, r *http.Request) {
+
+}
+
+// GET @BasePath/session/login
+//
+//	@Summary		Get current session
+//	@Description	Retrieve the current session information (if a session exists)
+//	@Produce		json
+//	@Success		200	{object}	SessionInfo
+//	@Failure		404	{string}	string	"no session found"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session/login [get]
+func (api *API) SessionLoginGet(w http.ResponseWriter, r *http.Request) {
+
+}
+
+// POST @BasePath/session/login
+//
+//	@Summary		Create a new session
+//	@Description	Initiate the authentication flow to create a new session
+//	@Produce		json
+//	@Success		302	{string}	string.	"Redirect to Login UI"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session/login [post]
+func (api *API) SessionLoginPost(w http.ResponseWriter, r *http.Request) {
+
+}
+
+// GET @BasePath/session/verify
+//
+//	@Summary		Get current session
+//	@Description	Retrieve the current session information (if a session exists)
+//	@Produce		json
+//	@Success		200	{object}	SessionInfo
+//	@Failure		404	{string}	string	"no session found"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session/verify [get]
+func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
+
+}
+
+// POST @BasePath/session/verify
+//
+//	@Summary		Create a new session
+//	@Description	Initiate the authentication flow to create a new session
+//	@Produce		json
+//	@Success		302	{string}	string.	"Redirect to Login UI"
+//	@Failure		500	{string}	string	"server error"
+//	@Router			/api/session/login [post]
+func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
+
 }

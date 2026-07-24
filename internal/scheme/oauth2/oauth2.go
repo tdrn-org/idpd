@@ -29,7 +29,7 @@ import (
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/config"
-	"github.com/tdrn-org/idpd/internal/adapters/middleware/rest"
+	serverhttp "github.com/tdrn-org/idpd/internal/http"
 	"github.com/tdrn-org/idpd/internal/i18n"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -46,18 +46,22 @@ var ErrUnknownAuthRequest error = errors.New("unknown OAuth2 auth request")
 const DefaultClientClockSkew time.Duration = 1 * time.Minute
 
 const (
-	authorizationEndpoint = "/" + string(Name) + "/authorize"
+	basePath = "/" + string(Name)
+
+	authorizationEndpoint = basePath + "/authorize"
 	authCallbackEndpoint  = authorizationEndpoint + "/callback"
-	tokenEndpoint         = "/" + string(Name) + "/token"
-	introspectEndpoint    = "/" + string(Name) + "/introspect"
-	userinfoEndpoint      = "/" + string(Name) + "/userinfo"
-	revocationEndpoint    = "/" + string(Name) + "/revoke"
-	endSessionEndpoint    = "/" + string(Name) + "/end_session"
-	keysEndpoint          = "/" + string(Name) + "/keys"
+	tokenEndpoint         = basePath + "/token"
+	introspectEndpoint    = basePath + "/introspect"
+	userinfoEndpoint      = basePath + "/userinfo"
+	revocationEndpoint    = basePath + "/revoke"
+	endSessionEndpoint    = basePath + "/end_session"
+	keysEndpoint          = basePath + "/keys"
 
 	deviceAuthzEndpoint = "/device_authorization"
 
-	loginEndpoint = rest.PathLogin
+	loginEndpoint = basePath + "/login"
+
+// consentEndpoint = basePath + "/consent"
 )
 
 type Handler struct {
@@ -125,6 +129,7 @@ func (h *Handler) Name() scheme.Name {
 }
 
 func (h *Handler) Mount(instance *httpserver.Instance) {
+	// op.Provider handlers
 	instance.Handle(oidc.DiscoveryEndpoint, h.opProvider)
 	instance.Handle(authorizationEndpoint, h.opProvider)
 	instance.Handle(authCallbackEndpoint, h.opProvider)
@@ -135,11 +140,8 @@ func (h *Handler) Mount(instance *httpserver.Instance) {
 	instance.Handle(endSessionEndpoint, h.opProvider)
 	instance.Handle(keysEndpoint, h.opProvider)
 	instance.Handle(deviceAuthzEndpoint, h.opProvider)
-}
-
-func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request, id string) error {
-	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), id), http.StatusFound)
-	return nil
+	// own handlers
+	instance.HandleFunc(loginEndpoint, h.handleLogin)
 }
 
 func (h *Handler) Endpoint() *oauth2.Endpoint {
@@ -204,4 +206,14 @@ func allowInsecure(issuerURL *url.URL) op.Option {
 		return op.WithAllowInsecure()
 	}
 	return noop
+}
+
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	id := query.Get("id")
+	if id == "" {
+		serverhttp.SendError(h.logger, w, r, http.StatusBadRequest, nil)
+		return
+	}
+	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), id), http.StatusFound)
 }

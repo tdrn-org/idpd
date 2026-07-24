@@ -18,7 +18,6 @@ package scheme
 
 import (
 	"log/slog"
-	"net/http"
 	"net/url"
 
 	"github.com/tdrn-org/go-httpserver"
@@ -43,5 +42,4 @@ func (n Name) String() string {
 type Handler interface {
 	Name() Name
 	Mount(instance *httpserver.Instance)
-	RedirectLogin(w http.ResponseWriter, r *http.Request, id string) error
 }

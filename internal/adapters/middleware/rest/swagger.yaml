@@ -1,4 +1,4 @@
-basePath: /api/v1
+basePath: /api
 definitions:
   rest.ServerInfo:
     properties:
@@ -6,10 +6,15 @@ definitions:
         description: The server version
         type: string
     type: object
+  rest.SessionInfo:
+    properties:
+      strong_auth:
+        type: boolean
+    type: object
 host: localhost:9123
 info:
   contact:
-    url: https://github.com/tdrn-org/totem
+    url: https://github.com/tdrn-org/idpd
   description: IdPD identity provider server API.
   license:
     name: Apache 2.0
@@ -17,9 +22,9 @@ info:
   title: IdPD REST API
   version: "1.0"
 paths:
-  /api/v1/info:
+  /api/info:
     get:
-      description: Retrieve basic server info like version and configuration options
+      description: Retrieve basic server info like version and configured options
       produces:
       - application/json
       responses:
@@ -32,33 +37,7 @@ paths:
           schema:
             type: string
       summary: Query server info
-  /api/v1/login:
-    get:
-      description: Initiate the login flow using the given handler and auth request
-      parameters:
-      - description: auth handler
-        in: query
-        name: handler
-        required: true
-        type: string
-      - description: auth request id
-        in: query
-        name: id
-        required: true
-        type: string
-      produces:
-      - text/plain
-      responses:
-        "302":
-          description: Redirect to Login UI
-          schema:
-            type: string
-        "500":
-          description: server error
-          schema:
-            type: string
-      summary: Initiate login flow
-  /api/v1/ping:
+  /api/ping:
     get:
       description: Ping the server to check general health
       produces:
@@ -73,4 +52,93 @@ paths:
           schema:
             type: string
       summary: Ping the server
+  /api/session:
+    get:
+      description: Retrieve the current session information (if a session exists)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rest.SessionInfo'
+        "404":
+          description: no session found
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Get current session
+    post:
+      description: Deletes the current session (if a session exists)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rest.SessionInfo'
+        "404":
+          description: no session found
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Delete the current session
+  /api/session/login:
+    get:
+      description: Retrieve the current session information (if a session exists)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rest.SessionInfo'
+        "404":
+          description: no session found
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Get current session
+    post:
+      description: Initiate the authentication flow to create a new session
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Redirect to Login UI
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Create a new session
+  /api/session/verify:
+    get:
+      description: Retrieve the current session information (if a session exists)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rest.SessionInfo'
+        "404":
+          description: no session found
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Get current session
 swagger: "2.0"
