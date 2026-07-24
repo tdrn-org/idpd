@@ -110,5 +110,5 @@ func SelectAuthRequestByCode(ctx context.Context, tx *database.Tx, code string) 
 var deleteAuthRequestByIDSQL string
 
 func DeleteAuthRequestByID(ctx context.Context, tx *database.Tx, id string) error {
-	return tx.ExecTx(ctx, deleteAuthCodeByAuthRequestIDSQL, id)
+	return tx.ExecTx(ctx, deleteAuthRequestByIDSQL, id)
 }
