@@ -37,13 +37,3 @@ password = ""
 
 [userstore]
 type = "demo"
-
-[userstore.file]
-file = "users.toml"
-
-[[userstore.file.user]]
-login = "user1"
-password = "password1"
-
-[userstore.demo.user]
-login = "testuser"

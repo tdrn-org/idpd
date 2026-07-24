@@ -41,6 +41,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/scheme/saml2"
 	"github.com/tdrn-org/idpd/internal/userstore"
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
+	"github.com/tdrn-org/idpd/internal/userstore/ldap"
 	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 )
 
@@ -164,7 +165,8 @@ func (s *Server) startUserstore(ctx context.Context, cfg *config.Config) error {
 	var users userstore.Backend
 	var err error
 	switch cfg.Userstore.Type {
-	//	case config.UserstoreType(ldap.Type):
+	case config.UserstoreType(ldap.Type):
+		users, err = userstore.Open(ldapUserstoreConfig(&cfg.Userstore))
 	case config.UserstoreType(tomlfile.Type):
 		users, err = userstore.Open(fileUserstoreConfig(&cfg.Userstore))
 	case config.UserstoreType(demo.Type):

@@ -19,6 +19,7 @@ package idpd
 import (
 	"log/slog"
 	"reflect"
+	"time"
 
 	"github.com/rs/cors"
 	"github.com/tdrn-org/go-conf/service/loglevel"
@@ -28,6 +29,7 @@ import (
 	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/internal/userstore"
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
+	"github.com/tdrn-org/idpd/internal/userstore/ldap"
 	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 )
 
@@ -98,6 +100,37 @@ func httpServerOptions(cfg *config.ServerConfig) []httpserver.OptionSetter {
 		httpServerOptions = append(httpServerOptions, httpserver.WithAccessLog(accessLogLogger))
 	}
 	return httpServerOptions
+}
+
+func ldapUserstoreConfig(cfg *config.UserstoreConfig) userstore.Config {
+	attributeMapping := &cfg.LDAPConfig.CustomMapping
+	switch cfg.LDAPConfig.Mapping {
+	case config.LDAPMappingActiveDirectory:
+		attributeMapping = ldap.ActiveDirectoryMappingConfig
+	case config.LDAPMappingRFC2798:
+		attributeMapping = ldap.RFC2798MappingConfig
+	}
+	return &ldap.Config{
+		URLs:             cfg.LDAPConfig.URLs.URLs(),
+		RoundRobin:       cfg.LDAPConfig.RoundRobin,
+		ConnectionLimit:  cfg.LDAPConfig.ConnectionLimit,
+		KeepAliveTimeout: time.Duration(cfg.LDAPConfig.KeepAliveTimeout),
+		BindDN:           cfg.LDAPConfig.BindDN,
+		BindPassword:     cfg.LDAPConfig.BindPassword,
+		UserSearch: ldap.SearchConfig{
+			BaseDN:       cfg.LDAPConfig.UserSearch.BaseDN,
+			Scope:        int(cfg.LDAPConfig.UserSearch.Scope),
+			DerefAliases: int(cfg.LDAPConfig.UserSearch.DerefAliases),
+			Filter:       cfg.LDAPConfig.UserSearch.Filter,
+		},
+		UserAttributeMapping: &attributeMapping.User,
+		GroupSearch: ldap.SearchConfig{
+			BaseDN:       cfg.LDAPConfig.GroupSearch.BaseDN,
+			Scope:        int(cfg.LDAPConfig.GroupSearch.Scope),
+			DerefAliases: int(cfg.LDAPConfig.GroupSearch.DerefAliases),
+			Filter:       cfg.LDAPConfig.GroupSearch.Filter,
+		},
+		GroupAttributeMapping: &attributeMapping.Group}
 }
 
 func fileUserstoreConfig(cfg *config.UserstoreConfig) userstore.Config {

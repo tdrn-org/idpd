@@ -58,3 +58,72 @@ contact_email = ""
 
 [forward]
 enabled = true
+
+[userstore]
+type = "file"
+
+[userstore.ldap]
+urls = [ "ldaps://localhost" ]
+round_robin = true
+connection_limit = 0
+keep_alive_timeout = "60s"
+bind_dn = ""
+bind_password = ""
+mapping = "active_directory"
+
+[userstore.ldap.users]
+base_dn = ""
+scope = "whole_subtree"
+deref_aliases = "never"
+filter = "(objectClass=user)"
+
+[userstore.ldap.groups]
+base_dn = ""
+scope = "whole_subtree"
+deref_aliases = "never"
+filter = "(objectClass=group)"
+
+[userstore.ldap.custom_mapping.user]
+login = "userPrincipalName"
+name = "displayName"
+given_name = "givenName"
+family_name = "sn"
+picture = "thumbnailPhoto"
+website = "wWWHomePage"
+birthdate = ""
+timezone = ""
+locale = ""
+email_addresses = "mail"
+phone_numbers = "telephoneNumber"
+street = "street"
+locality = "l"
+region = ""
+postal_code = "postalCode"
+country = "c"
+updated_at = "whenChanged"
+groups = "memberOf"
+
+[userstore.ldap.custom_mapping.group]
+name = "sAMAccountName"
+members = "member"
+
+[userstore.file]
+file = ""
+
+[userstore.demo.user]
+login = "demouser"
+password = ""
+name = "Demo User"
+given_name = "Demo"
+family_name = "User"
+middle_name = ""
+nickname = "Demo"
+picture = ""
+website = ""
+birthdate = 1987-06-05
+timezone = ""
+locale = "en"
+email_addresses = [ "demo.user@localhost" ]
+phone_numbers = [ "" ]
+addresses = [{ formatted = "", street = "", locality = "", region = "", postal_code = "", country = "" }]
+groups = { "groupId" = { name = "Demo Users" } }
