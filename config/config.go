@@ -31,6 +31,7 @@ type Config struct {
 	Logging   LoggingConfig   `toml:"logging"`
 	Server    ServerConfig    `toml:"server"`
 	Store     StoreConfig     `toml:"store"`
+	GeoIP     GeoIPConfig     `toml:"geoip"`
 	General   GeneralConfig   `toml:"general"`
 	OAuth2    OAuth2Config    `toml:"oauth2"`
 	SAML2     SAML2Config     `toml:"saml2"`
