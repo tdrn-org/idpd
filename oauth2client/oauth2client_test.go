@@ -25,6 +25,7 @@ import (
 	"github.com/tdrn-org/idpd"
 	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/oauth2client"
+	"github.com/zitadel/oidc/v3/pkg/op"
 	"golang.org/x/oauth2"
 )
 
@@ -46,7 +47,7 @@ func TestOIDCCodeFlow(t *testing.T) {
 		ClientSecret: clientConfig.Secret,
 		Endpoint:     *server.OAuth2().Endpoint(),
 		RedirectURL:  clientConfig.RedirectURLStrings()[0],
-		Scopes:       clientConfig.AllowedScopes,
+		Scopes:       op.DefaultSupportedScopes,
 	}
 	flow = oauth2client.NewOIDCCodeFLow(oauth2Config)
 	authURL, sessionData, err := flow.Init(t.Context())

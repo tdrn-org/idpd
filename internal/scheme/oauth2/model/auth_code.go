@@ -44,3 +44,10 @@ func InsertAuthCode(ctx context.Context, tx *database.Tx, code, authRequestID st
 	}
 	return c, nil
 }
+
+//go:embed auth_code.delete_by_auth_request_id.sql
+var deleteAuthCodeByAuthRequestIDSQL string
+
+func DeleteAuthCodeByAuthRequestID(ctx context.Context, tx *database.Tx, authRequestID string) error {
+	return tx.ExecTx(ctx, deleteAuthCodeByAuthRequestIDSQL, authRequestID)
+}

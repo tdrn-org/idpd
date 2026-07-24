@@ -59,8 +59,13 @@ func (s *opStorage) SaveAuthCode(ctx context.Context, id string, code string) er
 
 // op.AuthStorage
 func (s *opStorage) DeleteAuthRequest(ctx context.Context, id string) error {
-	s.logStub()
-	return nil
+	return s.handler.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		err := model.DeleteAuthCodeByAuthRequestID(txCtx, tx, id)
+		if err != nil {
+			return err
+		}
+		return model.DeleteAuthRequestByID(txCtx, tx, id)
+	})
 }
 
 // op.AuthStorage

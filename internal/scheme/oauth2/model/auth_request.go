@@ -105,3 +105,10 @@ func SelectAuthRequestByCode(ctx context.Context, tx *database.Tx, code string) 
 	}
 	return r, oidcAuthRequest, nil
 }
+
+//go:embed auth_request.delete_by_id.sql
+var deleteAuthRequestByIDSQL string
+
+func DeleteAuthRequestByID(ctx context.Context, tx *database.Tx, id string) error {
+	return tx.ExecTx(ctx, deleteAuthCodeByAuthRequestIDSQL, id)
+}
