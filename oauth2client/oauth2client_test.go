@@ -25,7 +25,6 @@ import (
 	"github.com/tdrn-org/idpd"
 	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/oauth2client"
-	"github.com/zitadel/oidc/v3/pkg/op"
 	"golang.org/x/oauth2"
 )
 
@@ -41,13 +40,15 @@ func TestOIDCCodeFlow(t *testing.T) {
 		fmt.Println(authResult)
 	})
 	clientConfig := oauth2client.NewOIDCCodeFlowClientConfig("testclient", "testsecret", false, redirectURL)
+	// clientConfig.AllowedScopes = append(clientConfig.AllowedScopes, "offline_access")
+	// clientConfig.GrantTypes = append(clientConfig.GrantTypes, config.OAuth2GrantType(oidc.GrantTypeRefreshToken))
 	server.OAuth2().AddClient(clientConfig)
 	oauth2Config := &oauth2.Config{
 		ClientID:     clientConfig.ID,
 		ClientSecret: clientConfig.Secret,
 		Endpoint:     *server.OAuth2().Endpoint(),
 		RedirectURL:  clientConfig.RedirectURLStrings()[0],
-		Scopes:       op.DefaultSupportedScopes,
+		Scopes:       clientConfig.AllowedScopes,
 	}
 	flow = oauth2client.NewOIDCCodeFLow(oauth2Config)
 	authURL, sessionData, err := flow.Init(t.Context())

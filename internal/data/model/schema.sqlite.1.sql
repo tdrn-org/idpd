@@ -66,6 +66,15 @@ CREATE TABLE oauth2_token(
     expiry_time INTEGER NOT NULL,
     PRIMARY KEY(id)
 );
+CREATE TABLE oauth2_refresh_token(
+    id TEXT PRIMARY KEY,
+    auth_time INTEGER,
+    subject TEXT,
+    client_id TEXT,
+    expiry INTEGER,
+    access_token_id TEXT,
+    FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)
+);
 CREATE TABLE oauth2_token_audience(
     audience TEXT,
     token_id TEXT,
@@ -75,15 +84,6 @@ CREATE TABLE oauth2_token_scope(
     scope TEXT,
     token_id TEXT,
     FOREIGN KEY(token_id) REFERENCES oauth2_token(id)
-);
-CREATE TABLE oauth2_refresh_token(
-    id TEXT PRIMARY KEY,
-    auth_time INTEGER,
-    subject TEXT,
-    client_id TEXT,
-    expiry INTEGER,
-    access_token_id TEXT,
-    FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)
 );
 CREATE TABLE oauth2_refresh_token_amr(
     amr TEXT,

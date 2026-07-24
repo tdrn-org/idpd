@@ -87,9 +87,22 @@ func (s *opStorage) CreateAccessToken(ctx context.Context, request op.TokenReque
 }
 
 // op.AuthStorage
-func (s *opStorage) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (accessTokenID string, newRefreshToken string, expiration time.Time, err error) {
-	s.logStub()
-	return "", "", time.Time{}, nil
+func (s *opStorage) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (string, string, time.Time, error) {
+	var tokenID string
+	var refreshTokenID string
+	var tokenExpiryTime time.Time
+	var err error
+	switch request := request.(type) {
+	case *opAuthRequest:
+		s.logStub()
+	case op.TokenExchangeRequest:
+		s.logStub()
+	case op.RefreshTokenRequest:
+		s.logStub()
+	default:
+		err = fmt.Errorf("unexpected access and refresh token request type: %T", request)
+	}
+	return tokenID, refreshTokenID, tokenExpiryTime, err
 }
 
 // op.AuthStorage
