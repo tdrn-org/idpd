@@ -52,6 +52,8 @@ func handleWeb(w http.ResponseWriter, r *http.Request) {
 	f, err := buildFS.Open(fsPath)
 	if err == nil {
 		f.Close()
+		// Rewrite path so FileServer finds files under build/ in the embed.FS
+		r.URL.Path = "/build" + r.URL.Path
 		http.FileServer(http.FS(buildFS)).ServeHTTP(w, r)
 		return
 	}
