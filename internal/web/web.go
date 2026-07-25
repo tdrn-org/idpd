@@ -15,3 +15,53 @@
  */
 
 package web
+
+import (
+	"embed"
+	"net/http"
+	"strings"
+
+	"github.com/tdrn-org/go-httpserver"
+)
+
+//go:embed all:build/*
+var buildFS embed.FS
+
+//go:embed all:messages/*
+var messagesFS embed.FS
+
+// Mount registers the SPA frontend on the HTTP server.
+// All non-API paths serve static files from build/, falling back to index.html for client-side routing.
+func Mount(instance *httpserver.Instance) {
+	instance.HandleFunc("GET /", handleWeb)
+}
+
+func handleWeb(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Build the filesystem path
+	fsPath := "build" + r.URL.Path
+	if strings.HasSuffix(r.URL.Path, "/") {
+		fsPath += "index.html"
+	}
+
+	// Try to serve the static file
+	f, err := buildFS.Open(fsPath)
+	if err == nil {
+		f.Close()
+		http.FileServer(http.FS(buildFS)).ServeHTTP(w, r)
+		return
+	}
+
+	// SPA fallback: serve index.html for client-side routing
+	indexData, err := buildFS.ReadFile("build/index.html")
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(indexData)
+}

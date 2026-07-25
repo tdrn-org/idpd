@@ -43,6 +43,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
 	"github.com/tdrn-org/idpd/internal/userstore/ldap"
 	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
+	"github.com/tdrn-org/idpd/internal/web"
 )
 
 const serverJobTickerSchedule time.Duration = 5 * time.Minute
@@ -76,6 +77,7 @@ func StartServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		s.startUserstore,
 		s.startHttpServer,
 		s.startRestAPI,
+		s.startWebUI,
 		s.startSchemeHandlers,
 		s.startJobTicker,
 	}
@@ -224,6 +226,12 @@ func (s *Server) closeHttpServer() error {
 
 func (s *Server) startRestAPI(_ context.Context, _ *config.Config) error {
 	rest.NewAPI(s.runtime()).Mount(s.httpServer)
+	return nil
+}
+
+func (s *Server) startWebUI(_ context.Context, _ *config.Config) error {
+	s.logger.Info("mounting web UI...")
+	web.Mount(s.httpServer)
 	return nil
 }
 
