@@ -1,0 +1,15 @@
+{
+  "landing_title": "IdPD — Identity Provider",
+  "landing_subtitle": "Willkommen bei deinem Identity Provider",
+  "landing_cta": "Anmelden",
+  "login_title": "Anmeldung",
+  "login_username": "Benutzername",
+  "login_password": "Passwort",
+  "login_otp": "Einmalcode (optional)",
+  "login_submit": "Anmelden",
+  "user_title": "Benutzerprofil",
+  "user_welcome": "Willkommen, {user}!",
+  "user_logout": "Abmelden",
+  "loading": "Lade...",
+  "error_generic": "Etwas ist schiefgelaufen."
+}
