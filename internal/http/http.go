@@ -59,6 +59,7 @@ func QueryParams(r *http.Request, keys ...string) ([]string, error) {
 	query := r.URL.Query()
 	for _, key := range keys {
 		value := query.Get(key)
+		values = append(values, value)
 		if value == "" {
 			paramErrs = append(paramErrs, fmt.Errorf("query parameter '%s' not set", key))
 		}
