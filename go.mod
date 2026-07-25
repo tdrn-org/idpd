@@ -48,7 +48,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
-	github.com/mattn/go-isatty v0.0.23 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/muhlemmer/httpforwarded v0.1.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -93,7 +93,7 @@ require (
 	github.com/tdrn-org/go-httpserver v0.1.1
 	github.com/tdrn-org/go-log v0.5.7
 	github.com/tdrn-org/go-pool v0.0.2
-	github.com/zitadel/oidc/v3 v3.47.9
+	github.com/zitadel/oidc/v3 v3.48.0
 	github.com/zitadel/saml v0.4.1
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
