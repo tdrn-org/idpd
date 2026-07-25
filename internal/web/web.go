@@ -21,16 +21,19 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"strings"
 
 	"github.com/tdrn-org/go-httpserver"
+	"github.com/tdrn-org/go-httpserver/csp"
 )
 
 //go:embed all:build/*
 var buildFS embed.FS
 
+/*
+TODO: Enable for I18N
 //go:embed all:messages/*
 var messagesFS embed.FS
+*/
 
 // Mount registers the SPA frontend on the HTTP server.
 // All non-API paths serve static files from build/, falling back to index.html for client-side routing.
@@ -40,26 +43,28 @@ func Mount(instance *httpserver.Instance) error {
 		return fmt.Errorf("unexpected web document structure (cause: %w)", err)
 	}
 	docs := sub.(fs.ReadDirFS)
-	fileServer := http.FileServerFS(docs)
-
-	// SPA fallback: serve index.html for unmatched paths (client-side routing)
-	docsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path == "" {
-			path = "index.html"
-		}
-		f, err := docs.Open(path)
-		if err != nil {
-			// File not found — fall back to index.html for SPA routing
-			r.URL.Path = "/index.html"
-		} else {
-			f.Close()
-		}
-		fileServer.ServeHTTP(w, r)
-	})
-
-	// Handle("/") matches all paths — important for serving _app/immutable/* assets
-	cacheControl := httpserver.StaticHeader("Cache-Control", "public, max-age=86400, immutable")
-	instance.Handle("/", httpserver.HeaderHandler(docsHandler, cacheControl))
+	const policyNone = "'none'"
+	const policySelf = "'self'"
+	const policyUnsafeInline = "'unsafe-inline'"
+	const dataSrc = "data:"
+	contentSecurityPolicy := &csp.ContentSecurityPolicy{
+		BaseUri:       []string{policySelf},
+		FormAction:    []string{policySelf},
+		FrameAncestor: []string{policyNone},
+		DefaultSrc:    []string{policyNone},
+		ConnectSrc:    []string{policySelf},
+		ScriptSrc:     []string{policySelf},
+		StyleSrc:      []string{policySelf, policyUnsafeInline},
+		ImgSrc:        []string{policySelf, dataSrc},
+	}
+	err = contentSecurityPolicy.AddHashes(csp.HashAlgSHA256, docs)
+	if err != nil {
+		return fmt.Errorf("failed to generate csp hashes (cause: %w)", err)
+	}
+	instance.Handle("/", httpserver.HeaderHandler(http.FileServerFS(docs),
+		contentSecurityPolicy.Header(),
+		httpserver.StaticHeader("X-Content-Type-Options", "nosniff"),
+		httpserver.StaticHeader("X-Frame-Options", "DENY"),
+		httpserver.StaticHeader("Cache-Control", "public, max-age=86400, immutable")))
 	return nil
 }
