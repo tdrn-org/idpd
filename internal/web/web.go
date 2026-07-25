@@ -63,6 +63,9 @@ func Mount(instance *httpserver.Instance) error {
 	}
 	instance.Handle("/", httpserver.HeaderHandler(http.FileServerFS(docs),
 		contentSecurityPolicy.Header(),
+		httpserver.StaticHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
+		httpserver.StaticHeader("Referrer-Policy", "strict-origin-when-cross-origin"),
+		httpserver.StaticHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
 		httpserver.StaticHeader("X-Content-Type-Options", "nosniff"),
 		httpserver.StaticHeader("X-Frame-Options", "DENY"),
 		httpserver.StaticHeader("Cache-Control", "public, max-age=86400, immutable")))
