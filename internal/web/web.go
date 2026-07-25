@@ -18,6 +18,8 @@ package web
 
 import (
 	"embed"
+	"fmt"
+	"io/fs"
 	"net/http"
 	"strings"
 
@@ -32,38 +34,32 @@ var messagesFS embed.FS
 
 // Mount registers the SPA frontend on the HTTP server.
 // All non-API paths serve static files from build/, falling back to index.html for client-side routing.
-func Mount(instance *httpserver.Instance) {
-	instance.HandleFunc("GET /", handleWeb)
-}
-
-func handleWeb(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.URL.Path, "/api/") {
-		http.NotFound(w, r)
-		return
-	}
-
-	// Build the filesystem path
-	fsPath := "build" + r.URL.Path
-	if strings.HasSuffix(r.URL.Path, "/") {
-		fsPath += "index.html"
-	}
-
-	// Try to serve the static file
-	f, err := buildFS.Open(fsPath)
-	if err == nil {
-		f.Close()
-		// Rewrite path so FileServer finds files under build/ in the embed.FS
-		r.URL.Path = "/build" + r.URL.Path
-		http.FileServer(http.FS(buildFS)).ServeHTTP(w, r)
-		return
-	}
-
-	// SPA fallback: serve index.html for client-side routing
-	indexData, err := buildFS.ReadFile("build/index.html")
+func Mount(instance *httpserver.Instance) error {
+	sub, err := fs.Sub(buildFS, "build")
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("unexpected web document structure (cause: %w)", err)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(indexData)
+	docs := sub.(fs.ReadDirFS)
+	fileServer := http.FileServerFS(docs)
+
+	// SPA fallback: serve index.html for unmatched paths (client-side routing)
+	docsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path == "" {
+			path = "index.html"
+		}
+		f, err := docs.Open(path)
+		if err != nil {
+			// File not found — fall back to index.html for SPA routing
+			r.URL.Path = "/index.html"
+		} else {
+			f.Close()
+		}
+		fileServer.ServeHTTP(w, r)
+	})
+
+	// Handle("/") matches all paths — important for serving _app/immutable/* assets
+	cacheControl := httpserver.StaticHeader("Cache-Control", "public, max-age=86400, immutable")
+	instance.Handle("/", httpserver.HeaderHandler(docsHandler, cacheControl))
+	return nil
 }

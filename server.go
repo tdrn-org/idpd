@@ -231,8 +231,7 @@ func (s *Server) startRestAPI(_ context.Context, _ *config.Config) error {
 
 func (s *Server) startWebUI(_ context.Context, _ *config.Config) error {
 	s.logger.Info("mounting web UI...")
-	web.Mount(s.httpServer)
-	return nil
+	return web.Mount(s.httpServer)
 }
 
 func (s *Server) startSchemeHandlers(_ context.Context, cfg *config.Config) error {
