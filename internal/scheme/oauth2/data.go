@@ -125,11 +125,11 @@ func (h *Handler) getAuthRequestByCode(ctx context.Context, code string) (*opAut
 	return authRequest, err
 }
 
-func (h *Handler) createTokenFromAuthRequest(ctx context.Context, request *opAuthRequest, refreshTokenID string) (string, time.Time, error) {
+func (h *Handler) createTokenFromAuthRequest(ctx context.Context, request *opAuthRequest) (string, time.Time, error) {
 	var tokenID string
 	var tokenExpiryTime time.Time
 	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
-		t, err := model.InsertTokenFromAuthRequest(txCtx, tx, request, refreshTokenID, time.Duration(h.cfg.AccessTokenLifetime))
+		t, err := model.InsertTokenFromAuthRequest(txCtx, tx, request, time.Duration(h.cfg.AccessTokenLifetime))
 		if err != nil {
 			return err
 		}
@@ -138,4 +138,31 @@ func (h *Handler) createTokenFromAuthRequest(ctx context.Context, request *opAut
 		return err
 	})
 	return tokenID, tokenExpiryTime, err
+}
+
+func (h *Handler) createTokenAndRefreshTokenFromAuthRequest(ctx context.Context, request *opAuthRequest, currentRefreshTokenID string) (string, string, time.Time, error) {
+	var tokenID string
+	var refreshTokenID string
+	var tokenExpiryTime time.Time
+	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
+		if refreshTokenID != "" {
+			err := model.DeleteRefreshTokenByID(txCtx, tx, currentRefreshTokenID)
+			if err != nil {
+				return err
+			}
+		}
+		t, err := model.InsertTokenFromAuthRequest(txCtx, tx, request, time.Duration(h.cfg.AccessTokenLifetime))
+		if err != nil {
+			return err
+		}
+		r, err := model.InsertRefreshToken(txCtx, tx, t.ID, time.Duration(h.cfg.RefreshTokenLifetime))
+		if err != nil {
+			return err
+		}
+		tokenID = t.ID
+		refreshTokenID = r.ID
+		tokenExpiryTime = database.DB2Time(t.ExpiryTime)
+		return err
+	})
+	return tokenID, refreshTokenID, tokenExpiryTime, err
 }

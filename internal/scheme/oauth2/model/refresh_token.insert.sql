@@ -1,8 +1,7 @@
 INSERT INTO
-    oauth2_token(
+    oauth2_refresh_token(
         id,
-        client_id,
-        subject,
+        access_token_id,
         create_time,
         expiry_time
     )
@@ -10,6 +9,5 @@ VALUES(
     $1,
     $2,
     $3,
-    $4,
-    $5
+    $4
 )

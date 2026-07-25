@@ -75,7 +75,7 @@ func (s *opStorage) CreateAccessToken(ctx context.Context, request op.TokenReque
 	var err error
 	switch request := request.(type) {
 	case *opAuthRequest:
-		tokenID, tokenExpiryTime, err = s.handler.createTokenFromAuthRequest(ctx, request, "")
+		tokenID, tokenExpiryTime, err = s.handler.createTokenFromAuthRequest(ctx, request)
 	case op.TokenExchangeRequest:
 		s.logStub()
 	case *oidc.JWTTokenRequest:
@@ -94,7 +94,7 @@ func (s *opStorage) CreateAccessAndRefreshTokens(ctx context.Context, request op
 	var err error
 	switch request := request.(type) {
 	case *opAuthRequest:
-		s.logStub()
+		tokenID, refreshTokenID, tokenExpiryTime, err = s.handler.createTokenAndRefreshTokenFromAuthRequest(ctx, request, currentRefreshToken)
 	case op.TokenExchangeRequest:
 		s.logStub()
 	case op.RefreshTokenRequest:

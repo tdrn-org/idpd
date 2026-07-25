@@ -61,18 +61,16 @@ CREATE TABLE oauth2_token(
     id TEXT NOT NULL,
     client_id TEXT NOT NULL,
     subject TEXT NOT NULL,
-    refresh_token_id TEXT,
     create_time INTEGER NOT NULL,
     expiry_time INTEGER NOT NULL,
     PRIMARY KEY(id)
 );
 CREATE TABLE oauth2_refresh_token(
-    id TEXT PRIMARY KEY,
-    auth_time INTEGER,
-    subject TEXT,
-    client_id TEXT,
-    expiry INTEGER,
-    access_token_id TEXT,
+    id TEXT NOT NULL,
+    access_token_id TEXT NOT NULL,
+    create_time INTEGER NOT NULL,
+    expiry_time INTEGER NOT NULL,
+    PRIMARY KEY(id),
     FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)
 );
 CREATE TABLE oauth2_token_audience(

@@ -26,31 +26,28 @@ import (
 )
 
 type Token struct {
-	ID             string `db:"id"`
-	ClientID       string `db:"client_id"`
-	Subject        string `db:"subject"`
-	RefreshTokenID string `db:"refresh_token_id"`
-	CreateTime     int64  `db:"create_time"`
-	ExpiryTime     int64  `db:"expiry_time"`
+	ID         string `db:"id"`
+	ClientID   string `db:"client_id"`
+	Subject    string `db:"subject"`
+	CreateTime int64  `db:"create_time"`
+	ExpiryTime int64  `db:"expiry_time"`
 }
 
 //go:embed token.insert.sql
 var insertTokenSQL string
 
-func InsertTokenFromAuthRequest(ctx context.Context, tx *database.Tx, request op.AuthRequest, refreshTokenID string, lifetimeDuration time.Duration) (*Token, error) {
+func InsertTokenFromAuthRequest(ctx context.Context, tx *database.Tx, request op.AuthRequest, lifetimeDuration time.Duration) (*Token, error) {
 	t := &Token{
-		ID:             database.NewID(),
-		ClientID:       request.GetClientID(),
-		Subject:        request.GetSubject(),
-		RefreshTokenID: refreshTokenID,
-		CreateTime:     database.Time2DB(tx.Now()),
-		ExpiryTime:     database.Time2DB(tx.Now().Add(lifetimeDuration)),
+		ID:         database.NewID(),
+		ClientID:   request.GetClientID(),
+		Subject:    request.GetSubject(),
+		CreateTime: database.Time2DB(tx.Now()),
+		ExpiryTime: database.Time2DB(tx.Now().Add(lifetimeDuration)),
 	}
 	err := tx.ExecTx(ctx, insertTokenSQL,
 		t.ID,
 		t.ClientID,
 		t.Subject,
-		t.RefreshTokenID,
 		t.CreateTime,
 		t.ExpiryTime)
 	if err != nil {
