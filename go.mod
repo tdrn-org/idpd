@@ -9,6 +9,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tdrn-org/go-conf v0.0.6
 	github.com/tdrn-org/go-diff v0.1.3
+	github.com/tdrn-org/go-notify v0.0.4
 	github.com/tdrn-org/go-tlsconf v0.0.10
 	golang.org/x/crypto v0.54.0
 	golang.org/x/oauth2 v0.36.0
@@ -56,6 +57,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/urfave/cli/v2 v2.27.7 // indirect
+	github.com/wneessen/go-mail v0.8.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	github.com/zitadel/logging v0.7.0 // indirect
 	github.com/zitadel/schema v1.3.2 // indirect
@@ -80,11 +82,11 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/oschwald/maxminddb-golang/v2 v2.4.1
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rs/cors v1.11.1
 	github.com/swaggo/swag v1.16.6
 	github.com/tdrn-org/go-database v0.1.1
