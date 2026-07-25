@@ -14,7 +14,4 @@
  * limitations under the License.
  */
 
-package config
-
-type ForwardConfig struct {
-}
+package web

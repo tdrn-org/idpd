@@ -106,7 +106,6 @@ func (c *opClient) GrantTypes() []oidc.GrantType {
 func (c *opClient) LoginURL(id string) string {
 	loginURL := *c.loginURL
 	query := loginURL.Query()
-	query.Set("handler", Name.String())
 	query.Set("id", id)
 	loginURL.RawQuery = query.Encode()
 	return loginURL.String()

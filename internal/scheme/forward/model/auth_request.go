@@ -1,0 +1,80 @@
+/*
+ * Copyright 2025-2026 Holger de Carne
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package model
+
+import (
+	"context"
+	_ "embed"
+
+	"github.com/tdrn-org/go-database"
+	"github.com/tdrn-org/idpd/internal/domain"
+)
+
+type AuthRequest struct {
+	ID                   string `db:"id"`
+	UserSessionRequestID string `db:"user_session_request_id"`
+	RedirectURL          string `db:"redirect_url"`
+	CreateTime           int64  `db:"create_time"`
+}
+
+//go:embed auth_request.insert.sql
+var insertAuthRequestSQL string
+
+func InsertAuthRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest, redirectURL string) (*AuthRequest, error) {
+	r := &AuthRequest{
+		ID:                   database.NewID(),
+		UserSessionRequestID: userSessionRequest.ID,
+		RedirectURL:          redirectURL,
+		CreateTime:           database.Time2DB(tx.Now()),
+	}
+	err := tx.ExecTx(ctx, insertAuthRequestSQL,
+		r.ID,
+		r.UserSessionRequestID,
+		r.RedirectURL,
+		r.CreateTime)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+//go:embed auth_request.select_by_id.sql
+var selectAuthRequestByIDSQL string
+
+func SelectAuthRequestByID(ctx context.Context, tx *database.Tx, id string) (*AuthRequest, error) {
+	row, err := tx.QueryRowTx(ctx, selectAuthRequestByIDSQL, id)
+	if err != nil {
+		return nil, err
+	}
+	r := &AuthRequest{
+		ID: id,
+	}
+	err = database.ScanRow(row, r, "user_session_request_id", "create_time")
+	if database.NoRows(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+//go:embed auth_request.delete_by_id.sql
+var deleteAuthRequestByIDSQL string
+
+func DeleteAuthRequestByID(ctx context.Context, tx *database.Tx, id string) error {
+	return tx.ExecTx(ctx, deleteAuthRequestByIDSQL, id)
+}

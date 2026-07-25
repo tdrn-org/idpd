@@ -18,6 +18,7 @@ package scheme
 
 import (
 	"log/slog"
+	"net/http"
 	"net/url"
 
 	"github.com/tdrn-org/go-httpserver"
@@ -25,21 +26,24 @@ import (
 	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
-type Runtime interface {
-	BaseURL() *url.URL
-	DataStore() *data.Store
-	Users() userstore.Backend
-	DemoUser() *userstore.User
-	Logger() *slog.Logger
-}
-
 type Name string
 
 func (n Name) String() string {
 	return string(n)
 }
 
+type Runtime interface {
+	BaseURL() *url.URL
+	LoginURL(handler Name, id string) *url.URL
+	VerifyURL(handler Name, id string) *url.URL
+	DataStore() *data.Store
+	Users() userstore.Backend
+	DemoUser() *userstore.User
+	Logger() *slog.Logger
+}
+
 type Handler interface {
 	Name() Name
 	Mount(instance *httpserver.Instance)
+	RedirectLogin(w http.ResponseWriter, r *http.Request) error
 }

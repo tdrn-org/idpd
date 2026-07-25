@@ -18,6 +18,8 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -49,4 +51,17 @@ func SendError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, stat
 		logger.Error("http handler failure", slog.String("path", r.URL.Path), slog.String("method", r.Method), slog.Any("err", cause))
 	}
 	http.Error(w, http.StatusText(status), status)
+}
+
+func QueryParams(r *http.Request, keys ...string) ([]string, error) {
+	values := make([]string, 0, len(keys))
+	paramErrs := make([]error, 0, len(keys))
+	query := r.URL.Query()
+	for _, key := range keys {
+		value := query.Get(key)
+		if value == "" {
+			paramErrs = append(paramErrs, fmt.Errorf("query parameter '%s' not set", key))
+		}
+	}
+	return values, errors.Join(paramErrs...)
 }

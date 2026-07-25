@@ -25,6 +25,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/userstore"
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
+	"github.com/tdrn-org/idpd/internal/web"
 )
 
 func (s *Server) runtime() *serverRuntime {
@@ -37,6 +38,14 @@ type serverRuntime struct {
 
 func (runtime *serverRuntime) BaseURL() *url.URL {
 	return runtime.server.baseURL
+}
+
+func (runtime *serverRuntime) LoginURL(handler scheme.Name, id string) *url.URL {
+	return web.LoginURL(runtime.server.baseURL, string(handler), id)
+}
+
+func (runtime *serverRuntime) VerifyURL(handler scheme.Name, id string) *url.URL {
+	return web.VerifyURL(runtime.server.baseURL, string(handler), id)
 }
 
 func (runtime *serverRuntime) DataStore() *data.Store {
@@ -63,6 +72,6 @@ func (runtime *serverRuntime) Ping(ctx context.Context) error {
 	return runtime.server.Ping(ctx)
 }
 
-func (runtime *serverRuntime) GetHandler(name string) scheme.Handler {
+func (runtime *serverRuntime) GetHandler(name scheme.Name) scheme.Handler {
 	return runtime.server.schemeHandlers[scheme.Name(name)]
 }

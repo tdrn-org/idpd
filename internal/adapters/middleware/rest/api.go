@@ -24,15 +24,20 @@ import (
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/buildinfo"
+	"github.com/tdrn-org/idpd/internal/data"
 	serverhttp "github.com/tdrn-org/idpd/internal/http"
 	"github.com/tdrn-org/idpd/internal/scheme"
+	"github.com/tdrn-org/idpd/internal/scheme/forward"
+	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
 type Runtime interface {
 	BaseURL() *url.URL
+	DataStore() *data.Store
+	DemoUser() *userstore.User
 	Logger() *slog.Logger
 	Ping(ctx context.Context) error
-	GetHandler(name string) scheme.Handler
+	GetHandler(name scheme.Name) scheme.Handler
 }
 
 //	@title			IdPD REST API
@@ -56,6 +61,8 @@ func NewAPI(runtime Runtime) *API {
 		runtime: runtime,
 	}
 }
+
+const responseNoSessionFound string = "no session found"
 
 const basePath string = "/api"
 const PathPing string = basePath + "/ping"
@@ -97,6 +104,9 @@ func (api *API) PingGet(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Query server info
 //	@Description	Retrieve basic server info like version and configured options
+//
+// . @Accept json
+//
 //	@Produce		json
 //	@Success		200	{object}	ServerInfo
 //	@Failure		500	{string}	string	"server error"
@@ -117,13 +127,17 @@ type ServerInfo struct {
 //
 //	@Summary		Get current session
 //	@Description	Retrieve the current session information (if a session exists)
+//
+// . @Accept json
+//
 //	@Produce		json
 //	@Success		200	{object}	SessionInfo
 //	@Failure		404	{string}	string	"no session found"
 //	@Failure		500	{string}	string	"server error"
 //	@Router			/api/session [get]
 func (api *API) SessionGet(w http.ResponseWriter, r *http.Request) {
-
+	// TODO:implement
+	serverhttp.SendPlainTextResponse(api.runtime.Logger(), w, r, http.StatusNotFound, responseNoSessionFound)
 }
 
 type SessionInfo struct {
@@ -134,35 +148,50 @@ type SessionInfo struct {
 //
 //	@Summary		Create a new session
 //	@Description	Initiate the authentication flow to create a new session
+//
+//	@Accept			json
 //	@Produce		json
-//	@Success		302	{string}	string.	"Redirect to Login UI"
+//	@Success		302	{string}	string.	"Redirect to login"
 //	@Failure		500	{string}	string	"server error"
 //	@Router			/api/session [post]
 func (api *API) SessionPost(w http.ResponseWriter, r *http.Request) {
-
+	err := api.runtime.GetHandler(forward.Name).RedirectLogin(w, r)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
 }
 
 // DELETE @BasePath/session
 //
 //	@Summary		Delete the current session
 //	@Description	Deletes the current session (if a session exists)
+//
+//	@Accept			json
 //	@Produce		json
 //	@Success		200	{object}	SessionInfo
 //	@Failure		404	{string}	string	"no session found"
 //	@Failure		500	{string}	string	"server error"
-//	@Router			/api/session [post]
+//	@Router			/api/session [delete]
 func (api *API) SessionDelete(w http.ResponseWriter, r *http.Request) {
-
+	// TODO:implement
+	serverhttp.SendPlainTextResponse(api.runtime.Logger(), w, r, http.StatusNotFound, responseNoSessionFound)
 }
 
 // GET @BasePath/session/login
 //
 //	@Summary		Get current session
 //	@Description	Retrieve the current session information (if a session exists)
+//
+//	@Accept			json
 //	@Produce		json
-//	@Success		200	{object}	SessionInfo
-//	@Failure		404	{string}	string	"no session found"
-//	@Failure		500	{string}	string	"server error"
+//
+//	@Param			handler	query		string	false	"Handler Name"
+//	@Param			id		path		string	true	"Benutzer ID"
+//
+//	@Success		200		{object}	SessionInfo
+//	@Failure		404		{string}	string	"no session found"
+//	@Failure		500		{string}	string	"server error"
 //	@Router			/api/session/login [get]
 func (api *API) SessionLoginGet(w http.ResponseWriter, r *http.Request) {
 
@@ -172,6 +201,7 @@ func (api *API) SessionLoginGet(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Create a new session
 //	@Description	Initiate the authentication flow to create a new session
+//	@Accept			json
 //	@Produce		json
 //	@Success		302	{string}	string.	"Redirect to Login UI"
 //	@Failure		500	{string}	string	"server error"
@@ -184,10 +214,15 @@ func (api *API) SessionLoginPost(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Get current session
 //	@Description	Retrieve the current session information (if a session exists)
+//	@Accept			json
 //	@Produce		json
-//	@Success		200	{object}	SessionInfo
-//	@Failure		404	{string}	string	"no session found"
-//	@Failure		500	{string}	string	"server error"
+//
+//	@Param			handler	query		string	false	"Handler Name"
+//	@Param			id		path		string	true	"Benutzer ID"
+//
+//	@Success		200		{object}	SessionInfo
+//	@Failure		404		{string}	string	"no session found"
+//	@Failure		500		{string}	string	"server error"
 //	@Router			/api/session/verify [get]
 func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
 
@@ -197,10 +232,11 @@ func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Create a new session
 //	@Description	Initiate the authentication flow to create a new session
+//	@Accept			json
 //	@Produce		json
 //	@Success		302	{string}	string.	"Redirect to Login UI"
 //	@Failure		500	{string}	string	"server error"
-//	@Router			/api/session/login [post]
+//	@Router			/api/session/verify [post]
 func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
 
 }

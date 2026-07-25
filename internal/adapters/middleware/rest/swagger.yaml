@@ -53,25 +53,9 @@ paths:
             type: string
       summary: Ping the server
   /api/session:
-    get:
-      description: Retrieve the current session information (if a session exists)
-      produces:
+    delete:
+      consumes:
       - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/rest.SessionInfo'
-        "404":
-          description: no session found
-          schema:
-            type: string
-        "500":
-          description: server error
-          schema:
-            type: string
-      summary: Get current session
-    post:
       description: Deletes the current session (if a session exists)
       produces:
       - application/json
@@ -89,7 +73,6 @@ paths:
           schema:
             type: string
       summary: Delete the current session
-  /api/session/login:
     get:
       description: Retrieve the current session information (if a session exists)
       produces:
@@ -109,12 +92,14 @@ paths:
             type: string
       summary: Get current session
     post:
+      consumes:
+      - application/json
       description: Initiate the authentication flow to create a new session
       produces:
       - application/json
       responses:
         "302":
-          description: Redirect to Login UI
+          description: Redirect to login
           schema:
             type: string
         "500":
@@ -122,9 +107,21 @@ paths:
           schema:
             type: string
       summary: Create a new session
-  /api/session/verify:
+  /api/session/login:
     get:
+      consumes:
+      - application/json
       description: Retrieve the current session information (if a session exists)
+      parameters:
+      - description: Handler Name
+        in: query
+        name: handler
+        type: string
+      - description: Benutzer ID
+        in: path
+        name: id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -141,4 +138,67 @@ paths:
           schema:
             type: string
       summary: Get current session
+    post:
+      consumes:
+      - application/json
+      description: Initiate the authentication flow to create a new session
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Redirect to Login UI
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Create a new session
+  /api/session/verify:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve the current session information (if a session exists)
+      parameters:
+      - description: Handler Name
+        in: query
+        name: handler
+        type: string
+      - description: Benutzer ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rest.SessionInfo'
+        "404":
+          description: no session found
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Get current session
+    post:
+      consumes:
+      - application/json
+      description: Initiate the authentication flow to create a new session
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Redirect to Login UI
+          schema:
+            type: string
+        "500":
+          description: server error
+          schema:
+            type: string
+      summary: Create a new session
 swagger: "2.0"

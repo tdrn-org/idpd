@@ -14,7 +14,27 @@
  * limitations under the License.
  */
 
-package config
+package web
 
-type ForwardConfig struct {
+import "net/url"
+
+const loginEndpoint string = "/login"
+const verifyEndpoint string = "/login/verify"
+
+func LoginURL(baseURL *url.URL, handler, id string) *url.URL {
+	loginURL := baseURL.JoinPath(loginEndpoint)
+	query := loginURL.Query()
+	query.Set("handler", id)
+	query.Set("id", id)
+	loginURL.RawQuery = query.Encode()
+	return loginURL
+}
+
+func VerifyURL(baseURL *url.URL, handler, id string) *url.URL {
+	loginURL := baseURL.JoinPath(verifyEndpoint)
+	query := loginURL.Query()
+	query.Set("handler", id)
+	query.Set("id", id)
+	loginURL.RawQuery = query.Encode()
+	return loginURL
 }

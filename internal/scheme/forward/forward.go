@@ -17,6 +17,8 @@
 package forward
 
 import (
+	"net/http"
+
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/scheme"
 )
@@ -38,4 +40,17 @@ func (h *Handler) Name() scheme.Name {
 }
 
 func (h *Handler) Mount(instance *httpserver.Instance) {
+}
+
+func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request) error {
+	redirectURL := r.Referer()
+	if redirectURL == "" {
+		redirectURL = h.runtime.BaseURL().String()
+	}
+	authRequest, err := h.createAuthRequest(r.Context(), redirectURL)
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, h.runtime.LoginURL(Name, authRequest.ID).String(), http.StatusFound)
+	return nil
 }

@@ -144,6 +144,10 @@ func (h *Handler) Mount(instance *httpserver.Instance) {
 	instance.HandleFunc(loginEndpoint, h.handleLogin)
 }
 
+func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request) error {
+	return errors.New("login must be initiated via OAuth2/OIDC flow")
+}
+
 func (h *Handler) Endpoint() *oauth2.Endpoint {
 	issuerURL := h.runtime.BaseURL()
 	return &oauth2.Endpoint{
@@ -209,11 +213,10 @@ func allowInsecure(issuerURL *url.URL) op.Option {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	id := query.Get("id")
-	if id == "" {
-		serverhttp.SendError(h.logger, w, r, http.StatusBadRequest, nil)
+	params, err := serverhttp.QueryParams(r, "id")
+	if err != nil {
+		serverhttp.SendError(h.logger, w, r, http.StatusBadRequest, err)
 		return
 	}
-	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), id), http.StatusFound)
+	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), params[0]), http.StatusFound)
 }

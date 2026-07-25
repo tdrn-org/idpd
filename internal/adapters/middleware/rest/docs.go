@@ -96,7 +96,34 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "description": "Initiate the authentication flow to create a new session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Create a new session",
+                "responses": {
+                    "302": {
+                        "description": "Redirect to login",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
                 "description": "Deletes the current session (if a session exists)",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -126,10 +153,28 @@ const docTemplate = `{
         "/api/session/login": {
             "get": {
                 "description": "Retrieve the current session information (if a session exists)",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "summary": "Get current session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Handler Name",
+                        "name": "handler",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Benutzer ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -153,6 +198,9 @@ const docTemplate = `{
             },
             "post": {
                 "description": "Initiate the authentication flow to create a new session",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -176,10 +224,28 @@ const docTemplate = `{
         "/api/session/verify": {
             "get": {
                 "description": "Retrieve the current session information (if a session exists)",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "summary": "Get current session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Handler Name",
+                        "name": "handler",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Benutzer ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -189,6 +255,30 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "no session found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Initiate the authentication flow to create a new session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Create a new session",
+                "responses": {
+                    "302": {
+                        "description": "Redirect to Login UI",
                         "schema": {
                             "type": "string"
                         }

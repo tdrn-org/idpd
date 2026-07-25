@@ -246,7 +246,7 @@ func (s *Server) startSchemeHandlers(_ context.Context, cfg *config.Config) erro
 		handler.Mount(s.httpServer)
 		s.schemeHandlers[handler.Name()] = handler
 	}
-	if cfg.Forward.Enabled {
+	{
 		s.logger.Info("enabling Forward scheme")
 		handler := forward.NewHandler(s.runtime())
 		handler.Mount(s.httpServer)

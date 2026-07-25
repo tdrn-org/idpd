@@ -65,7 +65,6 @@ organization_url = ""
 contact_email = ""
 
 [forward]
-enabled = true
 
 [userstore]
 type = "file"

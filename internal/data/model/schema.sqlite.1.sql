@@ -73,30 +73,15 @@ CREATE TABLE oauth2_refresh_token(
     PRIMARY KEY(id),
     FOREIGN KEY(access_token_id) REFERENCES oauth2_token(id)
 );
-CREATE TABLE oauth2_token_audience(
-    audience TEXT,
-    token_id TEXT,
-    FOREIGN KEY(token_id) REFERENCES oauth2_token(id)
-);
-CREATE TABLE oauth2_token_scope(
-    scope TEXT,
-    token_id TEXT,
-    FOREIGN KEY(token_id) REFERENCES oauth2_token(id)
-);
-CREATE TABLE oauth2_refresh_token_amr(
-    amr TEXT,
-    refresh_token_id TEXT,
-    FOREIGN KEY(refresh_token_id) REFERENCES oauth2_refresh_token(id)
-);
-CREATE TABLE oauth2_refresh_token_audience(
-    audience TEXT,
-    refresh_token_id TEXT,
-    FOREIGN KEY(refresh_token_id) REFERENCES oauth2_refresh_token(id)
-);
-CREATE TABLE oauth2_refresh_token_scope(
-    scope TEXT,
-    refresh_token_id TEXT,
-    FOREIGN KEY(refresh_token_id) REFERENCES oauth2_refresh_token(id)
+--
+-- Forward
+--
+CREATE TABLE forward_auth_request(
+    id TEXT PRIMARY KEY,
+    user_session_request_id TEXT NOT NULL,
+    redirect_url TEXT NOT NULL,
+    create_time INTEGER NOT NULL,
+    FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
 );
 --
 -- EOF

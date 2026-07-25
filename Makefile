@@ -19,7 +19,7 @@ endif
 NPM := $(shell command -v npm 2> /dev/null)
 NPMOPTS ?= --no-progress --no-color --no-fund
 
-WEB ?= 0
+WEB ?= 1
 
 .DEFAULT_GOAL := help
 
@@ -53,7 +53,7 @@ endif
 	$(GO) mod download -x
 
 .PHONY: build
-build: fmt deps
+build: fmt deps generate
 	@echo "Building artifacts..."
 ifeq (1, $(WEB))
 	# cd internal/web && $(NPM) $(NPMOPTS) run build
