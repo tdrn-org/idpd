@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { api, m } from '$lib';
   import type { SessionLoginInfo } from '$lib/types.js';
-  import { LogIn, Loader, AlertTriangle } from '@lucide/svelte';
+  import { LogIn, Loader, TriangleAlert } from '@lucide/svelte';
 
   let id = $state('');
   let loginInfo = $state<SessionLoginInfo | null>(null);
@@ -47,7 +47,7 @@
         remember,
         verification
       });
-      goto(`/login/verify?id=${encodeURIComponent(id)}`);
+      goto(`/verify?id=${encodeURIComponent(id)}`);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.';
     } finally {
@@ -63,7 +63,7 @@
   </div>
 {:else if error}
   <div class="card p-8 max-w-md mx-auto space-y-6 text-center">
-    <AlertTriangle class="w-12 h-12 text-amber-400 mx-auto" />
+    <TriangleAlert class="w-12 h-12 text-amber-400 mx-auto" />
     <p class="text-amber-400">{error}</p>
     <a href="/" class="text-indigo-400 hover:text-indigo-300">{m.back_home()}</a>
   </div>

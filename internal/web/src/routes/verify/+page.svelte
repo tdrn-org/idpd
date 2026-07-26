@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { api, m } from '$lib';
   import type { SessionVerifyInfo } from '$lib/types.js';
-  import { ShieldCheck, Loader, AlertTriangle } from '@lucide/svelte';
+  import { ShieldCheck, Loader, TriangleAlert } from '@lucide/svelte';
 
   let id = $state('');
   let verifyInfo = $state<SessionVerifyInfo | null>(null);
@@ -63,7 +63,7 @@
   </div>
 {:else if error}
   <div class="card p-8 max-w-md mx-auto space-y-6 text-center">
-    <AlertTriangle class="w-12 h-12 text-amber-400 mx-auto" />
+    <TriangleAlert class="w-12 h-12 text-amber-400 mx-auto" />
     <p class="text-amber-400">{error}</p>
     <a href="/" class="text-indigo-400 hover:text-indigo-300">{m.back_home()}</a>
   </div>

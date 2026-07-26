@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-package i18n
+package web_test
 
 import (
-	"strings"
+	"testing"
 
-	"golang.org/x/text/language"
+	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/idpd/internal/i18n"
+	"github.com/tdrn-org/idpd/internal/web"
 )
 
-func FileName(name string, locale language.Tag) string {
-	localeBase, _ := locale.Base()
-	split := strings.LastIndex(name, ".")
-	if split <= 0 {
-		return localeBase.String() + name
-	}
-	return name[:split] + "_" + localeBase.String() + name[split:]
+func TestMessages(t *testing.T) {
+	messages, err := web.Messages(i18n.DefaultLocale())
+	require.NoError(t, err)
+	require.NotNil(t, messages)
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { api, m } from '$lib';
-  import { LogIn, Fingerprint, Loader } from '@lucide/svelte';
+  import { LogIn, FingerprintPattern, Loader } from '@lucide/svelte';
 
   let checking = $state(true);
   let hasSession = $state(false);
@@ -43,7 +43,7 @@
 {:else if !hasSession}
   <div class="flex flex-col items-center justify-center min-h-[60vh] gap-8 text-center">
     <div class="p-6 rounded-full bg-indigo-500/10">
-      <Fingerprint class="w-16 h-16 text-indigo-400" />
+      <FingerprintPattern class="w-16 h-16 text-indigo-400" />
     </div>
 
     <div class="space-y-2">

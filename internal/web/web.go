@@ -18,22 +18,23 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
+	"path/filepath"
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/go-httpserver/csp"
+	"github.com/tdrn-org/idpd/internal/i18n"
+	"golang.org/x/text/language"
 )
 
 //go:embed all:build/*
 var buildFS embed.FS
 
-/*
-TODO: Enable for I18N
 //go:embed all:messages/*
 var messagesFS embed.FS
-*/
 
 // Mount registers the SPA frontend on the HTTP server.
 // All non-API paths serve static files from build/, falling back to index.html for client-side routing.
@@ -70,4 +71,19 @@ func Mount(instance *httpserver.Instance) error {
 		httpserver.StaticHeader("X-Frame-Options", "DENY"),
 		httpserver.StaticHeader("Cache-Control", "public, max-age=86400, immutable")))
 	return nil
+}
+
+func Messages(locale language.Tag) (map[string]string, error) {
+	fileName := filepath.Join("messages", i18n.FileName(".json", locale))
+	file, err := messagesFS.Open(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open messages bundle '%s' (cause: %w)", fileName, err)
+	}
+	defer file.Close()
+	var messages map[string]string
+	err = json.NewDecoder(file).Decode(&messages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode message bundle '%s' (cause: %w)", fileName, err)
+	}
+	return messages, nil
 }
