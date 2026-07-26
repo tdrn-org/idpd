@@ -40,6 +40,7 @@ func (h *Handler) Name() scheme.Name {
 }
 
 func (h *Handler) Mount(instance *httpserver.Instance) {
+	// No handlers here
 }
 
 func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request) error {

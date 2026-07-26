@@ -19,7 +19,7 @@ package web
 import "net/url"
 
 const loginEndpoint string = "/login"
-const verifyEndpoint string = "/login/verify"
+const verifyEndpoint string = "/verify"
 
 func LoginURL(baseURL *url.URL, id string) *url.URL {
 	loginURL := baseURL.JoinPath(loginEndpoint)

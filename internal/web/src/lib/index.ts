@@ -1,3 +1,10 @@
 export { api } from './api.js';
 export { m } from './i18n.js';
-export type { SessionInfo, LoginRequest } from './types.js';
+export type {
+  SessionInfo,
+  UserInfo,
+  SessionLoginInfo,
+  SessionLoginRequest,
+  SessionVerifyInfo,
+  SessionVerifyRequest
+} from './types.js';

@@ -42,14 +42,29 @@ import adapter from '@sveltejs/adapter-static';
 
 export default {
   kit: {
+    paths: {
+      relative: false,  // absolute Asset-Pfade – sonst brechen sie je nach Route-Tiefe
+    },
     adapter: adapter({
-      pages: 'build',
-      assets: 'build',
-      fallback: 'index.html',  // SPA-Fallback: Go leitet alle Nicht-API-Pfade hierher
+      pages: './build',
+      assets: './build',
+      fallback: '200.html',  // SPA-Shell für nicht prerenderte Routen
       precompress: false,
+      strict: true,
     }),
   },
 };
+```
+
+Zusammen mit `export const prerender = true` im Root-`+layout.ts` (siehe unten) erzeugt
+das für **jede** Route ohne Pflichtparameter ein echtes Dokument:
+
+```
+build/index.html   → /
+build/login.html   → /login
+build/verify.html  → /verify
+build/user.html    → /user
+build/200.html     → Fallback für alles andere
 ```
 
 ### Go embed.FS
@@ -65,8 +80,20 @@ var buildFS embed.FS
 var messagesFS embed.FS
 ```
 
-Go leitet alle Requests, die nicht mit `/api/` beginnen, auf `build/index.html` um.
-Das ermöglicht clientseitiges SvelteKit-Routing.
+Der `spaHandler` in `web.go` löst Request-Pfade so auf, wie es ein statischer Hoster tut
+(`try_files $uri $uri.html $uri/index.html /200.html`):
+
+1. `/robots.txt` → exakter Treffer im Build
+2. `/login` → `login.html` (prerendert)
+3. `/login/` → 301 auf `/login` (der Build kennt keine Trailing Slashes)
+4. `/irgendwas` → `200.html`, SvelteKit routet clientseitig
+5. `/fehlt.js`, `/_app/fehlt.js` → 404 (kein Fallback für Assets, sonst käme JS mit
+   Content-Type `text/html` zurück)
+
+**Neue Route anlegen** heißt daher: Verzeichnis unter `src/routes/` anlegen, `npm run build`,
+fertig – das Dokument entsteht automatisch. Verlinkt Go die Route (siehe `urls.go`), gehört
+sie in `TestMountedRoutesResolve`, das prüft, dass sie prerendert ist und nicht bloß über
+die Shell ausgeliefert wird.
 
 ### Build-Befehl (vom Makefile)
 
@@ -399,7 +426,7 @@ internal/web/
 │   │           └── StatusBadge.svelte
 │   └── routes/
 │       ├── +layout.svelte           # Root-Layout: Glassmorphism-Navbar
-│       ├── +layout.ts               # export const ssr = false
+│       ├── +layout.ts               # export const ssr = false + prerender = true
 │       ├── +page.svelte             # Dashboard: Stats-Grid + Recent-Connections
 │       ├── connections/
 │       │   └── +page.svelte         # Verbindungstabelle (expandable rows)
@@ -460,7 +487,7 @@ Daten von `GET /api/v1/rules/lmi`:
 - **Kein direktes `fetch` in Komponenten** – immer `$lib/api.ts` nutzen
 - **Alle Interfaces in `$lib/types.ts`** – Go-Structs 1:1 abbilden, snake_case JSON-Feldnamen beibehalten
 - **`$lib/`-Alias** – niemals relative `../../`-Imports
-- **`ssr = false`** im Root-`+layout.ts` – kein SSR, reine SPA
+- **`ssr = false` + `prerender = true`** im Root-`+layout.ts` – kein SSR, aber pro Route eine echte HTML-Shell
 - **`npm`** – das Makefile nutzt `npm`, kein pnpm oder yarn einführen
 - **i18n-Texte in `messages/*.json`** – werden sowohl von `$lib/i18n.ts` (client) als auch `web.go` (server) gelesen
 - **`web.go` NICHT löschen** – es enthält die `embed.FS`-Direktiven und serverseitige i18n-Logik
@@ -489,8 +516,9 @@ Daten von `GET /api/v1/rules/lmi`:
 
 - [ ] Kein Svelte-4-Syntax (kein `export let`, kein `$:`, kein `<slot>`)
 - [ ] Alle UI-Texte über `m.key()` aus `$lib/i18n.js`, Schlüssel in `de.json` + `en.json`
-- [ ] `svelte.config.js` → `adapter-static` mit `pages: 'build'` + `fallback: 'index.html'`
-- [ ] `src/routes/+layout.ts` exportiert `export const ssr = false`
+- [ ] `svelte.config.js` → `adapter-static` mit `pages: './build'` + `fallback: '200.html'` + `paths.relative: false`
+- [ ] `src/routes/+layout.ts` exportiert `ssr = false` **und** `prerender = true`
+- [ ] `go test ./internal/web/` grün (prüft Routing, Cache-Header und prerenderte Routen)
 - [ ] Keine direkten `fetch`-Calls in Komponenten (nur `$lib/api.ts`)
 - [ ] TypeScript-Interfaces in `$lib/types.ts`, JSON-Keys unverändert (snake_case)
 - [ ] Kein `<style>`-Block in Svelte-Komponenten
