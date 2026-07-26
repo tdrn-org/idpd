@@ -62,7 +62,22 @@ func Mount(instance *httpserver.Instance) error {
 	if err != nil {
 		return fmt.Errorf("failed to generate csp hashes (cause: %w)", err)
 	}
-	instance.Handle("/", httpserver.HeaderHandler(http.FileServerFS(docs),
+	// Wrap FileServer with SPA fallback: serve index.html for any path that doesn't match a static file
+	fileServer := http.FileServerFS(docs)
+	spaHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Try to serve the requested file
+		path := filepath.Clean(r.URL.Path)
+		f, err := docs.Open(path)
+		if err != nil {
+			// File not found — fall back to index.html for SPA routing
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		f.Close()
+		fileServer.ServeHTTP(w, r)
+	})
+	instance.Handle("/", httpserver.HeaderHandler(spaHandler,
 		contentSecurityPolicy.Header(),
 		httpserver.StaticHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
 		httpserver.StaticHeader("Referrer-Policy", "strict-origin-when-cross-origin"),
