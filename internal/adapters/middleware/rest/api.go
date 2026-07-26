@@ -18,10 +18,12 @@ package rest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/buildinfo"
@@ -141,7 +143,37 @@ type ServerInfo struct {
 //	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session [get]
 func (api *API) SessionGet(w http.ResponseWriter, r *http.Request) {
-	// TODO:implement
+	// Try to read session from cookie
+	cookie, err := r.Cookie("idpd_session")
+	if err != nil {
+		serverhttp.SendPlainTextResponse(api.runtime.Logger(), w, r, http.StatusNotFound, responseNoSessionFound)
+		return
+	}
+	userSessionRequest, err := api.runtime.DataStore().GetUserSessionRequest(r.Context(), cookie.Value)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if userSessionRequest == nil || userSessionRequest.AuthInfo.State != domain.UserSessionRequestStateDone {
+		serverhttp.SendPlainTextResponse(api.runtime.Logger(), w, r, http.StatusNotFound, responseNoSessionFound)
+		return
+	}
+	demoUser := api.runtime.DemoUser()
+	if demoUser != nil {
+		info := &SessionInfo{
+			StrongAuth: false,
+			User: UserInfo{
+				Login:    demoUser.Login,
+				Name:     demoUser.Name,
+				Nickname: demoUser.Nickname,
+				Picture:  demoUser.Picture,
+				Email:    userSessionRequest.AuthInfo.Login,
+				Groups:   demoUser.GroupNames(),
+			},
+		}
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, info)
+		return
+	}
 	serverhttp.SendPlainTextResponse(api.runtime.Logger(), w, r, http.StatusNotFound, responseNoSessionFound)
 }
 
@@ -246,11 +278,57 @@ type SessionLoginInfo struct {
 //
 //	@Param			request	body		SessionLoginRequest	true	"Request parameters"
 //
-//	@Success		200		{string}	string.				"Ok"
+//	@Success		200		{object}	map[string]bool		"Ok"
+//	@Failure		400		{string}	string				"Bad Request"
+//	@Failure		401		{string}	string				"Unauthorized"
 //	@Failure		500		{string}	string				"Internal Server Error"
 //	@Router			/api/session/login [post]
 func (api *API) SessionLoginPost(w http.ResponseWriter, r *http.Request) {
-
+	request := &SessionLoginRequest{}
+	err := json.NewDecoder(r.Body).Decode(request)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, err)
+		return
+	}
+	userSessionRequest, err := api.runtime.DataStore().GetUserSessionRequest(r.Context(), request.ID)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if userSessionRequest == nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, fmt.Errorf("unknown user session request id '%s'", request.ID))
+		return
+	}
+	demoUser := api.runtime.DemoUser()
+	if demoUser != nil {
+		// Demo mode: accept any credentials, skip verification
+		userSessionRequest.AuthInfo.State = domain.UserSessionRequestStateDone
+		userSessionRequest.AuthInfo.Login = demoUser.Login
+		userSessionRequest.AuthInfo.LoginTime = time.Now()
+		userSessionRequest.AuthInfo.Verification = domain.Verification(request.Verification)
+		userSessionRequest.AuthInfo.VerificationTime = time.Now()
+		err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
+		if err != nil {
+			serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+			return
+		}
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	// Real authentication: validate credentials
+	userSessionRequest.AuthInfo.State = domain.UserSessionRequestStateIdentified
+	userSessionRequest.AuthInfo.Login = request.Login
+	userSessionRequest.AuthInfo.Remember = request.Remember
+	userSessionRequest.AuthInfo.LoginTime = time.Now()
+	userSessionRequest.AuthInfo.Verification = domain.Verification(request.Verification)
+	// Set verification challenge (MVP: use fixed code "000000")
+	userSessionRequest.AuthInfo.VerificationChallenge = []byte("000000")
+	err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, map[string]bool{"ok": true})
 }
 
 type SessionLoginRequest struct {
@@ -297,15 +375,74 @@ type SessionVerifyInfo struct {
 
 // POST @BasePath/session/verify
 //
-//	@Summary		Create a new session
-//	@Description	Initiate the authentication flow to create a new session
+//	@Summary		Verify authentication
+//	@Description	Verify the authentication by providing the verification code
+//
 //	@Accept			json
 //	@Produce		json
-//	@Success		302	{string}	string.	"Redirect to Login UI"
-//	@Failure		500	{string}	string	"Internal Server Error"
+//
+//	@Param			request	body		SessionVerifyRequest	true	"Request parameters"
+//
+//	@Success		200		{object}	map[string]string		"Redirect"
+//	@Failure		400		{string}	string					"Bad Request"
+//	@Failure		500		{string}	string					"Internal Server Error"
 //	@Router			/api/session/verify [post]
 func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
+	request := &SessionVerifyRequest{}
+	err := json.NewDecoder(r.Body).Decode(request)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, err)
+		return
+	}
+	userSessionRequest, err := api.runtime.DataStore().GetUserSessionRequest(r.Context(), request.ID)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if userSessionRequest == nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, fmt.Errorf("unknown user session request id '%s'", request.ID))
+		return
+	}
+	// Verify the challenge
+	if string(userSessionRequest.AuthInfo.VerificationChallenge) != request.Code {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, fmt.Errorf("invalid verification code"))
+		return
+	}
+	demoUser := api.runtime.DemoUser()
+	if demoUser != nil {
+		// Demo mode: already done in login
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, map[string]string{"redirect": "/user"})
+		return
+	}
+	// Mark as done
+	userSessionRequest.AuthInfo.State = domain.UserSessionRequestStateDone
+	userSessionRequest.AuthInfo.VerificationTime = time.Now()
+	err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	// Set session cookie
+	sessionCookie := &http.Cookie{
+		Name:     "idpd_session",
+		Value:    userSessionRequest.ID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+	}
+	if userSessionRequest.AuthInfo.Remember {
+		sessionCookie.MaxAge = 30 * 24 * 3600
+	}
+	http.SetCookie(w, sessionCookie)
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, map[string]string{"redirect": "/user"})
+}
 
+type SessionVerifyRequest struct {
+	// ID identifies the authentication request this request refers to
+	ID string `json:"id"`
+	// Code is the verification code
+	Code string `json:"code"`
 }
 
 func (api *API) handleUserSessionRequest(w http.ResponseWriter, r *http.Request, handle func(http.ResponseWriter, *http.Request, *domain.UserSessionRequest)) {

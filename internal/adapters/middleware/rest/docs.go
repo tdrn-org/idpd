@@ -208,6 +208,21 @@ const docTemplate = `{
                     "200": {
                         "description": "Ok",
                         "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
                             "type": "string"
                         }
                     },
@@ -261,17 +276,37 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Initiate the authentication flow to create a new session",
+                "description": "Verify the authentication by providing the verification code",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Create a new session",
+                "summary": "Verify authentication",
+                "parameters": [
+                    {
+                        "description": "Request parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionVerifyRequest"
+                        }
+                    }
+                ],
                 "responses": {
-                    "302": {
-                        "description": "Redirect to Login UI",
+                    "200": {
+                        "description": "Redirect",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "string"
                         }
@@ -380,6 +415,19 @@ const docTemplate = `{
             "properties": {
                 "verification": {
                     "$ref": "#/definitions/domain.Verification"
+                }
+            }
+        },
+        "rest.SessionVerifyRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is the verification code",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID identifies the authentication request this request refers to",
+                    "type": "string"
                 }
             }
         },

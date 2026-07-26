@@ -18,12 +18,21 @@
         if (err instanceof Error && err.message.includes('404')) {
           hasSession = false;
         }
-        // any other error: stay on landing
+        // other errors: stay on landing
       })
       .finally(() => {
         checking = false;
       });
   });
+
+  async function handleLogin() {
+    try {
+      await api.startSession();
+    } catch (err) {
+      // If the redirect doesn't happen via API, navigate manually
+      console.error('Session start failed:', err);
+    }
+  }
 </script>
 
 {#if checking}
@@ -42,10 +51,13 @@
       <p class="text-stone-400 text-lg">{m.landing_subtitle()}</p>
     </div>
 
-    <a href="/login"
-       class="inline-flex items-center gap-2 px-8 py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-medium rounded-lg transition-colors shadow-lg shadow-indigo-500/25">
-      <LogIn class="w-5 h-5" />
-      {m.landing_cta()}
-    </a>
+    <!-- POST /api/session to initiate Forward-Auth -->
+    <form action="/api/session" method="POST" onsubmit={handleLogin}>
+      <button type="submit"
+         class="inline-flex items-center gap-2 px-8 py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-medium rounded-lg transition-colors shadow-lg shadow-indigo-500/25 cursor-pointer">
+        <LogIn class="w-5 h-5" />
+        {m.landing_cta()}
+      </button>
+    </form>
   </div>
 {/if}

@@ -75,6 +75,16 @@ definitions:
       verification:
         $ref: '#/definitions/domain.Verification'
     type: object
+  rest.SessionVerifyRequest:
+    properties:
+      code:
+        description: Code is the verification code
+        type: string
+      id:
+        description: ID identifies the authentication request this request refers
+          to
+        type: string
+    type: object
   rest.UserInfo:
     properties:
       email:
@@ -229,6 +239,16 @@ paths:
         "200":
           description: Ok
           schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
             type: string
         "500":
           description: Internal Server Error
@@ -266,17 +286,30 @@ paths:
     post:
       consumes:
       - application/json
-      description: Initiate the authentication flow to create a new session
+      description: Verify the authentication by providing the verification code
+      parameters:
+      - description: Request parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rest.SessionVerifyRequest'
       produces:
       - application/json
       responses:
-        "302":
-          description: Redirect to Login UI
+        "200":
+          description: Redirect
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
           schema:
             type: string
         "500":
           description: Internal Server Error
           schema:
             type: string
-      summary: Create a new session
+      summary: Verify authentication
 swagger: "2.0"

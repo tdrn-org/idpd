@@ -1,6 +1,6 @@
-import type { SessionInfo } from './types.js';
+import type { SessionInfo, SessionLoginInfo, SessionLoginRequest, SessionVerifyInfo, SessionVerifyRequest } from './types.js';
 
-const BASE = '/api/v1';
+const BASE = '/api';
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
@@ -18,8 +18,29 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function postNoBody(path: string): Promise<Response> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${path}`);
+  return res;
+}
+
 export const api = {
   session: () => get<SessionInfo>('/session'),
-  login: (req: { handler: string; username: string; password: string; otp?: string }) =>
-    post<SessionInfo>('/login', req),
+
+  sessionLoginInfo: (id: string) =>
+    get<SessionLoginInfo>(`/session/login?id=${encodeURIComponent(id)}`),
+
+  sessionLogin: (req: SessionLoginRequest) =>
+    post<{ ok: boolean }>('/session/login', req),
+
+  sessionVerifyInfo: (id: string) =>
+    get<SessionVerifyInfo>(`/session/verify?id=${encodeURIComponent(id)}`),
+
+  sessionVerify: (req: SessionVerifyRequest) =>
+    post<{ ok: boolean; redirect?: string }>('/session/verify', req),
+
+  startSession: () =>
+    postNoBody('/session'),
 };
