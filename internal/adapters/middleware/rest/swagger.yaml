@@ -1,7 +1,22 @@
 basePath: /api
 definitions:
+  domain.Verification:
+    enum:
+    - email
+    - totp
+    - passkey
+    - seckey
+    type: string
+    x-enum-varnames:
+    - VerificationEmail
+    - VerificationTOTP
+    - VerificationPasskey
+    - VerificationSecKey
   rest.ServerInfo:
     properties:
+      base_url:
+        description: The server's base URL
+        type: string
       version:
         description: The server version
         type: string
@@ -10,6 +25,72 @@ definitions:
     properties:
       strong_auth:
         type: boolean
+      user:
+        $ref: '#/definitions/rest.UserInfo'
+    type: object
+  rest.SessionLoginInfo:
+    properties:
+      allowed_verifications:
+        description: |-
+          AllowedVerifications lists the allowed verification methods for this login flow.
+          Only verification methods from this list are accepted during this login flow.
+        items:
+          $ref: '#/definitions/domain.Verification'
+        type: array
+      login_hint:
+        description: |-
+          LoginHint contains a hint for the login to use, if any can be derived from context.
+          Can be overriden by the user.
+        type: string
+      remember:
+        description: |-
+          Remember indicates the default for whether to remember the login across browser sessions or not.
+          Can be overriden by the user.
+        type: boolean
+    type: object
+  rest.SessionLoginRequest:
+    properties:
+      id:
+        description: ID identifies the authentication request this request refers
+          to
+        type: string
+      login:
+        description: Login is the user login to use for the authentication
+        type: string
+      password:
+        description: Password is the user password to use for the authentication
+        type: string
+      remember:
+        description: Remember indicates whether to remember the given login across
+          browser sessions or not.
+        type: boolean
+      verification:
+        allOf:
+        - $ref: '#/definitions/domain.Verification'
+        description: Verification is the verification method to perform in the next
+          step auf the authentication flow.
+    type: object
+  rest.SessionVerifyInfo:
+    properties:
+      verification:
+        $ref: '#/definitions/domain.Verification'
+    type: object
+  rest.UserInfo:
+    properties:
+      email:
+        type: string
+      groups:
+        items:
+          type: string
+        type: array
+      login:
+        type: string
+      name:
+        type: string
+      nickname:
+        type: string
+      picture:
+        type: string
     type: object
 host: localhost:9123
 info:
@@ -24,7 +105,7 @@ info:
 paths:
   /api/info:
     get:
-      description: Retrieve basic server info like version and configured options
+      description: Query static server info like version and configured options
       produces:
       - application/json
       responses:
@@ -33,7 +114,7 @@ paths:
           schema:
             $ref: '#/definitions/rest.ServerInfo'
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
       summary: Query server info
@@ -44,19 +125,17 @@ paths:
       - text/plain
       responses:
         "200":
-          description: ok
+          description: Ok
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
-      summary: Ping the server
+      summary: Ping server
   /api/session:
     delete:
-      consumes:
-      - application/json
-      description: Deletes the current session (if a session exists)
+      description: Delete the current session (if a session exists)
       produces:
       - application/json
       responses:
@@ -65,16 +144,16 @@ paths:
           schema:
             $ref: '#/definitions/rest.SessionInfo'
         "404":
-          description: no session found
+          description: No session found
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
-      summary: Delete the current session
+      summary: Delete current session
     get:
-      description: Retrieve the current session information (if a session exists)
+      description: Get the current session (if a session exists)
       produces:
       - application/json
       responses:
@@ -83,41 +162,36 @@ paths:
           schema:
             $ref: '#/definitions/rest.SessionInfo'
         "404":
-          description: no session found
+          description: No session found
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
       summary: Get current session
     post:
-      consumes:
-      - application/json
       description: Initiate the authentication flow to create a new session
       produces:
       - application/json
       responses:
         "302":
-          description: Redirect to login
+          description: Redirect to ...
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
-      summary: Create a new session
+      summary: Initiate a new session
   /api/session/login:
     get:
       consumes:
       - application/json
-      description: Retrieve the current session information (if a session exists)
+      description: Get the login information for the authentication flow associated
+        with the given authentication request
       parameters:
-      - description: Handler Name
-        in: query
-        name: handler
-        type: string
-      - description: Benutzer ID
+      - description: Authentication request ID
         in: path
         name: id
         required: true
@@ -128,29 +202,36 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/rest.SessionInfo'
-        "404":
-          description: no session found
+            $ref: '#/definitions/rest.SessionLoginInfo'
+        "400":
+          description: Bad Request
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
-      summary: Get current session
+      summary: Get login information
     post:
       consumes:
       - application/json
       description: Initiate the authentication flow to create a new session
+      parameters:
+      - description: Request parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rest.SessionLoginRequest'
       produces:
       - application/json
       responses:
-        "302":
-          description: Redirect to Login UI
+        "200":
+          description: Ok
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
       summary: Create a new session
@@ -158,13 +239,10 @@ paths:
     get:
       consumes:
       - application/json
-      description: Retrieve the current session information (if a session exists)
+      description: Get the verify information for the authentication flow associated
+        with the given authentication request
       parameters:
-      - description: Handler Name
-        in: query
-        name: handler
-        type: string
-      - description: Benutzer ID
+      - description: Authentication request ID
         in: path
         name: id
         required: true
@@ -175,16 +253,16 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/rest.SessionInfo'
-        "404":
-          description: no session found
+            $ref: '#/definitions/rest.SessionVerifyInfo'
+        "400":
+          description: Bad Request
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
-      summary: Get current session
+      summary: Get verify information
     post:
       consumes:
       - application/json
@@ -197,7 +275,7 @@ paths:
           schema:
             type: string
         "500":
-          description: server error
+          description: Internal Server Error
           schema:
             type: string
       summary: Create a new session

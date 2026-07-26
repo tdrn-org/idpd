@@ -34,8 +34,8 @@ func (n Name) String() string {
 
 type Runtime interface {
 	BaseURL() *url.URL
-	LoginURL(handler Name, id string) *url.URL
-	VerifyURL(handler Name, id string) *url.URL
+	LoginURL(id string) *url.URL
+	VerifyURL(id string) *url.URL
 	DataStore() *data.Store
 	Users() userstore.Backend
 	DemoUser() *userstore.User

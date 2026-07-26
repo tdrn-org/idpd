@@ -40,12 +40,12 @@ func (runtime *serverRuntime) BaseURL() *url.URL {
 	return runtime.server.baseURL
 }
 
-func (runtime *serverRuntime) LoginURL(handler scheme.Name, id string) *url.URL {
-	return web.LoginURL(runtime.server.baseURL, string(handler), id)
+func (runtime *serverRuntime) LoginURL(id string) *url.URL {
+	return web.LoginURL(runtime.server.baseURL, id)
 }
 
-func (runtime *serverRuntime) VerifyURL(handler scheme.Name, id string) *url.URL {
-	return web.VerifyURL(runtime.server.baseURL, string(handler), id)
+func (runtime *serverRuntime) VerifyURL(id string) *url.URL {
+	return web.VerifyURL(runtime.server.baseURL, id)
 }
 
 func (runtime *serverRuntime) DataStore() *data.Store {

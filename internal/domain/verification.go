@@ -26,13 +26,25 @@ const (
 	VerificationSecKey  Verification = "seckey"
 )
 
+var AllVerifications []Verification = []Verification{
+	VerificationEmail,
+	VerificationTOTP,
+	VerificationPasskey,
+	VerificationSecKey,
+}
+
+var StrongVerifications []Verification = []Verification{
+	VerificationPasskey,
+	VerificationSecKey,
+}
+
 func (v Verification) String() string {
 	return string(v)
 }
 
 // Strong returns true for verification methods that provide strong (multi-factor) authentication.
 func (v Verification) Strong() bool {
-	return v == VerificationSecKey
+	return v == VerificationPasskey || v == VerificationSecKey
 }
 
 // StrongAuth checks whether the named verification method counts as strong authentication.

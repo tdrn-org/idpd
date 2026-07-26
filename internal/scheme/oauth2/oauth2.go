@@ -168,6 +168,15 @@ func (h *Handler) AddClient(cfg *config.OAuth2ClientConfig) {
 	}
 }
 
+func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	params, err := serverhttp.QueryParams(r, "id")
+	if err != nil {
+		serverhttp.SendError(h.logger, w, r, http.StatusBadRequest, err)
+		return
+	}
+	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), params[0]), http.StatusFound)
+}
+
 func filterClaims(claims []string, logger *slog.Logger) []string {
 	supportedClaims := op.DefaultSupportedClaims
 	if len(claims) == 0 {
@@ -212,11 +221,7 @@ func allowInsecure(issuerURL *url.URL) op.Option {
 	return noop
 }
 
-func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	params, err := serverhttp.QueryParams(r, "id")
-	if err != nil {
-		serverhttp.SendError(h.logger, w, r, http.StatusBadRequest, err)
-		return
-	}
-	http.Redirect(w, r, op.AuthCallbackURL(h.opProvider)(r.Context(), params[0]), http.StatusFound)
+func strongVerification(oidcAuthReqest *oidc.AuthRequest) bool {
+	// TODO: Determine strong required
+	return false
 }

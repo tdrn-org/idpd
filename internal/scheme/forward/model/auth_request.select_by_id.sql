@@ -1,5 +1,4 @@
 SELECT
-    a.user_session_request_id,
     a.redirect_url,
     a.create_time
 FROM

@@ -23,7 +23,7 @@ const docTemplate = `{
     "paths": {
         "/api/info": {
             "get": {
-                "description": "Retrieve basic server info like version and configured options",
+                "description": "Query static server info like version and configured options",
                 "produces": [
                     "application/json"
                 ],
@@ -36,7 +36,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -50,16 +50,16 @@ const docTemplate = `{
                 "produces": [
                     "text/plain"
                 ],
-                "summary": "Ping the server",
+                "summary": "Ping server",
                 "responses": {
                     "200": {
-                        "description": "ok",
+                        "description": "Ok",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -69,7 +69,7 @@ const docTemplate = `{
         },
         "/api/session": {
             "get": {
-                "description": "Retrieve the current session information (if a session exists)",
+                "description": "Get the current session (if a session exists)",
                 "produces": [
                     "application/json"
                 ],
@@ -82,13 +82,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "no session found",
+                        "description": "No session found",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -97,22 +97,19 @@ const docTemplate = `{
             },
             "post": {
                 "description": "Initiate the authentication flow to create a new session",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Create a new session",
+                "summary": "Initiate a new session",
                 "responses": {
                     "302": {
-                        "description": "Redirect to login",
+                        "description": "Redirect to ...",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -120,14 +117,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes the current session (if a session exists)",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Delete the current session (if a session exists)",
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Delete the current session",
+                "summary": "Delete current session",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -136,13 +130,13 @@ const docTemplate = `{
                         }
                     },
                     "404": {
-                        "description": "no session found",
+                        "description": "No session found",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -152,24 +146,18 @@ const docTemplate = `{
         },
         "/api/session/login": {
             "get": {
-                "description": "Retrieve the current session information (if a session exists)",
+                "description": "Get the login information for the authentication flow associated with the given authentication request",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Get current session",
+                "summary": "Get login information",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Handler Name",
-                        "name": "handler",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Benutzer ID",
+                        "description": "Authentication request ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -179,17 +167,17 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.SessionInfo"
+                            "$ref": "#/definitions/rest.SessionLoginInfo"
                         }
                     },
-                    "404": {
-                        "description": "no session found",
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -205,15 +193,26 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "summary": "Create a new session",
+                "parameters": [
+                    {
+                        "description": "Request parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionLoginRequest"
+                        }
+                    }
+                ],
                 "responses": {
-                    "302": {
-                        "description": "Redirect to Login UI",
+                    "200": {
+                        "description": "Ok",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -223,24 +222,18 @@ const docTemplate = `{
         },
         "/api/session/verify": {
             "get": {
-                "description": "Retrieve the current session information (if a session exists)",
+                "description": "Get the verify information for the authentication flow associated with the given authentication request",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
                     "application/json"
                 ],
-                "summary": "Get current session",
+                "summary": "Get verify information",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Handler Name",
-                        "name": "handler",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Benutzer ID",
+                        "description": "Authentication request ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -250,17 +243,17 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.SessionInfo"
+                            "$ref": "#/definitions/rest.SessionVerifyInfo"
                         }
                     },
-                    "404": {
-                        "description": "no session found",
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "type": "string"
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -284,7 +277,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "server error",
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "string"
                         }
@@ -294,9 +287,28 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "domain.Verification": {
+            "type": "string",
+            "enum": [
+                "email",
+                "totp",
+                "passkey",
+                "seckey"
+            ],
+            "x-enum-varnames": [
+                "VerificationEmail",
+                "VerificationTOTP",
+                "VerificationPasskey",
+                "VerificationSecKey"
+            ]
+        },
         "rest.ServerInfo": {
             "type": "object",
             "properties": {
+                "base_url": {
+                    "description": "The server's base URL",
+                    "type": "string"
+                },
                 "version": {
                     "description": "The server version",
                     "type": "string"
@@ -308,6 +320,92 @@ const docTemplate = `{
             "properties": {
                 "strong_auth": {
                     "type": "boolean"
+                },
+                "user": {
+                    "$ref": "#/definitions/rest.UserInfo"
+                }
+            }
+        },
+        "rest.SessionLoginInfo": {
+            "type": "object",
+            "properties": {
+                "allowed_verifications": {
+                    "description": "AllowedVerifications lists the allowed verification methods for this login flow.\nOnly verification methods from this list are accepted during this login flow.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.Verification"
+                    }
+                },
+                "login_hint": {
+                    "description": "LoginHint contains a hint for the login to use, if any can be derived from context.\nCan be overriden by the user.",
+                    "type": "string"
+                },
+                "remember": {
+                    "description": "Remember indicates the default for whether to remember the login across browser sessions or not.\nCan be overriden by the user.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "rest.SessionLoginRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "ID identifies the authentication request this request refers to",
+                    "type": "string"
+                },
+                "login": {
+                    "description": "Login is the user login to use for the authentication",
+                    "type": "string"
+                },
+                "password": {
+                    "description": "Password is the user password to use for the authentication",
+                    "type": "string"
+                },
+                "remember": {
+                    "description": "Remember indicates whether to remember the given login across browser sessions or not.",
+                    "type": "boolean"
+                },
+                "verification": {
+                    "description": "Verification is the verification method to perform in the next step auf the authentication flow.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.Verification"
+                        }
+                    ]
+                }
+            }
+        },
+        "rest.SessionVerifyInfo": {
+            "type": "object",
+            "properties": {
+                "verification": {
+                    "$ref": "#/definitions/domain.Verification"
+                }
+            }
+        },
+        "rest.UserInfo": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "login": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "nickname": {
+                    "type": "string"
+                },
+                "picture": {
+                    "type": "string"
                 }
             }
         }

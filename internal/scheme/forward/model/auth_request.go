@@ -25,10 +25,9 @@ import (
 )
 
 type AuthRequest struct {
-	ID                   string `db:"id"`
-	UserSessionRequestID string `db:"user_session_request_id"`
-	RedirectURL          string `db:"redirect_url"`
-	CreateTime           int64  `db:"create_time"`
+	ID          string `db:"id"`
+	RedirectURL string `db:"redirect_url"`
+	CreateTime  int64  `db:"create_time"`
 }
 
 //go:embed auth_request.insert.sql
@@ -36,14 +35,12 @@ var insertAuthRequestSQL string
 
 func InsertAuthRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest, redirectURL string) (*AuthRequest, error) {
 	r := &AuthRequest{
-		ID:                   database.NewID(),
-		UserSessionRequestID: userSessionRequest.ID,
-		RedirectURL:          redirectURL,
-		CreateTime:           database.Time2DB(tx.Now()),
+		ID:          userSessionRequest.ID,
+		RedirectURL: redirectURL,
+		CreateTime:  database.Time2DB(tx.Now()),
 	}
 	err := tx.ExecTx(ctx, insertAuthRequestSQL,
 		r.ID,
-		r.UserSessionRequestID,
 		r.RedirectURL,
 		r.CreateTime)
 	if err != nil {
@@ -63,7 +60,7 @@ func SelectAuthRequestByID(ctx context.Context, tx *database.Tx, id string) (*Au
 	r := &AuthRequest{
 		ID: id,
 	}
-	err = database.ScanRow(row, r, "user_session_request_id", "create_time")
+	err = database.ScanRow(row, r, "redirect_url", "create_time")
 	if database.NoRows(err) {
 		return nil, nil
 	} else if err != nil {

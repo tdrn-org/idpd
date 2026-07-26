@@ -18,6 +18,7 @@ package rest
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -25,6 +26,7 @@ import (
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/buildinfo"
 	"github.com/tdrn-org/idpd/internal/data"
+	"github.com/tdrn-org/idpd/internal/domain"
 	serverhttp "github.com/tdrn-org/idpd/internal/http"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/scheme/forward"
@@ -62,7 +64,7 @@ func NewAPI(runtime Runtime) *API {
 	}
 }
 
-const responseNoSessionFound string = "no session found"
+const responseNoSessionFound string = "No session found"
 
 const basePath string = "/api"
 const PathPing string = basePath + "/ping"
@@ -85,11 +87,13 @@ func (api *API) Mount(server *httpserver.Instance) {
 
 // GET @BasePath/ping
 //
-//	@Summary		Ping the server
+//	@Summary		Ping server
 //	@Description	Ping the server to check general health
+//
 //	@Produce		text/plain
-//	@Success		200	{string}	string	"ok"
-//	@Failure		500	{string}	string	"server error"
+//
+//	@Success		200	{string}	string	"Ok"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/ping [get]
 func (api *API) PingGet(w http.ResponseWriter, r *http.Request) {
 	err := api.runtime.Ping(r.Context())
@@ -103,17 +107,17 @@ func (api *API) PingGet(w http.ResponseWriter, r *http.Request) {
 // GET @BasePath/info
 //
 //	@Summary		Query server info
-//	@Description	Retrieve basic server info like version and configured options
-//
-// . @Accept json
+//	@Description	Query static server info like version and configured options
 //
 //	@Produce		json
+//
 //	@Success		200	{object}	ServerInfo
-//	@Failure		500	{string}	string	"server error"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/info [get]
 func (api *API) InfoGet(w http.ResponseWriter, r *http.Request) {
 	info := &ServerInfo{
 		Version: buildinfo.Version(),
+		BaseURL: api.runtime.BaseURL().String(),
 	}
 	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, info)
 }
@@ -121,19 +125,20 @@ func (api *API) InfoGet(w http.ResponseWriter, r *http.Request) {
 type ServerInfo struct {
 	// The server version
 	Version string `json:"version"`
+	// The server's base URL
+	BaseURL string `json:"base_url"`
 }
 
 // GET @BasePath/session
 //
 //	@Summary		Get current session
-//	@Description	Retrieve the current session information (if a session exists)
-//
-// . @Accept json
+//	@Description	Get the current session (if a session exists)
 //
 //	@Produce		json
+//
 //	@Success		200	{object}	SessionInfo
-//	@Failure		404	{string}	string	"no session found"
-//	@Failure		500	{string}	string	"server error"
+//	@Failure		404	{string}	string	"No session found"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session [get]
 func (api *API) SessionGet(w http.ResponseWriter, r *http.Request) {
 	// TODO:implement
@@ -141,18 +146,28 @@ func (api *API) SessionGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type SessionInfo struct {
-	StrongAuth bool `json:"strong_auth"`
+	StrongAuth bool     `json:"strong_auth"`
+	User       UserInfo `json:"user"`
+}
+
+type UserInfo struct {
+	Login    string   `json:"login"`
+	Name     string   `json:"name"`
+	Nickname string   `json:"nickname"`
+	Picture  string   `json:"picture"`
+	Email    string   `json:"email"`
+	Groups   []string `json:"groups"`
 }
 
 // POST @BasePath/session
 //
-//	@Summary		Create a new session
+//	@Summary		Initiate a new session
 //	@Description	Initiate the authentication flow to create a new session
 //
-//	@Accept			json
 //	@Produce		json
-//	@Success		302	{string}	string.	"Redirect to login"
-//	@Failure		500	{string}	string	"server error"
+//
+//	@Success		302	{string}	string	"Redirect to ..."
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session [post]
 func (api *API) SessionPost(w http.ResponseWriter, r *http.Request) {
 	err := api.runtime.GetHandler(forward.Name).RedirectLogin(w, r)
@@ -164,14 +179,14 @@ func (api *API) SessionPost(w http.ResponseWriter, r *http.Request) {
 
 // DELETE @BasePath/session
 //
-//	@Summary		Delete the current session
-//	@Description	Deletes the current session (if a session exists)
+//	@Summary		Delete current session
+//	@Description	Delete the current session (if a session exists)
 //
-//	@Accept			json
 //	@Produce		json
+//
 //	@Success		200	{object}	SessionInfo
-//	@Failure		404	{string}	string	"no session found"
-//	@Failure		500	{string}	string	"server error"
+//	@Failure		404	{string}	string	"No session found"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session [delete]
 func (api *API) SessionDelete(w http.ResponseWriter, r *http.Request) {
 	// TODO:implement
@@ -180,52 +195,104 @@ func (api *API) SessionDelete(w http.ResponseWriter, r *http.Request) {
 
 // GET @BasePath/session/login
 //
-//	@Summary		Get current session
-//	@Description	Retrieve the current session information (if a session exists)
+//	@Summary		Get login information
+//	@Description	Get the login information for the authentication flow associated with the given authentication request
 //
 //	@Accept			json
 //	@Produce		json
 //
-//	@Param			handler	query		string	false	"Handler Name"
-//	@Param			id		path		string	true	"Benutzer ID"
+//	@Param			id	path		string	true	"Authentication request ID"
 //
-//	@Success		200		{object}	SessionInfo
-//	@Failure		404		{string}	string	"no session found"
-//	@Failure		500		{string}	string	"server error"
+//	@Success		200	{object}	SessionLoginInfo
+//	@Failure		400	{string}	string	"Bad Request"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session/login [get]
 func (api *API) SessionLoginGet(w http.ResponseWriter, r *http.Request) {
+	api.handleUserSessionRequest(w, r, api.sessionLoginGet)
+}
 
+func (api *API) sessionLoginGet(w http.ResponseWriter, r *http.Request, userSessionRequest *domain.UserSessionRequest) {
+	allowedVerifications := domain.AllVerifications
+	if userSessionRequest.AuthInfo.StrongVerificationRequired {
+		allowedVerifications = domain.StrongVerifications
+	}
+	response := &SessionLoginInfo{
+		LoginHint:            userSessionRequest.AuthInfo.Login,
+		Remember:             userSessionRequest.AuthInfo.Remember,
+		AllowedVerifications: allowedVerifications,
+	}
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, response)
+}
+
+type SessionLoginInfo struct {
+	// LoginHint contains a hint for the login to use, if any can be derived from context.
+	// Can be overriden by the user.
+	LoginHint string `json:"login_hint"`
+	// Remember indicates the default for whether to remember the login across browser sessions or not.
+	// Can be overriden by the user.
+	Remember bool `json:"remember"`
+	// AllowedVerifications lists the allowed verification methods for this login flow.
+	// Only verification methods from this list are accepted during this login flow.
+	AllowedVerifications []domain.Verification `json:"allowed_verifications"`
 }
 
 // POST @BasePath/session/login
 //
 //	@Summary		Create a new session
 //	@Description	Initiate the authentication flow to create a new session
+//
 //	@Accept			json
 //	@Produce		json
-//	@Success		302	{string}	string.	"Redirect to Login UI"
-//	@Failure		500	{string}	string	"server error"
+//
+//	@Param			request	body		SessionLoginRequest	true	"Request parameters"
+//
+//	@Success		200		{string}	string.				"Ok"
+//	@Failure		500		{string}	string				"Internal Server Error"
 //	@Router			/api/session/login [post]
 func (api *API) SessionLoginPost(w http.ResponseWriter, r *http.Request) {
 
 }
 
+type SessionLoginRequest struct {
+	// ID identifies the authentication request this request refers to
+	ID string `json:"id"`
+	// Login is the user login to use for the authentication
+	Login string `json:"login"`
+	// Remember indicates whether to remember the given login across browser sessions or not.
+	Remember bool `json:"remember"`
+	// Password is the user password to use for the authentication
+	Password string `json:"password"`
+	// Verification is the verification method to perform in the next step auf the authentication flow.
+	Verification domain.Verification `json:"verification"`
+}
+
 // GET @BasePath/session/verify
 //
-//	@Summary		Get current session
-//	@Description	Retrieve the current session information (if a session exists)
+//	@Summary		Get verify information
+//	@Description	Get the verify information for the authentication flow associated with the given authentication request
+//
 //	@Accept			json
 //	@Produce		json
 //
-//	@Param			handler	query		string	false	"Handler Name"
-//	@Param			id		path		string	true	"Benutzer ID"
+//	@Param			id	path		string	true	"Authentication request ID"
 //
-//	@Success		200		{object}	SessionInfo
-//	@Failure		404		{string}	string	"no session found"
-//	@Failure		500		{string}	string	"server error"
+//	@Success		200	{object}	SessionVerifyInfo
+//	@Failure		400	{string}	string	"Bad Request"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session/verify [get]
 func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
+	api.handleUserSessionRequest(w, r, api.sessionVerifyGet)
+}
 
+func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSessionRequest *domain.UserSessionRequest) {
+	response := &SessionVerifyInfo{
+		Verification: userSessionRequest.AuthInfo.Verification,
+	}
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, response)
+}
+
+type SessionVerifyInfo struct {
+	Verification domain.Verification `json:"verification"`
 }
 
 // POST @BasePath/session/verify
@@ -235,8 +302,27 @@ func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
 //	@Accept			json
 //	@Produce		json
 //	@Success		302	{string}	string.	"Redirect to Login UI"
-//	@Failure		500	{string}	string	"server error"
+//	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session/verify [post]
 func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
 
+}
+
+func (api *API) handleUserSessionRequest(w http.ResponseWriter, r *http.Request, handle func(http.ResponseWriter, *http.Request, *domain.UserSessionRequest)) {
+	params, err := serverhttp.QueryParams(r, "id")
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, err)
+		return
+	}
+	id := params[0]
+	userSessionRequest, err := api.runtime.DataStore().GetUserSessionRequest(r.Context(), id)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if userSessionRequest == nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, fmt.Errorf("unknown user session request id '%s'", id))
+		return
+	}
+	handle(w, r, userSessionRequest)
 }

@@ -27,10 +27,9 @@ import (
 )
 
 type AuthRequest struct {
-	ID                   string `db:"id"`
-	UserSessionRequestID string `db:"user_session_request_id"`
-	OIDCAuthRequest      []byte `db:"oidc_auth_request"`
-	CreateTime           int64  `db:"create_time"`
+	ID              string `db:"id"`
+	OIDCAuthRequest []byte `db:"oidc_auth_request"`
+	CreateTime      int64  `db:"create_time"`
 }
 
 //go:embed auth_request.insert.sql
@@ -42,14 +41,12 @@ func InsertAuthRequest(ctx context.Context, tx *database.Tx, userSessionRequest 
 		return nil, err
 	}
 	r := &AuthRequest{
-		ID:                   database.NewID(),
-		UserSessionRequestID: userSessionRequest.ID,
-		OIDCAuthRequest:      oidcAuthRequestBytes,
-		CreateTime:           database.Time2DB(tx.Now()),
+		ID:              userSessionRequest.ID,
+		OIDCAuthRequest: oidcAuthRequestBytes,
+		CreateTime:      database.Time2DB(tx.Now()),
 	}
 	err = tx.ExecTx(ctx, insertAuthRequestSQL,
 		r.ID,
-		r.UserSessionRequestID,
 		r.OIDCAuthRequest,
 		r.CreateTime)
 	if err != nil {
@@ -69,7 +66,7 @@ func SelectAuthRequestByID(ctx context.Context, tx *database.Tx, id string) (*Au
 	r := &AuthRequest{
 		ID: id,
 	}
-	err = database.ScanRow(row, r, "user_session_request_id", "oidc_auth_request", "create_time")
+	err = database.ScanRow(row, r, "oidc_auth_request", "create_time")
 	if database.NoRows(err) {
 		return nil, nil, nil
 	} else if err != nil {
@@ -92,7 +89,7 @@ func SelectAuthRequestByCode(ctx context.Context, tx *database.Tx, code string) 
 		return nil, nil, err
 	}
 	r := &AuthRequest{}
-	err = database.ScanRow(row, r, "id", "user_session_request_id", "oidc_auth_request", "create_time")
+	err = database.ScanRow(row, r, "id", "oidc_auth_request", "create_time")
 	if database.NoRows(err) {
 		return nil, nil, nil
 	} else if err != nil {

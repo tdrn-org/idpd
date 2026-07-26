@@ -59,7 +59,7 @@ func (h *Handler) activeSigningKey(ctx context.Context, algorithm jose.Signature
 func (h *Handler) createAuthRequest(ctx context.Context, oidcAuthRequest *oidc.AuthRequest, idTokenHintUserID string) (*opAuthRequest, error) {
 	var authRequest *opAuthRequest
 	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
-		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String(), idTokenHintUserID, h.runtime.DemoUser())
+		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String(), idTokenHintUserID, strongVerification(oidcAuthRequest), h.runtime.DemoUser())
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ func (h *Handler) getAuthRequest(ctx context.Context, id string) (*opAuthRequest
 		if err != nil {
 			return err
 		}
-		userSessionRequest, err := h.runtime.DataStore().GetUserSessionRequest(txCtx, r.UserSessionRequestID)
+		userSessionRequest, err := h.runtime.DataStore().GetUserSessionRequest(txCtx, r.ID)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func (h *Handler) getAuthRequestByCode(ctx context.Context, code string) (*opAut
 		if err != nil {
 			return err
 		}
-		userSessionRequest, err := h.runtime.DataStore().GetUserSessionRequest(txCtx, r.UserSessionRequestID)
+		userSessionRequest, err := h.runtime.DataStore().GetUserSessionRequest(txCtx, r.ID)
 		if err != nil {
 			return err
 		}

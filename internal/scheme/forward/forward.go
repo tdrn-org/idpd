@@ -51,6 +51,6 @@ func (h *Handler) RedirectLogin(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	http.Redirect(w, r, h.runtime.LoginURL(Name, authRequest.ID).String(), http.StatusFound)
+	http.Redirect(w, r, h.runtime.LoginURL(authRequest.ID).String(), http.StatusFound)
 	return nil
 }

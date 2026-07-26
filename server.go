@@ -230,7 +230,6 @@ func (s *Server) startRestAPI(_ context.Context, _ *config.Config) error {
 }
 
 func (s *Server) startWebUI(_ context.Context, _ *config.Config) error {
-	s.logger.Info("mounting web UI...")
 	return web.Mount(s.httpServer)
 }
 

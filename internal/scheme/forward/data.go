@@ -26,7 +26,7 @@ import (
 func (h *Handler) createAuthRequest(ctx context.Context, redirectURL string) (*model.AuthRequest, error) {
 	var authRequest *model.AuthRequest
 	err := h.runtime.DataStore().Atomic(ctx, func(txCtx context.Context, tx *database.Tx) error {
-		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String(), "", h.runtime.DemoUser())
+		userSessionRequest, err := h.runtime.DataStore().CreateUserSessionRequest(txCtx, h.Name().String(), "", false, h.runtime.DemoUser())
 		if err != nil {
 			return err
 		}

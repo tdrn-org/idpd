@@ -26,7 +26,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
-func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint string, demoUser *userstore.User) (*domain.UserSessionRequest, error) {
+func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint string, strongVerification bool, demoUser *userstore.User) (*domain.UserSessionRequest, error) {
 	ic, err := s.ActiveIntegrityContext(ctx)
 	if err != nil {
 		return nil, err
@@ -34,9 +34,10 @@ func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint
 	userSessionRequest := &domain.UserSessionRequest{
 		IC: ic,
 		AuthInfo: domain.UserSessionRequestAuthInfo{
-			Handler: handler,
-			State:   domain.UserSessionRequestStateCreated,
-			Login:   loginHint,
+			Handler:                    handler,
+			State:                      domain.UserSessionRequestStateCreated,
+			Login:                      loginHint,
+			StrongVerificationRequired: strongVerification,
 		},
 	}
 	if demoUser != nil {

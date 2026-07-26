@@ -18,14 +18,12 @@ package idpd
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/tdrn-org/go-tlsconf/tlsclient"
 	"github.com/tdrn-org/idpd/config"
-	"github.com/tdrn-org/idpd/internal/adapters/middleware/rest"
 	"golang.org/x/oauth2"
 )
 
@@ -45,22 +43,11 @@ func (s *Server) HandleFunc(pattern string, handler http.HandlerFunc) *url.URL {
 
 func (s *Server) Ping(ctx context.Context) error {
 	if s.httpServer == nil {
-		return fmt.Errorf("server not started")
+		return errors.New("server not started")
 	}
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsclient.GetConfig(),
-		},
-	}
-	pingURL := s.httpServer.BaseURL().JoinPath(rest.PathPing).String()
-	rsp, err := client.Get(pingURL)
-	if err != nil {
-		return fmt.Errorf("failed to access URL: '%s' (cause: %w)", pingURL, err)
-	}
-	if rsp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to ping URL: '%s' (status: %s)", pingURL, rsp.Status)
-	}
-	return nil
+	return errors.Join(
+		s.dataStore.Ping(ctx),
+		s.users.Ping(ctx))
 }
 
 type OAuth2API interface {
@@ -80,4 +67,14 @@ func (s *Server) OAuth2() OAuth2API {
 
 type SAML2API interface {
 	MetadataURL() *url.URL
+}
+
+func (s *Server) SAML2() SAML2API {
+	for _, schemeHandler := range s.schemeHandlers {
+		saml2API, ok := schemeHandler.(SAML2API)
+		if ok {
+			return saml2API
+		}
+	}
+	return nil
 }

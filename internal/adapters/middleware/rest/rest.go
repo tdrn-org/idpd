@@ -17,4 +17,4 @@
 package rest
 
 //go:generate go run -tags=tools github.com/swaggo/swag/cmd/swag fmt -g api.go
-//go:generate go run -tags=tools github.com/swaggo/swag/cmd/swag init -g api.go -o .
+//go:generate go run -tags=tools github.com/swaggo/swag/cmd/swag init -g api.go -o . --parseDependency

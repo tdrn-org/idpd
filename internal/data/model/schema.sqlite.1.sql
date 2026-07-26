@@ -46,11 +46,11 @@ CREATE TABLE oauth2_signing_key(
     PRIMARY KEY(id)
 );
 CREATE TABLE oauth2_auth_request(
-    id TEXT PRIMARY KEY,
-    user_session_request_id TEXT NOT NULL,
+    id TEXT NOT NULL,
     oidc_auth_request BLOB NOT NULL,
     create_time INTEGER NOT NULL,
-    FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
+    PRIMARY KEY(id),
+    FOREIGN KEY(id) REFERENCES user_session_request(id)
 );
 CREATE TABLE oauth2_auth_code(
     code TEXT PRIMARY KEY,
@@ -77,11 +77,11 @@ CREATE TABLE oauth2_refresh_token(
 -- Forward
 --
 CREATE TABLE forward_auth_request(
-    id TEXT PRIMARY KEY,
-    user_session_request_id TEXT NOT NULL,
+    id TEXT NOT NULL,
     redirect_url TEXT NOT NULL,
     create_time INTEGER NOT NULL,
-    FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
+    PRIMARY KEY(id),
+    FOREIGN KEY(id) REFERENCES user_session_request(id)
 );
 --
 -- EOF

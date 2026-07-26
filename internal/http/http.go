@@ -24,9 +24,7 @@ import (
 	"net/http"
 )
 
-const ResponseOK string = "ok"
-const ResponseBadRequest string = "bad request"
-const ResponseServerError string = "server error"
+const ResponseOK string = "Ok"
 
 func SendApplicationJSONResponse(logger *slog.Logger, w http.ResponseWriter, r *http.Request, status int, content any) {
 	w.Header().Set("Content-Type", "application/json")
