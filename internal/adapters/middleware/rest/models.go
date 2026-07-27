@@ -87,3 +87,9 @@ type SessionLoginRequest struct {
 	// Verification is the verification method to perform in the next step auf the authentication flow.
 	Verification domain.Verification `json:"verification"`
 }
+
+type SessionVerifyInfo struct {
+	Verification domain.Verification `json:"verification"`
+}
+
+type SessionVerifyInfoResponse ExtendedStatusResponse[SessionVerifyInfo]

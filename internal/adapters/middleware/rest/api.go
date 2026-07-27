@@ -308,14 +308,21 @@ func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSessionRequest *domain.UserSessionRequest) {
-	response := &SessionVerifyInfo{
+	response := &SessionVerifyInfoResponse{
+		Success: true,
+	}
+	if !userSessionRequest.ReadyForVerification() {
+		response.Status = http.StatusForbidden
+		response.Code = StatusCodeAuthRequestNotAccessible
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
+		return
+	}
+	response.Success = true
+	response.Status = http.StatusOK
+	response.Data = &SessionVerifyInfo{
 		Verification: userSessionRequest.AuthInfo.Verification,
 	}
-	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, response)
-}
-
-type SessionVerifyInfo struct {
-	Verification domain.Verification `json:"verification"`
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
 
 // POST @BasePath/session/verify
