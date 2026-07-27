@@ -9,7 +9,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tdrn-org/go-conf v0.0.6
 	github.com/tdrn-org/go-diff v0.1.3
-	github.com/tdrn-org/go-notify v0.0.4
+	github.com/tdrn-org/go-notify v0.0.5
 	github.com/tdrn-org/go-tlsconf v0.0.10
 	golang.org/x/crypto v0.54.0
 	golang.org/x/oauth2 v0.36.0

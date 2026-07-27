@@ -56,3 +56,23 @@ func TestSigningKey(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateSecureRand32(t *testing.T) {
+	key1, err := crypto.GenerateSecureRand32()
+	require.NoError(t, err)
+	require.Len(t, key1, 32)
+
+	key2, err := crypto.GenerateSecureRand32()
+	require.NoError(t, err)
+	require.NotEqual(t, key1, key2)
+}
+
+func TestGenerateSecureOTP(t *testing.T) {
+	otp1, err := crypto.GenerateSecureOTP(6)
+	require.NoError(t, err)
+	require.Len(t, otp1, 6)
+
+	otp2, err := crypto.GenerateSecureOTP(6)
+	require.NoError(t, err)
+	require.NotEqual(t, otp1, otp2)
+}

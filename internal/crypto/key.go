@@ -45,7 +45,7 @@ type Key struct {
 }
 
 func NewKey32(keyType string) (*Key, error) {
-	secret, err := Rand32()
+	secret, err := GenerateSecureRand32()
 	if err != nil {
 		return nil, err
 	}

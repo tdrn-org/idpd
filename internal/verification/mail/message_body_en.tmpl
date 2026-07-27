@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="x-apple-disable-message-reformatting"/>
+</head>
+<body style="margin: 1em">
+<h3>
+<img style="vertical-align:middle" alt="icon" src="data:image/png;base64,{{.Icon}}" />&nbsp;Login verification code
+</h3>
+<div>
+Enter the code
+<p style="font-size: 1.5em; font-weight: bold;">{{.Code}}</p>
+to verify your login.
+<hr style="margin: 1em 0em 1em">
+</div>
+<div>
+{{if and (eq .Address .Host) (ne .AddressURL "")}}
+<b>Host:</b> <a href="{{.AddressURL}}" target="_blank">{{.Host}}</a>
+{{else}}
+<b>Host:</b> {{.Host}}
+{{end}}
+</div>
+{{if (ne .Address .Host)}}
+<div>
+{{if (ne .AddressURL "")}}
+<b>Address:</b> <a href="{{.AddressURL}}" target="_blank">{{.Address}}</a>
+{{else}}
+<b>Address:</b> {{.Address}}
+{{end}}
+</div>
+{{end}}
+{{if (ne .City "")}}
+<div>
+<b>City:</b> {{.City}}
+</div>
+{{end}}
+{{if (ne .Country "")}}
+<div>
+<b>Country:</b> {{.Country}}
+</div>
+{{end}}
+{{if or (ne .Lat "0") (ne .Lng "0")}} 
+<div>
+{{if (ne .LocationURL "")}}
+<b>Location:</b> <a href="{{.LocationURL}}" target="_blank">{{.Lat}}, {{.Lng}}</a>
+{{else}}
+<b>Location:</b> {{.Lat}}, {{.Lng}}
+{{end}}
+</div>
+{{end}}
+</body>
+</html>

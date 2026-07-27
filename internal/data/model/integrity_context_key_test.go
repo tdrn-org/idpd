@@ -30,7 +30,7 @@ import (
 func TestIntegrityContextKey(t *testing.T) {
 	driver := newTestDB(t)
 
-	cryptoKeySecret, err := crypto.Rand32()
+	cryptoKeySecret, err := crypto.GenerateSecureRand32()
 	require.NoError(t, err)
 	cryptoKey := &crypto.Key{
 		ID:     crypto.KeyID(crypto.NewKeyID(t.Name())),

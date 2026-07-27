@@ -16,6 +16,13 @@
 
 package domain
 
+import (
+	"context"
+	"errors"
+)
+
+var ErrChallengeResponseMismatch error = errors.New("verification mismatch")
+
 // Verification represents the method used to verify a user's identity during authentication.
 type Verification string
 
@@ -50,4 +57,12 @@ func (v Verification) IsStrong() bool {
 // IsStrongAuth checks whether the named verification method counts as strong authentication.
 func IsStrongAuth(verificationName string) bool {
 	return Verification(verificationName).IsStrong()
+}
+
+type VerificationHandler interface {
+	GenerateChallenge(ctx context.Context, user *User) ([]byte, error)
+	VerifyResponse(ctx context.Context, challenge, response []byte) error
+}
+
+type VerificationHandlers interface {
 }
