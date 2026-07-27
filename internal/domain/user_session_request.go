@@ -92,7 +92,7 @@ func (r *UserSessionRequest) ReadyForLogin() bool {
 }
 
 func (r *UserSessionRequest) Login(ctx context.Context, userStore UserStore, login, password string, remember bool) error {
-	if r.AuthInfo.State == UserSessionRequestStateCreated {
+	if r.AuthInfo.State != UserSessionRequestStateCreated {
 		return fmt.Errorf("invalid user session request state for login: '%s'", r.AuthInfo.State)
 	}
 	err := userStore.AuthenticateUser(ctx, login, password)

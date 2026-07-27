@@ -284,6 +284,9 @@ func (api *API) sessionLoginPost(w http.ResponseWriter, r *http.Request, userSes
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
+	response.Success = true
+	response.Status = http.StatusOK
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
 
 // GET @BasePath/session/verify
