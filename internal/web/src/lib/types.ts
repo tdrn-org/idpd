@@ -28,8 +28,3 @@ export interface SessionLoginRequest {
 export interface SessionVerifyInfo {
   verification: string;
 }
-
-export interface SessionVerifyRequest {
-  id: string;
-  code: string;
-}

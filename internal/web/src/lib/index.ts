@@ -6,5 +6,4 @@ export type {
   SessionLoginInfo,
   SessionLoginRequest,
   SessionVerifyInfo,
-  SessionVerifyRequest
 } from './types.js';
