@@ -19,6 +19,7 @@ package model_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-database"
@@ -39,7 +40,7 @@ func TestUserSessionRequest(t *testing.T) {
 	// Insert
 	var r1 *model.UserSessionRequest
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		r, err := model.InsertUserSessionRequest(ctx, tx, userSessionRequest)
+		r, err := model.InsertUserSessionRequest(ctx, tx, userSessionRequest, time.Hour)
 		require.NoError(t, err)
 		require.NotNil(t, r)
 		r1 = r

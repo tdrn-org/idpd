@@ -19,6 +19,7 @@ package model
 import (
 	"context"
 	_ "embed"
+	"time"
 
 	"github.com/tdrn-org/go-database"
 	"github.com/tdrn-org/idpd/internal/domain"
@@ -29,6 +30,7 @@ type UserSessionRequest struct {
 	ID         string `db:"id"`
 	AuthInfo   []byte `db:"auth_info"`
 	CreateTime int64  `db:"create_time"`
+	ExpiryTime int64  `db:"expiry_time"`
 }
 
 func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.IntegrityContextStore) (*domain.UserSessionRequest, error) {
@@ -49,6 +51,7 @@ func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.Integr
 		ID:         r.ID,
 		IC:         ic,
 		CreateTime: database.DB2Time(r.CreateTime),
+		ExpiryTime: database.DB2Time(r.ExpiryTime),
 	}
 	err = encoding.UnmarshalJSONPayload(&userSessionRequest.AuthInfo, authInfoBytes)
 	if err != nil {
@@ -57,10 +60,30 @@ func (r *UserSessionRequest) ToDomain(ctx context.Context, icStore domain.Integr
 	return userSessionRequest, nil
 }
 
+//go:embed user_session_request.update.sql
+var updateUserSessionRequestSQL string
+
+func (r *UserSessionRequest) UpdateFromDomain(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest) error {
+	authInfoBytes, err := encoding.MarshalJSONPayload(&userSessionRequest.AuthInfo)
+	if err != nil {
+		return err
+	}
+	authInfoPayload, err := userSessionRequest.IC.Secure(authInfoBytes)
+	if err != nil {
+		return err
+	}
+	authInfoBytes, err = encoding.MarshalJSONPayload(authInfoPayload)
+	if err != nil {
+		return err
+	}
+	r.AuthInfo = authInfoBytes
+	return tx.ExecTx(ctx, updateUserSessionRequestSQL, r.AuthInfo, r.ID)
+}
+
 //go:embed user_session_request.insert.sql
 var insertUserSessionRequestSQL string
 
-func InsertUserSessionRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest) (*UserSessionRequest, error) {
+func InsertUserSessionRequest(ctx context.Context, tx *database.Tx, userSessionRequest *domain.UserSessionRequest, lifetimeDuration time.Duration) (*UserSessionRequest, error) {
 	authInfoBytes, err := encoding.MarshalJSONPayload(&userSessionRequest.AuthInfo)
 	if err != nil {
 		return nil, err
@@ -77,11 +100,13 @@ func InsertUserSessionRequest(ctx context.Context, tx *database.Tx, userSessionR
 		ID:         database.NewID(),
 		AuthInfo:   authInfoBytes,
 		CreateTime: database.Time2DB(tx.Now()),
+		ExpiryTime: database.Time2DB(tx.Now().Add(lifetimeDuration)),
 	}
 	err = tx.ExecTx(ctx, insertUserSessionRequestSQL,
 		r.ID,
 		r.AuthInfo,
-		r.CreateTime)
+		r.CreateTime,
+		r.ExpiryTime)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +125,7 @@ func SelectUserSessionRequestByID(ctx context.Context, tx *database.Tx, id strin
 	if err != nil {
 		return nil, err
 	}
-	err = database.ScanRow(row, r, "auth_info", "create_time")
+	err = database.ScanRow(row, r, "auth_info", "create_time", "expiry_time")
 	if database.NoRows(err) {
 		return nil, nil
 	} else if err != nil {

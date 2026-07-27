@@ -18,17 +18,11 @@ package userstore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"slices"
-	"time"
 
-	"golang.org/x/text/language"
+	"github.com/tdrn-org/idpd/internal/domain"
 )
-
-var ErrUserNotFound error = errors.New("user not found")
-var ErrNotAuthenticated error = errors.New("not authenticated")
 
 type Type string
 
@@ -43,9 +37,8 @@ type Config interface {
 
 type Backend interface {
 	Config
-	LookupUser(ctx context.Context, login string) (*User, error)
-	AuthenticateUser(ctx context.Context, login, password string) error
 	Ping(ctx context.Context) error
+	domain.UserStore
 	io.Closer
 }
 
@@ -64,47 +57,4 @@ func Open(config Config) (Backend, error) {
 		return nil, fmt.Errorf("unknown userstore backend type '%s'", backendType)
 	}
 	return open(config)
-}
-
-type User struct {
-	ID             string
-	Login          string
-	Name           string
-	GivenName      string
-	FamilyName     string
-	MiddleName     string
-	Nickname       string
-	Picture        string
-	Website        string
-	Birthdate      time.Time
-	Timezone       string
-	Locale         language.Tag
-	EmailAddresses []string
-	PhoneNumbers   []string
-	Addresses      []*UserAddress
-	UpdatedAt      time.Time
-	Groups         map[string]*Group
-}
-
-func (u *User) GroupNames() []string {
-	names := make([]string, 0, len(u.Groups))
-	for _, group := range u.Groups {
-		names = append(names, group.Name)
-	}
-	slices.Sort(names)
-	return names
-}
-
-type UserAddress struct {
-	Formatted  string
-	Street     string
-	Locality   string
-	Region     string
-	PostalCode string
-	Country    string
-}
-
-type Group struct {
-	ID   string
-	Name string
 }

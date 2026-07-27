@@ -42,12 +42,12 @@ func (v Verification) String() string {
 	return string(v)
 }
 
-// Strong returns true for verification methods that provide strong (multi-factor) authentication.
-func (v Verification) Strong() bool {
+// IsStrong returns true for verification methods that provide strong (multi-factor) authentication.
+func (v Verification) IsStrong() bool {
 	return v == VerificationPasskey || v == VerificationSecKey
 }
 
-// StrongAuth checks whether the named verification method counts as strong authentication.
-func StrongAuth(verificationName string) bool {
-	return Verification(verificationName).Strong()
+// IsStrongAuth checks whether the named verification method counts as strong authentication.
+func IsStrongAuth(verificationName string) bool {
+	return Verification(verificationName).IsStrong()
 }

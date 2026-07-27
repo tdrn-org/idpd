@@ -52,7 +52,7 @@
     </div>
 
     <!-- POST /api/session to initiate Forward-Auth -->
-    <form action="/api/session" method="POST" onsubmit={handleLogin}>
+    <form action="/api/session" method="POST" use:enhance>
       <button type="submit"
          class="inline-flex items-center gap-2 px-8 py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-medium rounded-lg transition-colors shadow-lg shadow-indigo-500/25 cursor-pointer">
         <LogIn class="w-5 h-5" />

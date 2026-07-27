@@ -23,7 +23,7 @@ import (
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/data"
-	"github.com/tdrn-org/idpd/internal/userstore"
+	"github.com/tdrn-org/idpd/internal/domain"
 )
 
 type Name string
@@ -37,8 +37,8 @@ type Runtime interface {
 	LoginURL(id string) *url.URL
 	VerifyURL(id string) *url.URL
 	DataStore() *data.Store
-	Users() userstore.Backend
-	DemoUser() *userstore.User
+	UserStore() domain.UserStore
+	DemoUser() *domain.User
 	Logger() *slog.Logger
 }
 

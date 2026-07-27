@@ -21,12 +21,34 @@ definitions:
         description: The server version
         type: string
     type: object
+  rest.ServerInfoResponse:
+    properties:
+      code:
+        $ref: '#/definitions/rest.StatusCode'
+      data:
+        $ref: '#/definitions/rest.ServerInfo'
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
   rest.SessionInfo:
     properties:
       strong_auth:
         type: boolean
       user:
         $ref: '#/definitions/rest.UserInfo'
+    type: object
+  rest.SessionInfoResponse:
+    properties:
+      code:
+        $ref: '#/definitions/rest.StatusCode'
+      data:
+        $ref: '#/definitions/rest.SessionInfo'
+      status:
+        type: integer
+      success:
+        type: boolean
     type: object
   rest.SessionLoginInfo:
     properties:
@@ -48,12 +70,19 @@ definitions:
           Can be overriden by the user.
         type: boolean
     type: object
+  rest.SessionLoginInfoResponse:
+    properties:
+      code:
+        $ref: '#/definitions/rest.StatusCode'
+      data:
+        $ref: '#/definitions/rest.SessionLoginInfo'
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
   rest.SessionLoginRequest:
     properties:
-      id:
-        description: ID identifies the authentication request this request refers
-          to
-        type: string
       login:
         description: Login is the user login to use for the authentication
         type: string
@@ -84,6 +113,23 @@ definitions:
         description: ID identifies the authentication request this request refers
           to
         type: string
+    type: object
+  rest.StatusCode:
+    enum:
+    - no_session
+    - auth_request_not_accessible
+    type: string
+    x-enum-varnames:
+    - StatusCodeNoSession
+    - StatusCodeAuthRequestNotAccessible
+  rest.StatusResponse:
+    properties:
+      code:
+        $ref: '#/definitions/rest.StatusCode'
+      status:
+        type: integer
+      success:
+        type: boolean
     type: object
   rest.UserInfo:
     properties:
@@ -122,7 +168,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/rest.ServerInfo'
+            $ref: '#/definitions/rest.ServerInfoResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -132,12 +178,12 @@ paths:
     get:
       description: Ping the server to check general health
       produces:
-      - text/plain
+      - application/json
       responses:
         "200":
-          description: Ok
+          description: OK
           schema:
-            type: string
+            $ref: '#/definitions/rest.StatusResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -152,11 +198,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/rest.SessionInfo'
-        "404":
-          description: No session found
+            $ref: '#/definitions/rest.StatusResponse'
+        "401":
+          description: Unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/rest.StatusResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -170,11 +216,11 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/rest.SessionInfo'
-        "404":
-          description: No session found
+            $ref: '#/definitions/rest.SessionInfoResponse'
+        "401":
+          description: Unauthorized
           schema:
-            type: string
+            $ref: '#/definitions/rest.SessionInfoResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -194,7 +240,7 @@ paths:
           schema:
             type: string
       summary: Initiate a new session
-  /api/session/login:
+  /api/session/login/{id}:
     get:
       consumes:
       - application/json
@@ -212,11 +258,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/rest.SessionLoginInfo'
+            $ref: '#/definitions/rest.SessionLoginInfoResponse'
         "400":
           description: Bad Request
           schema:
-            type: string
+            $ref: '#/definitions/rest.SessionLoginInfoResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/rest.SessionLoginInfoResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -227,6 +277,11 @@ paths:
       - application/json
       description: Initiate the authentication flow to create a new session
       parameters:
+      - description: Authentication request ID
+        in: path
+        name: id
+        required: true
+        type: string
       - description: Request parameters
         in: body
         name: request
@@ -237,19 +292,17 @@ paths:
       - application/json
       responses:
         "200":
-          description: Ok
+          description: OK
           schema:
-            additionalProperties:
-              type: boolean
-            type: object
+            $ref: '#/definitions/rest.StatusResponse'
         "400":
           description: Bad Request
           schema:
-            type: string
-        "401":
-          description: Unauthorized
+            $ref: '#/definitions/rest.StatusResponse'
+        "403":
+          description: Forbidden
           schema:
-            type: string
+            $ref: '#/definitions/rest.StatusResponse'
         "500":
           description: Internal Server Error
           schema:

@@ -18,6 +18,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -47,6 +49,9 @@ type UserSessionRequest struct {
 
 	// CreateTime is the moment this request was created.
 	CreateTime time.Time
+
+	// ExpiryTime is the moment this request will expire.
+	ExpiryTime time.Time
 }
 
 type UserSessionRequestAuthInfo struct {
@@ -76,9 +81,50 @@ type UserSessionRequestAuthInfo struct {
 
 	// VerificationTime records when verification was completed.
 	VerificationTime time.Time `json:"verificition_time"`
+}
 
-	// SessionID is a UUID generated at request creation, carried through the entire flow.
-	SessionID string `json:"session_id"`
+func (r *UserSessionRequest) IsExpired(now time.Time) bool {
+	return time.Now().After(r.ExpiryTime)
+}
+
+func (r *UserSessionRequest) ReadyForLogin() bool {
+	return r.AuthInfo.State == UserSessionRequestStateCreated
+}
+
+func (r *UserSessionRequest) Login(ctx context.Context, userStore UserStore, login, password string, remember bool) error {
+	if r.AuthInfo.State == UserSessionRequestStateCreated {
+		return fmt.Errorf("invalid user session request state for login: '%s'", r.AuthInfo.State)
+	}
+	err := userStore.AuthenticateUser(ctx, login, password)
+	if err == nil {
+		r.AuthInfo.Login = login
+		r.AuthInfo.Remember = remember
+		r.AuthInfo.LoginTime = time.Now()
+	} else if !errors.Is(err, ErrUserNotFound) && !errors.Is(err, ErrNotAuthenticated) {
+		return err
+	}
+	r.AuthInfo.State = UserSessionRequestStateIdentified
+	return nil
+}
+
+func (r *UserSessionRequest) SetVerificationChallenge(verification Verification) error {
+	if r.AuthInfo.StrongVerificationRequired && !verification.IsStrong() {
+		return fmt.Errorf("insufficent user session request verification method: '%s'", verification)
+	}
+	r.AuthInfo.Verification = verification
+	//TODO: Set challenge
+	return nil
+}
+
+func (r *UserSessionRequest) ReadyForVerification() bool {
+	return r.AuthInfo.State == UserSessionRequestStateIdentified
+}
+
+func (r *UserSessionRequest) AllowedVerifications() []Verification {
+	if r.AuthInfo.StrongVerificationRequired {
+		return StrongVerifications
+	}
+	return AllVerifications
 }
 
 // UserSessionRequestStore is the persistence port for UserSessionRequest.

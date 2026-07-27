@@ -14,6 +14,7 @@ CREATE TABLE user_session_request(
     id TEXT NOT NULL,
     auth_info BLOB NOT NULL,
     create_time INTEGER NOT NULL,
+    expiry_time INTEGER NOT NULL,
     PRIMARY KEY(id)
 );
 --

@@ -21,9 +21,10 @@ import (
 	"log/slog"
 	"net/url"
 
+	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/data"
+	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/scheme"
-	"github.com/tdrn-org/idpd/internal/userstore"
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
 	"github.com/tdrn-org/idpd/internal/web"
 )
@@ -40,6 +41,10 @@ func (runtime *serverRuntime) BaseURL() *url.URL {
 	return runtime.server.baseURL
 }
 
+func (runtime *serverRuntime) SessionCookie() *httpserver.CookieHandler {
+	return runtime.server.sessionCookie
+}
+
 func (runtime *serverRuntime) LoginURL(id string) *url.URL {
 	return web.LoginURL(runtime.server.baseURL, id)
 }
@@ -52,11 +57,11 @@ func (runtime *serverRuntime) DataStore() *data.Store {
 	return runtime.server.dataStore
 }
 
-func (runtime *serverRuntime) Users() userstore.Backend {
+func (runtime *serverRuntime) UserStore() domain.UserStore {
 	return runtime.server.users
 }
 
-func (runtime *serverRuntime) DemoUser() *userstore.User {
+func (runtime *serverRuntime) DemoUser() *domain.User {
 	if runtime.server.users.Type() != demo.Type {
 		return nil
 	}

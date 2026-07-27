@@ -24,7 +24,7 @@ import (
 )
 
 func (h *Handler) populateUserinfo(ctx context.Context, userinfo *oidc.UserInfo, subject string, scopes []string) error {
-	user, err := h.runtime.Users().LookupUser(ctx, subject)
+	user, err := h.runtime.UserStore().LookupUser(ctx, subject)
 	if err != nil {
 		return err
 	}

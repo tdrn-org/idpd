@@ -42,7 +42,7 @@ const indexDocument string = "index.html"
 
 // fallbackDocument is the SPA shell emitted by the static adapter. It is served for
 // client side routes which are not prerendered (see svelte.config.js).
-const fallbackDocument string = "200.html"
+const fallbackDocument string = "index.html"
 
 // immutablePrefix marks the build artifacts emitted with a content hash in their name.
 const immutablePrefix string = "/_app/immutable/"

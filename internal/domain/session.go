@@ -22,7 +22,7 @@ import (
 
 // Session represents an authenticated user session.
 // It is created when a UserSessionRequest reaches the "done" state.
-type Session struct {
+type UserSession struct {
 	// ID is the unique session identifier.
 	ID string
 
@@ -58,11 +58,11 @@ type Session struct {
 }
 
 // IsActive returns true if the session has not been terminated.
-func (s *Session) IsActive() bool {
+func (s *UserSession) IsActive() bool {
 	return !s.Terminated
 }
 
 // CanSatisfyStrong returns true if this session can satisfy a strong-required auth request.
-func (s *Session) CanSatisfyStrong() bool {
-	return s.Strong || s.Verification.Strong()
+func (s *UserSession) CanSatisfyStrong() bool {
+	return s.Strong || s.Verification.IsStrong()
 }

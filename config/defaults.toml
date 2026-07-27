@@ -44,8 +44,11 @@ provider = "none"
 file = "./GeoLite2-City.mmdb"
 
 [general]
+session_cookie_name = "idpd_session"
+session_cookie_domain = ""
 integrity_context_key_rotation = "720h"
 integrity_context_key_lifetime = "1440h"
+auth_request_lifetime = "5m"
 
 [oauth2]
 enabled = true

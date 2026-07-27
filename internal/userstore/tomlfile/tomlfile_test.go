@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/userstore"
 	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 )
@@ -58,7 +59,7 @@ func TestLookupUser(t *testing.T) {
 
 	// Lookup unknown user
 	user0, err := backend.LookupUser(t.Context(), "user0")
-	require.Error(t, userstore.ErrUserNotFound, err)
+	require.Error(t, domain.ErrUserNotFound, err)
 	require.Nil(t, user0)
 
 	// Close
@@ -82,7 +83,7 @@ func TestAuthenticateUser(t *testing.T) {
 
 	// Authenticate user with wrong password
 	err = backend.AuthenticateUser(t.Context(), "user3", "password2")
-	require.Error(t, userstore.ErrNotAuthenticated, err)
+	require.Error(t, domain.ErrNotAuthenticated, err)
 
 	// Close
 	err = backend.Close()

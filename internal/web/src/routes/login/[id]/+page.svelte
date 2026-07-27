@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { api, m } from '$lib';
   import type { SessionLoginInfo } from '$lib/types.js';
@@ -14,10 +14,10 @@
   let error = $state('');
 
   $effect(() => {
-    const urlId = $page.url.searchParams.get('id');
-    if (urlId) {
-      id = urlId;
-      loadLoginInfo(urlId);
+    const authReqestId = page.params.id;
+    if (authReqestId) {
+      id = authReqestId;
+      loadLoginInfo(authReqestId);
     } else {
       error = 'Keine Authentifizierungs-ID gefunden.';
       loading = false;

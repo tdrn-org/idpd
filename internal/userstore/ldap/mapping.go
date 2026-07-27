@@ -26,7 +26,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/go-ldap/ldap/v3"
-	"github.com/tdrn-org/idpd/internal/userstore"
+	"github.com/tdrn-org/idpd/internal/domain"
 	"golang.org/x/text/language"
 )
 
@@ -45,81 +45,81 @@ var RFC2798MappingConfig *AttributeMappingConfig = &AttributeMappingConfig{}
 //go:embed mapping.rfc2798.toml
 var rfc2798MappingConfigData string
 
-type userAttributeMappingFunc func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger)
+type userAttributeMappingFunc func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger)
 
 type userAttributeMappingsTable map[string]userAttributeMappingFunc
 
 func (mappings userAttributeMappingsTable) bindConfig(config *UserAttributeMappingConfig) {
-	mappings.bindMapping(config.Login, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Login, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Login = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Name, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Name, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Name = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.GivenName, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.GivenName, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.GivenName = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.FamilyName, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.FamilyName, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.FamilyName = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Picture, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Picture, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Picture = mapPictureAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Website, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Website, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Website = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Birthdate, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Birthdate, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Birthdate = mapTimeAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Timezone, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Timezone, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Timezone = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Locale, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Locale, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.Locale = mapLanguageTagAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.EmailAddresses, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.EmailAddresses, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.EmailAddresses = mapStringsAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.PhoneNumbers, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.PhoneNumbers, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.PhoneNumbers = mapStringsAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Street, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Street, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		if len(user.Addresses) == 0 {
-			user.Addresses = append(user.Addresses, &userstore.UserAddress{})
+			user.Addresses = append(user.Addresses, &domain.UserAddress{})
 		}
 		user.Addresses[0].Street = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Locality, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Locality, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		if len(user.Addresses) == 0 {
-			user.Addresses = append(user.Addresses, &userstore.UserAddress{})
+			user.Addresses = append(user.Addresses, &domain.UserAddress{})
 		}
 		user.Addresses[0].Locality = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Region, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Region, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		if len(user.Addresses) == 0 {
-			user.Addresses = append(user.Addresses, &userstore.UserAddress{})
+			user.Addresses = append(user.Addresses, &domain.UserAddress{})
 		}
 		user.Addresses[0].Region = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.PostalCode, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.PostalCode, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		if len(user.Addresses) == 0 {
-			user.Addresses = append(user.Addresses, &userstore.UserAddress{})
+			user.Addresses = append(user.Addresses, &domain.UserAddress{})
 		}
 		user.Addresses[0].PostalCode = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Country, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Country, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		if len(user.Addresses) == 0 {
-			user.Addresses = append(user.Addresses, &userstore.UserAddress{})
+			user.Addresses = append(user.Addresses, &domain.UserAddress{})
 		}
 		user.Addresses[0].Country = mapStringAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.UpdatedAt, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.UpdatedAt, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		user.UpdatedAt = mapTimeAttribute(attribute, logger)
 	})
-	mappings.bindMapping(config.Groups, func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Groups, func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		groupDNs := mapStringsAttribute(attribute, logger)
 		for _, groupDN := range groupDNs {
-			user.Groups[groupDN] = &userstore.Group{ID: groupDN}
+			user.Groups[groupDN] = &domain.Group{ID: groupDN}
 		}
 	})
 }
@@ -130,7 +130,7 @@ func (mappings userAttributeMappingsTable) bindMapping(name string, mapping user
 	}
 	nextMapping, ok := mappings[name]
 	if ok {
-		mappings[name] = func(user *userstore.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+		mappings[name] = func(user *domain.User, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 			mapping(user, attribute, logger)
 			nextMapping(user, attribute, logger)
 		}
@@ -143,7 +143,7 @@ func (mappings userAttributeMappingsTable) attributes() []string {
 	return slices.Collect(maps.Keys(mappings))
 }
 
-func (mappings userAttributeMappingsTable) mapEntry(user *userstore.User, entry *ldap.Entry, logger *slog.Logger) {
+func (mappings userAttributeMappingsTable) mapEntry(user *domain.User, entry *ldap.Entry, logger *slog.Logger) {
 	user.ID = entry.DN
 	for _, attribute := range entry.Attributes {
 		attributeName := attribute.Name
@@ -155,12 +155,12 @@ func (mappings userAttributeMappingsTable) mapEntry(user *userstore.User, entry 
 	}
 }
 
-type groupAttributeMappingFunc func(group *userstore.Group, attribute *ldap.EntryAttribute, logger *slog.Logger)
+type groupAttributeMappingFunc func(group *domain.Group, attribute *ldap.EntryAttribute, logger *slog.Logger)
 
 type groupAttributeMappingsTable map[string]groupAttributeMappingFunc
 
 func (mappings groupAttributeMappingsTable) bindConfig(config *GroupAttributeMappingConfig) {
-	mappings.bindMapping(config.Name, func(group *userstore.Group, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+	mappings.bindMapping(config.Name, func(group *domain.Group, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 		group.Name = mapStringAttribute(attribute, logger)
 	})
 }
@@ -171,7 +171,7 @@ func (mappings groupAttributeMappingsTable) bindMapping(name string, mapping gro
 	}
 	nextMapping, ok := mappings[name]
 	if ok {
-		mappings[name] = func(group *userstore.Group, attribute *ldap.EntryAttribute, logger *slog.Logger) {
+		mappings[name] = func(group *domain.Group, attribute *ldap.EntryAttribute, logger *slog.Logger) {
 			mapping(group, attribute, logger)
 			nextMapping(group, attribute, logger)
 		}
@@ -184,11 +184,11 @@ func (mappings groupAttributeMappingsTable) attributes() []string {
 	return slices.Collect(maps.Keys(mappings))
 }
 
-func (mappings groupAttributeMappingsTable) mapEntry(user *userstore.User, entry *ldap.Entry, logger *slog.Logger) {
+func (mappings groupAttributeMappingsTable) mapEntry(user *domain.User, entry *ldap.Entry, logger *slog.Logger) {
 	DN := entry.DN
 	group, ok := user.Groups[DN]
 	if !ok {
-		group = &userstore.Group{ID: DN}
+		group = &domain.Group{ID: DN}
 		user.Groups[DN] = group
 	}
 	for _, attribute := range entry.Attributes {

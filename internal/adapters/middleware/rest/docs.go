@@ -32,7 +32,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.ServerInfo"
+                            "$ref": "#/definitions/rest.ServerInfoResponse"
                         }
                     },
                     "500": {
@@ -48,14 +48,14 @@ const docTemplate = `{
             "get": {
                 "description": "Ping the server to check general health",
                 "produces": [
-                    "text/plain"
+                    "application/json"
                 ],
                 "summary": "Ping server",
                 "responses": {
                     "200": {
-                        "description": "Ok",
+                        "description": "OK",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
                     "500": {
@@ -78,13 +78,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.SessionInfo"
+                            "$ref": "#/definitions/rest.SessionInfoResponse"
                         }
                     },
-                    "404": {
-                        "description": "No session found",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.SessionInfoResponse"
                         }
                     },
                     "500": {
@@ -126,13 +126,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.SessionInfo"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
-                    "404": {
-                        "description": "No session found",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
                     "500": {
@@ -144,7 +144,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/session/login": {
+        "/api/session/login/{id}": {
             "get": {
                 "description": "Get the login information for the authentication flow associated with the given authentication request",
                 "consumes": [
@@ -167,13 +167,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.SessionLoginInfo"
+                            "$ref": "#/definitions/rest.SessionLoginInfoResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.SessionLoginInfoResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/rest.SessionLoginInfoResponse"
                         }
                     },
                     "500": {
@@ -195,6 +201,13 @@ const docTemplate = `{
                 "summary": "Create a new session",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "Authentication request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
                         "description": "Request parameters",
                         "name": "request",
                         "in": "body",
@@ -206,24 +219,21 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Ok",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
                     "500": {
@@ -350,6 +360,23 @@ const docTemplate = `{
                 }
             }
         },
+        "rest.ServerInfoResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/rest.StatusCode"
+                },
+                "data": {
+                    "$ref": "#/definitions/rest.ServerInfo"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "rest.SessionInfo": {
             "type": "object",
             "properties": {
@@ -358,6 +385,23 @@ const docTemplate = `{
                 },
                 "user": {
                     "$ref": "#/definitions/rest.UserInfo"
+                }
+            }
+        },
+        "rest.SessionInfoResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/rest.StatusCode"
+                },
+                "data": {
+                    "$ref": "#/definitions/rest.SessionInfo"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },
@@ -381,13 +425,26 @@ const docTemplate = `{
                 }
             }
         },
+        "rest.SessionLoginInfoResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/rest.StatusCode"
+                },
+                "data": {
+                    "$ref": "#/definitions/rest.SessionLoginInfo"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "rest.SessionLoginRequest": {
             "type": "object",
             "properties": {
-                "id": {
-                    "description": "ID identifies the authentication request this request refers to",
-                    "type": "string"
-                },
                 "login": {
                     "description": "Login is the user login to use for the authentication",
                     "type": "string"
@@ -428,6 +485,31 @@ const docTemplate = `{
                 "id": {
                     "description": "ID identifies the authentication request this request refers to",
                     "type": "string"
+                }
+            }
+        },
+        "rest.StatusCode": {
+            "type": "string",
+            "enum": [
+                "no_session",
+                "auth_request_not_accessible"
+            ],
+            "x-enum-varnames": [
+                "StatusCodeNoSession",
+                "StatusCodeAuthRequestNotAccessible"
+            ]
+        },
+        "rest.StatusResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/rest.StatusCode"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
                 }
             }
         },

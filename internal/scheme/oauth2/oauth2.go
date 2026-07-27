@@ -169,7 +169,7 @@ func (h *Handler) AddClient(cfg *config.OAuth2ClientConfig) {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	params, err := serverhttp.QueryParams(r, "id")
+	params, err := serverhttp.GetQueryParams(r, "id")
 	if err != nil {
 		serverhttp.SendError(h.logger, w, r, http.StatusBadRequest, err)
 		return

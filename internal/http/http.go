@@ -51,7 +51,7 @@ func SendError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, stat
 	http.Error(w, http.StatusText(status), status)
 }
 
-func QueryParams(r *http.Request, keys ...string) ([]string, error) {
+func GetQueryParams(r *http.Request, keys ...string) ([]string, error) {
 	values := make([]string, 0, len(keys))
 	paramErrs := make([]error, 0, len(keys))
 	query := r.URL.Query()
@@ -63,4 +63,12 @@ func QueryParams(r *http.Request, keys ...string) ([]string, error) {
 		}
 	}
 	return values, errors.Join(paramErrs...)
+}
+
+func DecodeApplicationJSONRequest(r *http.Request, v any) error {
+	err := json.NewDecoder(r.Body).Decode(v)
+	if err != nil {
+		return fmt.Errorf("failed to decode JSON request body (cause: %w)", err)
+	}
+	return nil
 }

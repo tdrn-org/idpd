@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/userstore"
 	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
 	"golang.org/x/text/language"
@@ -99,8 +100,11 @@ func (b *demoBackend) StoreName() string {
 	return b.config.StoreName()
 }
 
-func (b *demoBackend) LookupUser(_ context.Context, _ string) (*userstore.User, error) {
-	userstoreUser := &userstore.User{
+func (*demoBackend) Ping(_ context.Context) error {
+	return nil
+}
+func (b *demoBackend) LookupUser(_ context.Context, _ string) (*domain.User, error) {
+	userstoreUser := &domain.User{
 		ID:             b.config.User.Login,
 		Login:          b.config.User.Login,
 		Name:           b.config.User.Name,
@@ -115,10 +119,10 @@ func (b *demoBackend) LookupUser(_ context.Context, _ string) (*userstore.User, 
 		Locale:         b.config.User.Locale,
 		EmailAddresses: b.config.User.EmailAddresses,
 		PhoneNumbers:   b.config.User.PhoneNumbers,
-		Groups:         make(map[string]*userstore.Group, len(b.config.User.Groups)),
+		Groups:         make(map[string]*domain.Group, len(b.config.User.Groups)),
 	}
 	for _, address := range b.config.User.Addresses {
-		userstoreUserAddress := &userstore.UserAddress{
+		userstoreUserAddress := &domain.UserAddress{
 			Formatted:  address.Formatted,
 			Street:     address.Street,
 			Locality:   address.Locality,
@@ -129,7 +133,7 @@ func (b *demoBackend) LookupUser(_ context.Context, _ string) (*userstore.User, 
 		userstoreUser.Addresses = append(userstoreUser.Addresses, userstoreUserAddress)
 	}
 	for groupID, group := range b.config.User.Groups {
-		userstoreUserGroup := &userstore.Group{
+		userstoreUserGroup := &domain.Group{
 			ID:   groupID,
 			Name: group.Name,
 		}
@@ -139,10 +143,6 @@ func (b *demoBackend) LookupUser(_ context.Context, _ string) (*userstore.User, 
 }
 
 func (b *demoBackend) AuthenticateUser(_ context.Context, _, _ string) error {
-	return nil
-}
-
-func (*demoBackend) Ping(_ context.Context) error {
 	return nil
 }
 

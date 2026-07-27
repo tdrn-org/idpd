@@ -17,6 +17,9 @@
 package config
 
 type GeneralConfig struct {
+	SessionCookieName           string       `toml:"session_cookie_name"`
+	SessionCookieDomain         string       `toml:"session_cookie_domain"`
 	IntegrityContextKeyRotation DurationSpec `toml:"integrity_context_key_rotation"`
 	IntegrityContextKeyLifetime DurationSpec `toml:"integrity_context_key_lifetime"`
+	AuthRequestLifetime         DurationSpec `toml:"auth_request_lifetime"`
 }

@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/userstore"
 	"golang.org/x/text/language"
 )
@@ -128,12 +129,16 @@ func (b *fileBackend) StoreName() string {
 	return b.config.StoreName()
 }
 
-func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.User, error) {
+func (*fileBackend) Ping(_ context.Context) error {
+	return nil
+}
+
+func (b *fileBackend) LookupUser(ctx context.Context, login string) (*domain.User, error) {
 	user, ok := b.users[login]
 	if !ok {
-		return nil, userstore.ErrUserNotFound
+		return nil, domain.ErrUserNotFound
 	}
-	userstoreUser := &userstore.User{
+	userstoreUser := &domain.User{
 		ID:             user.Login,
 		Login:          user.Login,
 		Name:           user.Name,
@@ -148,10 +153,10 @@ func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.
 		Locale:         user.Locale,
 		EmailAddresses: user.EmailAddresses,
 		PhoneNumbers:   user.PhoneNumbers,
-		Groups:         make(map[string]*userstore.Group, len(user.Groups)),
+		Groups:         make(map[string]*domain.Group, len(user.Groups)),
 	}
 	for _, address := range user.Addresses {
-		userstoreUserAddress := &userstore.UserAddress{
+		userstoreUserAddress := &domain.UserAddress{
 			Formatted:  address.Formatted,
 			Street:     address.Street,
 			Locality:   address.Locality,
@@ -162,7 +167,7 @@ func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.
 		userstoreUser.Addresses = append(userstoreUser.Addresses, userstoreUserAddress)
 	}
 	for groupID, group := range user.Groups {
-		userstoreUserGroup := &userstore.Group{
+		userstoreUserGroup := &domain.Group{
 			ID:   groupID,
 			Name: group.Name,
 		}
@@ -174,15 +179,11 @@ func (b *fileBackend) LookupUser(ctx context.Context, login string) (*userstore.
 func (b *fileBackend) AuthenticateUser(ctx context.Context, login, password string) error {
 	user, ok := b.users[login]
 	if !ok {
-		return userstore.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	if user.Password != password {
-		return userstore.ErrNotAuthenticated
+		return domain.ErrNotAuthenticated
 	}
-	return nil
-}
-
-func (*fileBackend) Ping(_ context.Context) error {
 	return nil
 }
 

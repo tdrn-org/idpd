@@ -30,13 +30,13 @@ export const api = {
   session: () => get<SessionInfo>('/session'),
 
   sessionLoginInfo: (id: string) =>
-    get<SessionLoginInfo>(`/session/login?id=${encodeURIComponent(id)}`),
+    get<SessionLoginInfo>(`/session/login/${id}`),
 
   sessionLogin: (req: SessionLoginRequest) =>
     post<{ ok: boolean }>('/session/login', req),
 
   sessionVerifyInfo: (id: string) =>
-    get<SessionVerifyInfo>(`/session/verify?id=${encodeURIComponent(id)}`),
+    get<SessionVerifyInfo>(`/session/verify/${id}`),
 
   sessionVerify: (req: SessionVerifyRequest) =>
     post<{ ok: boolean; redirect?: string }>('/session/verify', req),

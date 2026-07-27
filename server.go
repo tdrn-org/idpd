@@ -54,6 +54,7 @@ type Server struct {
 	users               userstore.Backend
 	httpServer          *httpserver.Instance
 	baseURL             *url.URL
+	sessionCookie       *httpserver.CookieHandler
 	schemeHandlers      map[scheme.Name]scheme.Handler
 	jobTicker           *time.Ticker
 	jobTickerShutdown   chan any
@@ -202,6 +203,15 @@ func (s *Server) startHttpServer(ctx context.Context, cfg *config.Config) error 
 		s.baseURL = cfg.Server.PublicURL.URL
 	} else {
 		s.baseURL = httpServer.BaseURL()
+	}
+	// TODO: Review cookie settings
+	s.sessionCookie = &httpserver.CookieHandler{
+		Name:     cfg.General.SessionCookieName,
+		Domain:   cfg.General.SessionCookieDomain,
+		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   1800,
 	}
 	// Replace early logger by one attributed with actual URL
 	s.logger = slog.With(slog.String("baseURL", s.baseURL.String()))

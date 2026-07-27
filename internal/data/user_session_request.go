@@ -23,10 +23,9 @@ import (
 
 	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/domain"
-	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
-func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint string, strongVerification bool, demoUser *userstore.User) (*domain.UserSessionRequest, error) {
+func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint string, strongVerification bool, demoUser *domain.User) (*domain.UserSessionRequest, error) {
 	ic, err := s.ActiveIntegrityContext(ctx)
 	if err != nil {
 		return nil, err
@@ -54,7 +53,7 @@ func (s *Store) CreateUserSessionRequest(ctx context.Context, handler, loginHint
 	}
 	defer tx.RollbackUncommitedTx(txCtx)
 
-	_, err = model.InsertUserSessionRequest(txCtx, tx, userSessionRequest)
+	_, err = model.InsertUserSessionRequest(txCtx, tx, userSessionRequest, time.Duration(s.cfg.AuthRequestLifetime))
 	if err != nil {
 		return nil, err
 	}
@@ -95,5 +94,25 @@ func (s *Store) GetUserSessionRequest(ctx context.Context, id string) (*domain.U
 }
 
 func (s *Store) UpdateUserSessionRequest(ctx context.Context, request *domain.UserSessionRequest) error {
+	txCtx, tx, err := s.driver.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.RollbackUncommitedTx(txCtx)
+
+	r, err := model.SelectUserSessionRequestByID(txCtx, tx, request.ID)
+	if err != nil {
+		return err
+	}
+	err = r.UpdateFromDomain(txCtx, tx, request)
+	if err != nil {
+		return err
+	}
+
+	err = tx.CommitTx(txCtx)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

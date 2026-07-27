@@ -29,6 +29,7 @@ import (
 	"github.com/go-ldap/ldap/v3"
 	"github.com/tdrn-org/go-pool"
 	"github.com/tdrn-org/go-tlsconf/tlsclient"
+	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/userstore"
 )
 
@@ -148,7 +149,16 @@ func (b *ldapBackend) StoreName() string {
 	return b.config.StoreName()
 }
 
-func (b *ldapBackend) LookupUser(ctx context.Context, login string) (*userstore.User, error) {
+func (b *ldapBackend) Ping(ctx context.Context) error {
+	conn, err := b.bind(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	return nil
+}
+
+func (b *ldapBackend) LookupUser(ctx context.Context, login string) (*domain.User, error) {
 	conn, err := b.bind(ctx)
 	if err != nil {
 		return nil, err
@@ -169,17 +179,17 @@ func (b *ldapBackend) LookupUser(ctx context.Context, login string) (*userstore.
 	return user, nil
 }
 
-func (b *ldapBackend) lookupUser(conn *pool.Resource[*ldap.Conn], login string) (*userstore.User, error) {
+func (b *ldapBackend) lookupUser(conn *pool.Resource[*ldap.Conn], login string) (*domain.User, error) {
 	userSearchFilter := fmt.Sprintf("(&(%s=%s)%s)", ldap.EscapeFilter(b.config.UserAttributeMapping.Login), ldap.EscapeFilter(login), b.config.UserSearch.Filter)
 	userSearchRequest := ldap.NewSearchRequest(b.config.UserSearch.BaseDN, b.config.UserSearch.Scope, b.config.UserSearch.DerefAliases, 0, 0, false, userSearchFilter, b.userAttributes, nil)
 	userSearchResult, err := conn.Get().Search(userSearchRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search user")
 	}
-	user := &userstore.User{Groups: make(map[string]*userstore.Group)}
+	user := &domain.User{Groups: make(map[string]*domain.Group)}
 	switch len(userSearchResult.Entries) {
 	case 0:
-		return nil, userstore.ErrUserNotFound
+		return nil, domain.ErrUserNotFound
 	case 1:
 		b.userAttributeMappings.mapEntry(user, userSearchResult.Entries[0], b.logger)
 		return user, nil
@@ -188,7 +198,7 @@ func (b *ldapBackend) lookupUser(conn *pool.Resource[*ldap.Conn], login string) 
 	}
 }
 
-func (b *ldapBackend) resolveGroupsByDN(conn *pool.Resource[*ldap.Conn], user *userstore.User) error {
+func (b *ldapBackend) resolveGroupsByDN(conn *pool.Resource[*ldap.Conn], user *domain.User) error {
 	groupCount := len(user.Groups)
 	if groupCount == 0 {
 		return nil
@@ -217,7 +227,7 @@ func (b *ldapBackend) resolveGroupsByDN(conn *pool.Resource[*ldap.Conn], user *u
 	return nil
 }
 
-func (b *ldapBackend) resolveGroupsByMembers(conn *pool.Resource[*ldap.Conn], user *userstore.User) error {
+func (b *ldapBackend) resolveGroupsByMembers(conn *pool.Resource[*ldap.Conn], user *domain.User) error {
 	groupSearchFilter := fmt.Sprintf("(&%s(%s=%s))", b.config.GroupSearch.Filter, ldap.EscapeFilter(b.config.GroupAttributeMapping.Members), ldap.EscapeFilter(user.ID))
 	groupSearchRequest := ldap.NewSearchRequest(b.config.GroupSearch.BaseDN, b.config.GroupSearch.Scope, b.config.GroupSearch.DerefAliases, 0, 0, false, groupSearchFilter, b.groupAttributes, nil)
 	groupSearchResult, err := conn.Get().Search(groupSearchRequest)
@@ -242,17 +252,8 @@ func (b *ldapBackend) AuthenticateUser(ctx context.Context, login, password stri
 	}
 	err = conn.Get().Bind(user.ID, password)
 	if err != nil {
-		return fmt.Errorf("%w (cause: %w)", userstore.ErrNotAuthenticated, err)
+		return fmt.Errorf("%w (cause: %w)", domain.ErrNotAuthenticated, err)
 	}
-	return nil
-}
-
-func (b *ldapBackend) Ping(ctx context.Context) error {
-	conn, err := b.bind(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
 	return nil
 }
 

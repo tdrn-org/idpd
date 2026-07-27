@@ -22,17 +22,9 @@ const loginEndpoint string = "/login"
 const verifyEndpoint string = "/verify"
 
 func LoginURL(baseURL *url.URL, id string) *url.URL {
-	loginURL := baseURL.JoinPath(loginEndpoint)
-	query := loginURL.Query()
-	query.Set("id", id)
-	loginURL.RawQuery = query.Encode()
-	return loginURL
+	return baseURL.JoinPath(loginEndpoint, id)
 }
 
 func VerifyURL(baseURL *url.URL, id string) *url.URL {
-	loginURL := baseURL.JoinPath(verifyEndpoint)
-	query := loginURL.Query()
-	query.Set("id", id)
-	loginURL.RawQuery = query.Encode()
-	return loginURL
+	return baseURL.JoinPath(verifyEndpoint, id)
 }
