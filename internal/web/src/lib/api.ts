@@ -32,14 +32,14 @@ export const api = {
   sessionLoginInfo: (id: string) =>
     get<SessionLoginInfo>(`/session/login/${id}`),
 
-  sessionLogin: (req: SessionLoginRequest) =>
-    post<{ ok: boolean }>('/session/login', req),
+  sessionLogin: (id: string, req: SessionLoginRequest) =>
+    post<{ ok: boolean }>(`/session/login/${id}`, req),
 
   sessionVerifyInfo: (id: string) =>
     get<SessionVerifyInfo>(`/session/verify/${id}`),
 
-  sessionVerify: (req: SessionVerifyRequest) =>
-    post<{ ok: boolean; redirect?: string }>('/session/verify', req),
+  sessionVerify: (id: string, req: Omit<SessionVerifyRequest, 'id'>) =>
+    post<{ ok: boolean; redirect?: string }>(`/session/verify/${id}`, { id, ...req }),
 
   startSession: () =>
     postNoBody('/session'),

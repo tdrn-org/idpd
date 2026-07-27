@@ -12,10 +12,10 @@
   let error = $state('');
 
   $effect(() => {
-    const authReqestId = page.params.id;
-    if (authReqestId) {
-      id = authReqestId;
-      loadVerifyInfo(authReqestId);
+    const authRequestId = page.params.id;
+    if (authRequestId) {
+      id = authRequestId;
+      loadVerifyInfo(authRequestId);
     } else {
       error = 'Keine Authentifizierungs-ID gefunden.';
       loading = false;
@@ -37,7 +37,7 @@
     loading = true;
     error = '';
     try {
-      await api.sessionVerify({ id, code });
+      await api.sessionVerify(id, { code });
       goto('/user');
     } catch (err) {
       error = err instanceof Error ? err.message : 'Verifikation fehlgeschlagen.';
@@ -51,6 +51,7 @@
       case 'email': return m.verify_email_label();
       case 'totp': return m.verify_totp_label();
       case 'passkey': return m.verify_passkey_label();
+      case 'seckey': return m.verify_seckey_label();
       default: return m.verify_code_label();
     }
   }
@@ -103,6 +104,6 @@
       </button>
     </form>
 
-    <a href="/login?id={id}" class="text-stone-500 hover:text-stone-300 text-sm transition-colors">{m.back_to_login()}</a>
+    <a href="/login/{id}" class="text-stone-500 hover:text-stone-300 text-sm transition-colors">{m.back_to_login()}</a>
   </div>
 {/if}

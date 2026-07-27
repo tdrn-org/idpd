@@ -19,7 +19,6 @@ export interface SessionLoginInfo {
 }
 
 export interface SessionLoginRequest {
-  id: string;
   login: string;
   password: string;
   remember: boolean;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { enhance } from '$app/forms';
   import { api, m } from '$lib';
   import { LogIn, FingerprintPattern, Loader } from '@lucide/svelte';
 

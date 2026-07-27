@@ -10,14 +10,15 @@
   let username = $state('');
   let password = $state('');
   let remember = $state(false);
+  let verification = $state('');
   let loading = $state(true);
   let error = $state('');
 
   $effect(() => {
-    const authReqestId = page.params.id;
-    if (authReqestId) {
-      id = authReqestId;
-      loadLoginInfo(authReqestId);
+    const authRequestId = page.params.id;
+    if (authRequestId) {
+      id = authRequestId;
+      loadLoginInfo(authRequestId);
     } else {
       error = 'Keine Authentifizierungs-ID gefunden.';
       loading = false;
@@ -27,6 +28,10 @@
   async function loadLoginInfo(authId: string) {
     try {
       loginInfo = await api.sessionLoginInfo(authId);
+      // Default to first allowed verification
+      if (loginInfo.allowed_verifications.length > 0) {
+        verification = loginInfo.allowed_verifications[0];
+      }
     } catch (err) {
       error = 'Login-Informationen konnten nicht geladen werden.';
     } finally {
@@ -39,19 +44,27 @@
     loading = true;
     error = '';
     try {
-      const verification = loginInfo?.allowed_verifications?.[0] ?? 'email';
-      await api.sessionLogin({
-        id,
+      await api.sessionLogin(id, {
         login: username,
         password,
         remember,
         verification
       });
-      goto(`/verify?id=${encodeURIComponent(id)}`);
+      goto(`/verify/${encodeURIComponent(id)}`);
     } catch (err) {
       error = err instanceof Error ? err.message : 'Anmeldung fehlgeschlagen.';
     } finally {
       loading = false;
+    }
+  }
+
+  function verificationLabel(v: string): string {
+    switch (v) {
+      case 'email': return m.verify_email_label?.() ?? 'E-Mail';
+      case 'totp': return m.verify_totp_label?.() ?? 'TOTP';
+      case 'passkey': return m.verify_passkey_label?.() ?? 'Passkey';
+      case 'seckey': return m.verify_seckey_label?.() ?? 'Security Key';
+      default: return v;
     }
   }
 </script>
@@ -100,6 +113,21 @@
           required
         />
       </div>
+
+      {#if loginInfo && loginInfo.allowed_verifications.length > 1}
+        <div>
+          <label for="verification" class="block text-sm font-medium text-stone-300 mb-1">{m.login_verification?.() ?? '2. Faktor'}</label>
+          <select
+            id="verification"
+            bind:value={verification}
+            class="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-colors"
+          >
+            {#each loginInfo.allowed_verifications as v}
+              <option value={v}>{verificationLabel(v)}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
 
       {#if loginInfo}
         <label class="flex items-center gap-2 text-sm text-stone-400 cursor-pointer">
