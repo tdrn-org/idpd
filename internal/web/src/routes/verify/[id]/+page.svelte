@@ -12,10 +12,10 @@
   let error = $state('');
 
   $effect(() => {
-    const authRequestId = page.params.id;
-    if (authRequestId) {
-      id = authRequestId;
-      loadVerifyInfo(authRequestId);
+    const authId = page.params.id;
+    if (authId) {
+      id = authId;
+      loadVerifyInfo(authId);
     } else {
       error = 'Keine Authentifizierungs-ID gefunden.';
       loading = false;
