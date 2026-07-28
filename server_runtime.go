@@ -19,7 +19,9 @@ package idpd
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"net/url"
+	"slices"
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/data"
@@ -69,14 +71,22 @@ func (runtime *serverRuntime) DemoUser() *domain.User {
 	return user
 }
 
+func (runtime *serverRuntime) GetHandler(name scheme.Name) scheme.Handler {
+	return runtime.server.schemeHandlers[scheme.Name(name)]
+}
+
+func (runtime *serverRuntime) GetVerificationHandlerRegistry() domain.VerificationHandlerRegistry {
+	return runtime.server.verificationHandlers
+}
+
+func (runtime *serverRuntime) ListVerifications() []domain.Verification {
+	return slices.Collect(maps.Keys(runtime.server.verificationHandlers))
+}
+
 func (runtime *serverRuntime) Logger() *slog.Logger {
 	return runtime.server.logger
 }
 
 func (runtime *serverRuntime) Ping(ctx context.Context) error {
 	return runtime.server.Ping(ctx)
-}
-
-func (runtime *serverRuntime) GetHandler(name scheme.Name) scheme.Handler {
-	return runtime.server.schemeHandlers[scheme.Name(name)]
 }

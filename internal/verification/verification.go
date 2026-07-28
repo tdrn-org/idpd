@@ -17,8 +17,6 @@
 package verification
 
 import (
-	"context"
-
 	"github.com/tdrn-org/idpd/internal/domain"
 )
 
@@ -26,6 +24,5 @@ type Runtime interface {
 }
 
 type Handler interface {
-	GenerateChallenge(ctx context.Context, user *domain.User) ([]byte, error)
-	VerifyResponse(ctx context.Context, challenge, response []byte) error
+	domain.VerificationHandler
 }

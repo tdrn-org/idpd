@@ -35,6 +35,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/adapters/middleware/rest"
 	"github.com/tdrn-org/idpd/internal/data"
 	"github.com/tdrn-org/idpd/internal/data/model"
+	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/scheme/forward"
 	"github.com/tdrn-org/idpd/internal/scheme/oauth2"
@@ -43,24 +44,26 @@ import (
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
 	"github.com/tdrn-org/idpd/internal/userstore/ldap"
 	"github.com/tdrn-org/idpd/internal/userstore/tomlfile"
+	"github.com/tdrn-org/idpd/internal/verification/mail"
 	"github.com/tdrn-org/idpd/internal/web"
 )
 
 const serverJobTickerSchedule time.Duration = 5 * time.Minute
 
 type Server struct {
-	cfg                 *config.Config
-	dataStore           *data.Store
-	users               userstore.Backend
-	httpServer          *httpserver.Instance
-	baseURL             *url.URL
-	sessionCookie       *httpserver.CookieHandler
-	schemeHandlers      map[scheme.Name]scheme.Handler
-	jobTicker           *time.Ticker
-	jobTickerShutdown   chan any
-	jobTickerShutdownWG sync.WaitGroup
-	jobs                []jobFunc
-	logger              *slog.Logger
+	cfg                  *config.Config
+	dataStore            *data.Store
+	users                userstore.Backend
+	httpServer           *httpserver.Instance
+	baseURL              *url.URL
+	sessionCookie        *httpserver.CookieHandler
+	schemeHandlers       map[scheme.Name]scheme.Handler
+	verificationHandlers verificationHandlerRegistry
+	jobTicker            *time.Ticker
+	jobTickerShutdown    chan any
+	jobTickerShutdownWG  sync.WaitGroup
+	jobs                 []jobFunc
+	logger               *slog.Logger
 }
 
 func StartServer(ctx context.Context, cfg *config.Config) (*Server, error) {
@@ -69,9 +72,10 @@ func StartServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 	// We will reset the logger after listener has been created.
 	earlyLogger := slog.With(slog.String("server", cfg.Server.Address))
 	s := &Server{
-		cfg:            cfg,
-		schemeHandlers: make(map[scheme.Name]scheme.Handler),
-		logger:         earlyLogger,
+		cfg:                  cfg,
+		schemeHandlers:       make(map[scheme.Name]scheme.Handler),
+		verificationHandlers: make(verificationHandlerRegistry),
+		logger:               earlyLogger,
 	}
 	startFuncs := []func(context.Context, *config.Config) error{
 		s.startStore,
@@ -79,6 +83,7 @@ func StartServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		s.startHttpServer,
 		s.startRestAPI,
 		s.startWebUI,
+		s.startVerificationHandlers,
 		s.startSchemeHandlers,
 		s.startJobTicker,
 	}
@@ -243,6 +248,17 @@ func (s *Server) startWebUI(_ context.Context, _ *config.Config) error {
 	return web.Mount(s.httpServer)
 }
 
+func (s *Server) startVerificationHandlers(_ context.Context, cfg *config.Config) error {
+	{
+		handler, err := mail.NewHandler(s.runtime(), &cfg.Mail)
+		if err != nil {
+			return err
+		}
+		s.verificationHandlers[domain.VerificationEmail] = handler
+	}
+	return nil
+}
+
 func (s *Server) startSchemeHandlers(_ context.Context, cfg *config.Config) error {
 	if cfg.OAuth2.Enabled {
 		s.logger.Info("enabling OAuth2 scheme")
@@ -308,3 +324,30 @@ func (s *Server) runJobs() {
 }
 
 type jobFunc func(ctx context.Context)
+
+type verificationHandlerRegistry map[domain.Verification]domain.VerificationHandler
+
+func (r verificationHandlerRegistry) GetVerificationHandler(verification domain.Verification) domain.VerificationHandler {
+	return r[verification]
+}
+
+func (r verificationHandlerRegistry) ListVerifications(strong bool) []domain.Verification {
+	defaultVerifications := []domain.Verification{
+		domain.VerificationEmail,
+		domain.VerificationTOTP,
+		domain.VerificationPasskey,
+		domain.VerificationSecKey,
+	}
+	verifications := make([]domain.Verification, 0, len(defaultVerifications))
+	for _, verification := range defaultVerifications {
+		if strong && !verification.IsStrong() {
+			continue
+		}
+		_, available := r[verification]
+		if !available {
+			continue
+		}
+		verifications = append(verifications, verification)
+	}
+	return verifications
+}

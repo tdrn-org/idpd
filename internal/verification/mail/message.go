@@ -58,8 +58,8 @@ func (p *templateParams) ResolveSubject() (string, error) {
 	return p.Subject, nil
 }
 
-const templateSubject string = "verification_code_subject.tmpl"
-const templateBody string = "verification_code_body.tmpl"
+const templateSubject string = "message_subject.tmpl"
+const templateBody string = "message_body.tmpl"
 
 func loadAndExecuteSubjectTemplate(ctx context.Context, params *templateParams) (string, error) {
 	localizedName := i18n.FileName(templateSubject, i18n.Locale(ctx))

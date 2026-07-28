@@ -20,7 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/tdrn-org/go-log"
 )
 
 // UserSessionRequestState represents the lifecycle state of an authentication request.
@@ -91,40 +94,45 @@ func (r *UserSessionRequest) ReadyForLogin() bool {
 	return r.AuthInfo.State == UserSessionRequestStateCreated
 }
 
-func (r *UserSessionRequest) Login(ctx context.Context, userStore UserStore, login, password string, remember bool) error {
+func (r *UserSessionRequest) Login(ctx context.Context, userStore UserStore, login, password string, remember bool) (*User, error) {
+	logger := slog.With(slog.String("login", login))
 	if r.AuthInfo.State != UserSessionRequestStateCreated {
-		return fmt.Errorf("invalid user session request state for login: '%s'", r.AuthInfo.State)
+		return nil, fmt.Errorf("invalid user session request state for login: '%s'", r.AuthInfo.State)
 	}
-	err := userStore.AuthenticateUser(ctx, login, password)
+	user, err := userStore.LookupUser(ctx, login)
 	if err == nil {
+		err = userStore.AuthenticateUser(ctx, login, password)
+	}
+	if err == nil {
+		log.Notice(logger, "user authenticated")
 		r.AuthInfo.Login = login
 		r.AuthInfo.Remember = remember
 		r.AuthInfo.LoginTime = time.Now()
 	} else if !errors.Is(err, ErrUserNotFound) && !errors.Is(err, ErrNotAuthenticated) {
-		return err
+		return nil, err
+	} else {
+		log.Notice(logger, "user not authenticated", slog.Any("err", err))
 	}
 	r.AuthInfo.State = UserSessionRequestStateIdentified
-	return nil
+	return user, nil
 }
 
-func (r *UserSessionRequest) SetVerificationChallenge(verification Verification) error {
+func (r *UserSessionRequest) SetVerificationChallenge(ctx context.Context, verificationHandler VerificationHandler, user *User) error {
+	verification := verificationHandler.Verification()
 	if r.AuthInfo.StrongVerificationRequired && !verification.IsStrong() {
 		return fmt.Errorf("insufficent user session request verification method: '%s'", verification)
 	}
+	challenge, err := verificationHandler.GenerateChallenge(ctx, user)
+	if err != nil {
+		return fmt.Errorf("failed to generate %s verification challenge for user '%s' (cause: %w)", verification, user.Login, err)
+	}
 	r.AuthInfo.Verification = verification
-	//TODO: Set challenge
+	r.AuthInfo.VerificationChallenge = challenge
 	return nil
 }
 
 func (r *UserSessionRequest) ReadyForVerification() bool {
 	return r.AuthInfo.State == UserSessionRequestStateIdentified
-}
-
-func (r *UserSessionRequest) AllowedVerifications() []Verification {
-	if r.AuthInfo.StrongVerificationRequired {
-		return StrongVerifications
-	}
-	return AllVerifications
 }
 
 // UserSessionRequestStore is the persistence port for UserSessionRequest.

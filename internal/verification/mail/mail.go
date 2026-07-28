@@ -26,6 +26,7 @@ import (
 	"github.com/tdrn-org/idpd/internal/crypto"
 	"github.com/tdrn-org/idpd/internal/domain"
 	"github.com/tdrn-org/idpd/internal/verification"
+	"github.com/tdrn-org/idpd/internal/web"
 )
 
 const codeLenght int = 6
@@ -45,6 +46,10 @@ func NewHandler(runtime verification.Runtime, cfg *config.MailConfig) (*Handler,
 		messageFactory: messageFactory,
 	}
 	return handler, nil
+}
+
+func (h *Handler) Verification() domain.Verification {
+	return domain.VerificationEmail
 }
 
 func (h *Handler) GenerateChallenge(ctx context.Context, user *domain.User) ([]byte, error) {
@@ -86,6 +91,7 @@ func (h *Handler) prepareMessage(ctx context.Context, user *domain.User, code st
 	params := &templateParams{
 		Recipients: []*stdmail.Address{recipient},
 		Code:       code,
+		Icon:       web.FavIcon(),
 	}
 	subject, err := loadAndExecuteSubjectTemplate(ctx, params)
 	if err != nil {

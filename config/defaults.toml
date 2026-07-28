@@ -37,6 +37,8 @@ password = ""
 
 [geoip]
 provider = "none"
+address_url_template = "https://whois.domaintools.com/{{.Address}}"
+location_url_template = "https://maps.google.com/?q={{.Lat}},{{.Lng}}"
 
 [geoip.none]
 
@@ -137,3 +139,13 @@ email_addresses = [ "demo.user@localhost" ]
 phone_numbers = [ "" ]
 addresses = [{ formatted = "", street = "", locality = "", region = "", postal_code = "", country = "" }]
 groups = { "groupId" = { name = "Demo Users" } }
+
+[mail]
+address = "localhost:587"
+user = "idpd"
+password = ""
+from_address = ""
+from_name = "IdPD"
+keep_alive_timeout = "60s"
+tls_mode = "starttls"
+ehlo_identity = ""

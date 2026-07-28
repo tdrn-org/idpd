@@ -33,18 +33,6 @@ const (
 	VerificationSecKey  Verification = "seckey"
 )
 
-var AllVerifications []Verification = []Verification{
-	VerificationEmail,
-	VerificationTOTP,
-	VerificationPasskey,
-	VerificationSecKey,
-}
-
-var StrongVerifications []Verification = []Verification{
-	VerificationPasskey,
-	VerificationSecKey,
-}
-
 func (v Verification) String() string {
 	return string(v)
 }
@@ -60,9 +48,12 @@ func IsStrongAuth(verificationName string) bool {
 }
 
 type VerificationHandler interface {
+	Verification() Verification
 	GenerateChallenge(ctx context.Context, user *User) ([]byte, error)
 	VerifyResponse(ctx context.Context, challenge, response []byte) error
 }
 
-type VerificationHandlers interface {
+type VerificationHandlerRegistry interface {
+	GetVerificationHandler(verification Verification) VerificationHandler
+	ListVerifications(strong bool) []Verification
 }

@@ -40,9 +40,10 @@ type Runtime interface {
 	DataStore() *data.Store
 	UserStore() domain.UserStore
 	DemoUser() *domain.User
+	GetHandler(name scheme.Name) scheme.Handler
+	GetVerificationHandlerRegistry() domain.VerificationHandlerRegistry
 	Logger() *slog.Logger
 	Ping(ctx context.Context) error
-	GetHandler(name scheme.Name) scheme.Handler
 }
 
 //	@title			IdPD REST API
@@ -220,15 +221,17 @@ func (api *API) sessionLoginGet(w http.ResponseWriter, r *http.Request, userSess
 	if !userSessionRequest.ReadyForLogin() {
 		response.Status = http.StatusForbidden
 		response.Code = StatusCodeAuthRequestNotAccessible
+		api.logAPIFailure(r, response.Status, nil)
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
+	allowedVerifications := api.runtime.GetVerificationHandlerRegistry().ListVerifications(userSessionRequest.AuthInfo.StrongVerificationRequired)
 	response.Success = true
 	response.Status = http.StatusOK
 	response.Data = &SessionLoginInfo{
 		LoginHint:            userSessionRequest.AuthInfo.Login,
 		Remember:             userSessionRequest.AuthInfo.Remember,
-		AllowedVerifications: userSessionRequest.AllowedVerifications(),
+		AllowedVerifications: allowedVerifications,
 	}
 	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
@@ -260,27 +263,28 @@ func (api *API) sessionLoginPost(w http.ResponseWriter, r *http.Request, userSes
 	defer r.Body.Close()
 	request := &SessionLoginRequest{}
 	err := serverhttp.DecodeApplicationJSONRequest(r, request)
-	if err != nil {
+	verificationHandler := api.runtime.GetVerificationHandlerRegistry().GetVerificationHandler(request.Verification)
+	if err != nil || verificationHandler == nil {
 		// This should not happen; respond simple and short
 		response.Status = http.StatusBadRequest
+		api.logAPIFailure(r, response.Status, err)
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
-	err = userSessionRequest.Login(r.Context(), api.runtime.UserStore(), request.Login, request.Password, request.Remember)
+	user, err := userSessionRequest.Login(r.Context(), api.runtime.UserStore(), request.Login, request.Password, request.Remember)
 	if err != nil {
 		response.Status = http.StatusInternalServerError
+		api.logAPIFailure(r, response.Status, err)
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
-	err = userSessionRequest.SetVerificationChallenge(request.Verification)
-	if err != nil {
-		response.Status = http.StatusBadRequest
-		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
-		return
+	err = userSessionRequest.SetVerificationChallenge(r.Context(), verificationHandler, user)
+	if err == nil {
+		err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
 	}
-	err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
 	if err != nil {
 		response.Status = http.StatusInternalServerError
+		api.logAPIFailure(r, response.Status, err)
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
@@ -314,6 +318,7 @@ func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSes
 	if !userSessionRequest.ReadyForVerification() {
 		response.Status = http.StatusForbidden
 		response.Code = StatusCodeAuthRequestNotAccessible
+		api.logAPIFailure(r, response.Status, nil)
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
@@ -440,4 +445,9 @@ func (api *API) handleWithUserSession(w http.ResponseWriter, r *http.Request, ha
 	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 	// TODO: Invoke handle if UserSession exists
 	_ = handle
+}
+
+func (api *API) logAPIFailure(r *http.Request, status int, cause error) {
+	statusText := fmt.Sprintf("%03d: %s", status, http.StatusText(status))
+	api.runtime.Logger().Warn("api handler failure", slog.String("path", r.URL.Path), slog.String("status", statusText), slog.Any("err", cause))
 }

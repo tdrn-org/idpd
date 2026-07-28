@@ -18,8 +18,10 @@ package web
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"path"
@@ -188,4 +190,17 @@ func Messages(locale language.Tag) (map[string]string, error) {
 		return nil, fmt.Errorf("failed to decode message bundle '%s' (cause: %w)", fileName, err)
 	}
 	return messages, nil
+}
+
+func FavIcon() string {
+	file, err := buildFS.Open("build/favicon.png")
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	icon, err := io.ReadAll(file)
+	if err != nil {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(icon)
 }

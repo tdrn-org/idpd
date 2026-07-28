@@ -25,8 +25,10 @@ import (
 )
 
 type GeoIPConfig struct {
-	Provider GeoIPProvider `toml:"provider"`
-	Mappings []struct {
+	Provider            GeoIPProvider `toml:"provider"`
+	AddressURLTemplate  string        `toml:"address_url_template"`
+	LocationURLTemplate string        `toml:"location_url_template"`
+	Mappings            []struct {
 		Networks NetworkSpecs `toml:"networks"`
 		Host     string       `toml:"host"`
 	} `toml:"mapping"`

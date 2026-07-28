@@ -37,6 +37,7 @@ type Config struct {
 	SAML2     SAML2Config     `toml:"saml2"`
 	Forward   ForwardConfig   `toml:"forward"`
 	Userstore UserstoreConfig `toml:"userstore"`
+	Mail      MailConfig      `toml:"mail"`
 }
 
 //go:embed defaults.toml
