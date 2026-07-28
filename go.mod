@@ -93,7 +93,7 @@ require (
 	github.com/tdrn-org/go-httpserver v0.1.1
 	github.com/tdrn-org/go-log v0.5.7
 	github.com/tdrn-org/go-pool v0.0.2
-	github.com/zitadel/oidc/v3 v3.48.0
+	github.com/zitadel/oidc/v3 v3.48.1
 	github.com/zitadel/saml v0.4.1
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
