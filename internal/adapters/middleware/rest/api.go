@@ -309,7 +309,7 @@ func (api *API) sessionLoginPost(w http.ResponseWriter, r *http.Request, userSes
 	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
 
-// GET @BasePath/session/verify
+// GET @BasePath/session/verify/{id}
 //
 //	@Summary		Get verify information
 //	@Description	Get the verify information for the authentication flow associated with the given authentication request
@@ -322,7 +322,7 @@ func (api *API) sessionLoginPost(w http.ResponseWriter, r *http.Request, userSes
 //	@Success		200	{object}	SessionVerifyInfoResponse
 //	@Failure		400	{object}	SessionVerifyInfoResponse
 //	@Failure		500	{string}	string	"Internal Server Error"
-//	@Router			/api/session/verify [get]
+//	@Router			/api/session/verify/{id} [get]
 func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
 	api.handleWithUserSessionRequest(w, r, api.sessionVerifyGet)
 }
@@ -346,7 +346,7 @@ func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSes
 	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
 
-// POST @BasePath/session/verify
+// POST @BasePath/session/verify/{id}
 //
 //	@Summary		Verify authentication
 //	@Description	Verify the authentication by providing the verification code
@@ -359,7 +359,7 @@ func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSes
 //	@Success		200		{object}	StatusResponse
 //	@Failure		400		{object}	StatusResponse
 //	@Failure		403		{object}	StatusResponse
-//	@Router			/api/session/verify [post]
+//	@Router			/api/session/verify/{id} [post]
 func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
 	api.handleWithUserSessionRequest(w, r, api.sessionVerifyPost)
 }

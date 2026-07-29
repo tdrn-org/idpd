@@ -245,7 +245,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/session/verify": {
+        "/api/session/verify/{id}": {
             "get": {
                 "description": "Get the verify information for the authentication flow associated with the given authentication request",
                 "consumes": [
