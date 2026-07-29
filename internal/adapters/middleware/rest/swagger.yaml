@@ -348,6 +348,11 @@ paths:
       - application/json
       description: Verify the authentication by providing the verification code
       parameters:
+      - description: Authentication request ID
+        in: path
+        name: id
+        required: true
+        type: string
       - description: Request parameters
         in: body
         name: request

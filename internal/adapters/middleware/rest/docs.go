@@ -296,6 +296,13 @@ const docTemplate = `{
                 "summary": "Verify authentication",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "Authentication request ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
                         "description": "Request parameters",
                         "name": "request",
                         "in": "body",

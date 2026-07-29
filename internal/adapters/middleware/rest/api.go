@@ -354,6 +354,7 @@ func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSes
 //	@Accept			json
 //	@Produce		json
 //
+//	@Param			id		path		string					true	"Authentication request ID"
 //	@Param			request	body		SessionVerifyRequest	true	"Request parameters"
 //
 //	@Success		200		{object}	StatusResponse
