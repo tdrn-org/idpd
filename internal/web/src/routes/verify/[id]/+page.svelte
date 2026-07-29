@@ -38,7 +38,7 @@
     error = '';
     try {
       await api.sessionVerify(id, { code });
-      goto('/user');
+      goto('/');
     } catch (err) {
       error = err instanceof Error ? err.message : 'Verifikation fehlgeschlagen.';
     } finally {

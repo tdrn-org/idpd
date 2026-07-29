@@ -96,5 +96,5 @@ export const api = {
 
   /** POST /api/session/verify/{id} — submit verification code */
   sessionVerify: (id: string, req: { code: string }) =>
-    post<VerifyOk>(`/session/verify/${id}`, { id, ...req }),
+    post<LoginOk>(`/session/verify/${id}`, req),
 };
