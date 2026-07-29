@@ -40,7 +40,7 @@
       {#if session.user.picture}
         <img
           src="data:image/jpeg;base64,{session.user.picture}"
-          alt={session.user.nickname || session.user.name}
+          alt={session.user.short_name || session.user.full_name}
           class="w-24 h-24 rounded-full object-cover ring-4 ring-indigo-500/30"
         />
       {:else}
@@ -49,7 +49,7 @@
         </div>
       {/if}
       <h1 class="text-2xl font-bold text-white">
-        {m.user_welcome().replace('{user}', session.user.nickname || session.user.name || session.user.login)}
+        {m.user_welcome().replace('{user}', session.user.short_name || session.user.full_name || session.user.login)}
       </h1>
     </div>
 

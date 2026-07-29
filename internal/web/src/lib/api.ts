@@ -3,6 +3,7 @@ import type {
   SessionLoginInfo,
   SessionLoginRequest,
   SessionVerifyInfo,
+  SessionVerifyRequest,
 } from './types.js';
 
 const BASE = '/api';
@@ -94,7 +95,7 @@ export const api = {
   sessionVerifyInfo: (id: string) =>
     get<SessionVerifyInfo>(`/session/verify/${id}`),
 
-  /** POST /api/session/verify/{id} — submit verification code */
-  sessionVerify: (id: string, req: { code: string }) =>
+  /** POST /api/session/verify/{id} — submit verification response */
+  sessionVerify: (id: string, req: SessionVerifyRequest) =>
     post<LoginOk>(`/session/verify/${id}`, req),
 };

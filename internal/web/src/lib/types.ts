@@ -5,8 +5,8 @@ export interface SessionInfo {
 
 export interface UserInfo {
   login: string;
-  name: string;
-  nickname: string;
+  full_name: string;
+  short_name: string;
   picture: string;
   email: string;
   groups: string[];
