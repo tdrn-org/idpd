@@ -52,25 +52,25 @@ func (h *Handler) Verification() domain.Verification {
 	return domain.VerificationEmail
 }
 
-func (h *Handler) GenerateChallenge(ctx context.Context, user *domain.User) ([]byte, error) {
+func (h *Handler) GenerateChallenge(ctx context.Context, user *domain.User) (string, error) {
 	code, err := crypto.GenerateSecureOTP(codeLenght)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	body, params, err := h.prepareMessage(ctx, user, code)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	payload := h.messageFactory.NewHTMLPayload(body)
 	err = payload.Send(ctx, params)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return []byte(code), nil
+	return code, nil
 }
 
-func (h *Handler) VerifyResponse(_ context.Context, challenge, response []byte) error {
-	if string(challenge) != string(response) {
+func (h *Handler) VerifyResponse(_ context.Context, challenge, response string) error {
+	if challenge != response {
 		return domain.ErrChallengeResponseMismatch
 	}
 	return nil

@@ -19,7 +19,6 @@ package model_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tdrn-org/go-database"
@@ -27,32 +26,34 @@ import (
 	"github.com/tdrn-org/idpd/internal/domain"
 )
 
-func TestUserSessionRequest(t *testing.T) {
+func TestUserSession(t *testing.T) {
 	driver := newTestDB(t)
 
 	userSessionRequest := &domain.UserSessionRequest{
 		IC: newNoopIntegrityContext(),
 		AuthInfo: domain.UserSessionRequestAuthInfo{
-			Handler: t.Name(),
+			Handler:      t.Name(),
+			Login:        "test",
+			Verification: domain.VerificationEmail,
 		},
 	}
 
 	// Insert
-	var r1 *model.UserSessionRequest
+	var s1 *model.UserSession
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		r, err := model.InsertUserSessionRequest(ctx, tx, userSessionRequest, time.Hour)
+		s, err := model.InsertUserSession(ctx, tx, userSessionRequest)
 		require.NoError(t, err)
-		require.NotNil(t, r)
-		r1 = r
+		require.NotNil(t, s)
+		s1 = s
 	})
 
 	// Select
-	var r2 *model.UserSessionRequest
+	var s2 *model.UserSession
 	runInTx(t, driver, func(ctx context.Context, tx *database.Tx) {
-		r, err := model.SelectUserSessionRequestByID(ctx, tx, r1.ID)
+		s, err := model.SelectUserSessionByID(ctx, tx, s1.ID)
 		require.NoError(t, err)
-		require.Equal(t, r1, r)
-		r2 = r
+		require.Equal(t, s1, s)
+		s2 = s
 	})
-	_ = r2
+	_ = s2
 }

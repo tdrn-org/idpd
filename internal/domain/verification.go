@@ -49,8 +49,8 @@ func IsStrongAuth(verificationName string) bool {
 
 type VerificationHandler interface {
 	Verification() Verification
-	GenerateChallenge(ctx context.Context, user *User) ([]byte, error)
-	VerifyResponse(ctx context.Context, challenge, response []byte) error
+	GenerateChallenge(ctx context.Context, user *User) (string, error)
+	VerifyResponse(ctx context.Context, challenge, response string) error
 }
 
 type VerificationHandlerRegistry interface {

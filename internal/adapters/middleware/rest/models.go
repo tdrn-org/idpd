@@ -93,3 +93,8 @@ type SessionVerifyInfo struct {
 }
 
 type SessionVerifyInfoResponse ExtendedStatusResponse[SessionVerifyInfo]
+
+type SessionVerifyRequest struct {
+	// Response is the response to the verification challenge
+	Response string `json:"code"`
+}

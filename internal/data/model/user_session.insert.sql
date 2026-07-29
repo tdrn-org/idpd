@@ -1,0 +1,19 @@
+INSERT INTO
+    user_session(
+        id,
+        login,
+        remember,
+        verification,
+        terminated,
+        create_time,
+        last_access_time
+    )
+VALUES(
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)

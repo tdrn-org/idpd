@@ -17,6 +17,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 )
 
@@ -26,29 +27,17 @@ type UserSession struct {
 	// ID is the unique session identifier.
 	ID string
 
-	// UserSessionRequestID references the auth request that created this session.
-	UserSessionRequestID string
-
 	// Login is the authenticated user identity.
 	Login string
-
-	// Verification is the method used during authentication.
-	Verification Verification
-
-	// Strong indicates whether this is a strong session (can satisfy strong-required requests).
-	Strong bool
 
 	// Remember indicates whether this session persists beyond the browser session.
 	Remember bool
 
+	// Verification is the method used during authentication.
+	Verification Verification
+
 	// Terminated flags whether the session has been explicitly ended.
 	Terminated bool
-
-	// VerificationAuditInfo describes where/when verification occurred.
-	VerificationAuditInfo string
-
-	// LastAccessAuditInfo describes where/when this session was last accessed.
-	LastAccessAuditInfo string
 
 	// CreateTime is when the session was created.
 	CreateTime time.Time
@@ -57,12 +46,20 @@ type UserSession struct {
 	LastAccessTime time.Time
 }
 
-// IsActive returns true if the session has not been terminated.
-func (s *UserSession) IsActive() bool {
+// IsValid returns true if the session is still valid (e.g. has not been terminated or expired).
+func (s *UserSession) IsValid() bool {
 	return !s.Terminated
 }
 
-// CanSatisfyStrong returns true if this session can satisfy a strong-required auth request.
-func (s *UserSession) CanSatisfyStrong() bool {
-	return s.Strong || s.Verification.IsStrong()
+// UserSessionStore is the persistence port for UserSession.
+// Implemented by data.Store.
+type UserSessionStore interface {
+	// CreateUserSession creates and persists a new user session based on the given user session request.
+	CreateUserSession(ctx context.Context, request *UserSessionRequest) (*UserSession, error)
+
+	// GetUserSession returns the session with the given ID, or nil if not found.
+	GetUserSession(ctx context.Context, id string) (*UserSession, error)
+
+	// UpdateUserSession persists changes to an existing session.
+	UpdateUserSession(ctx context.Context, session *UserSession) error
 }

@@ -262,13 +262,13 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/rest.SessionVerifyInfo"
+                            "$ref": "#/definitions/rest.SessionVerifyInfoResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.SessionVerifyInfoResponse"
                         }
                     },
                     "500": {
@@ -301,24 +301,21 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Redirect",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/rest.StatusResponse"
                         }
                     }
                 }
@@ -469,15 +466,28 @@
                 }
             }
         },
+        "rest.SessionVerifyInfoResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "$ref": "#/definitions/rest.StatusCode"
+                },
+                "data": {
+                    "$ref": "#/definitions/rest.SessionVerifyInfo"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
         "rest.SessionVerifyRequest": {
             "type": "object",
             "properties": {
                 "code": {
-                    "description": "Code is the verification code",
-                    "type": "string"
-                },
-                "id": {
-                    "description": "ID identifies the authentication request this request refers to",
+                    "description": "Response is the response to the verification challenge",
                     "type": "string"
                 }
             }

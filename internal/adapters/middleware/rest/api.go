@@ -18,7 +18,6 @@ package rest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -155,7 +154,31 @@ func (api *API) SessionGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) sessionGet(w http.ResponseWriter, r *http.Request, userSession *domain.UserSession) {
-	//TODO: Implement
+	user, err := api.runtime.UserStore().LookupUser(r.Context(), userSession.Login)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	userEmail := ""
+	if len(user.EmailAddresses) > 0 {
+		userEmail = user.EmailAddresses[0]
+	}
+	response := &SessionInfoResponse{
+		Success: true,
+		Status:  http.StatusOK,
+		Data: &SessionInfo{
+			StrongAuth: userSession.Verification.IsStrong(),
+			User: UserInfo{
+				Login:    user.Login,
+				Name:     user.Name,
+				Nickname: user.Nickname,
+				Picture:  user.Picture,
+				Email:    userEmail,
+				Groups:   user.GroupNames(),
+			},
+		},
+	}
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
 
 // POST @BasePath/session
@@ -271,14 +294,7 @@ func (api *API) sessionLoginPost(w http.ResponseWriter, r *http.Request, userSes
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
-	user, err := userSessionRequest.Login(r.Context(), api.runtime.UserStore(), request.Login, request.Password, request.Remember)
-	if err != nil {
-		response.Status = http.StatusInternalServerError
-		api.logAPIFailure(r, response.Status, err)
-		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
-		return
-	}
-	err = userSessionRequest.SetVerificationChallenge(r.Context(), verificationHandler, user)
+	err = userSessionRequest.Login(r.Context(), api.runtime.UserStore(), verificationHandler, request.Login, request.Password, request.Remember)
 	if err == nil {
 		err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
 	}
@@ -303,8 +319,8 @@ func (api *API) sessionLoginPost(w http.ResponseWriter, r *http.Request, userSes
 //
 //	@Param			id	path		string	true	"Authentication request ID"
 //
-//	@Success		200	{object}	SessionVerifyInfo
-//	@Failure		400	{string}	string	"Bad Request"
+//	@Success		200	{object}	SessionVerifyInfoResponse
+//	@Failure		400	{object}	SessionVerifyInfoResponse
 //	@Failure		500	{string}	string	"Internal Server Error"
 //	@Router			/api/session/verify [get]
 func (api *API) SessionVerifyGet(w http.ResponseWriter, r *http.Request) {
@@ -340,66 +356,51 @@ func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSes
 //
 //	@Param			request	body		SessionVerifyRequest	true	"Request parameters"
 //
-//	@Success		200		{object}	map[string]string		"Redirect"
-//	@Failure		400		{string}	string					"Bad Request"
-//	@Failure		500		{string}	string					"Internal Server Error"
+//	@Success		200		{object}	StatusResponse
+//	@Failure		400		{object}	StatusResponse
+//	@Failure		403		{object}	StatusResponse
 //	@Router			/api/session/verify [post]
 func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
-	request := &SessionVerifyRequest{}
-	err := json.NewDecoder(r.Body).Decode(request)
-	if err != nil {
-		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, err)
-		return
-	}
-	userSessionRequest, err := api.runtime.DataStore().GetUserSessionRequest(r.Context(), request.ID)
-	if err != nil {
-		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
-		return
-	}
-	if userSessionRequest == nil {
-		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, fmt.Errorf("unknown user session request id '%s'", request.ID))
-		return
-	}
-	// Verify the challenge
-	if string(userSessionRequest.AuthInfo.VerificationChallenge) != request.Code {
-		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusBadRequest, fmt.Errorf("invalid verification code"))
-		return
-	}
-	demoUser := api.runtime.DemoUser()
-	if demoUser != nil {
-		// Demo mode: already done in login
-		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, map[string]string{"redirect": "/user"})
-		return
-	}
-	// Mark as done
-	userSessionRequest.AuthInfo.State = domain.UserSessionRequestStateDone
-	userSessionRequest.AuthInfo.VerificationTime = time.Now()
-	err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
-	if err != nil {
-		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
-		return
-	}
-	// Set session cookie
-	sessionCookie := &http.Cookie{
-		Name:     "idpd_session",
-		Value:    userSessionRequest.ID,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-	}
-	if userSessionRequest.AuthInfo.Remember {
-		sessionCookie.MaxAge = 30 * 24 * 3600
-	}
-	http.SetCookie(w, sessionCookie)
-	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, http.StatusOK, map[string]string{"redirect": "/user"})
+	api.handleWithUserSessionRequest(w, r, api.sessionVerifyPost)
 }
 
-type SessionVerifyRequest struct {
-	// ID identifies the authentication request this request refers to
-	ID string `json:"id"`
-	// Code is the verification code
-	Code string `json:"code"`
+func (api *API) sessionVerifyPost(w http.ResponseWriter, r *http.Request, userSessionRequest *domain.UserSessionRequest) {
+	response := &StatusResponse{
+		Success: false,
+	}
+	defer r.Body.Close()
+	request := &SessionVerifyRequest{}
+	err := serverhttp.DecodeApplicationJSONRequest(r, request)
+	verificationHandler := api.runtime.GetVerificationHandlerRegistry().GetVerificationHandler(userSessionRequest.AuthInfo.Verification)
+	if err != nil || verificationHandler == nil {
+		// This should not happen; respond simple and short
+		response.Status = http.StatusBadRequest
+		api.logAPIFailure(r, response.Status, err)
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
+		return
+	}
+	verified, err := userSessionRequest.Verify(r.Context(), verificationHandler, request.Response)
+	var userSession *domain.UserSession
+	if err == nil {
+		err = api.runtime.DataStore().UpdateUserSessionRequest(r.Context(), userSessionRequest)
+		if err == nil {
+			userSession, err = api.runtime.DataStore().CreateUserSession(r.Context(), userSessionRequest)
+		}
+	}
+	if err != nil {
+		response.Status = http.StatusInternalServerError
+		api.logAPIFailure(r, response.Status, err)
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
+		return
+	}
+	if verified {
+		response.Success = true
+		response.Status = http.StatusOK
+	} else {
+		response.Status = http.StatusForbidden
+	}
+	api.runtime.SessionCookie().Set(w, userSession.ID, userSession.Remember)
+	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 }
 
 func (api *API) handleWithUserSessionRequest(w http.ResponseWriter, r *http.Request, handle func(http.ResponseWriter, *http.Request, *domain.UserSessionRequest)) {
@@ -435,16 +436,22 @@ func (api *API) handleWithUserSession(w http.ResponseWriter, r *http.Request, ha
 		Code:    StatusCodeNoSession,
 	}
 	cookie := api.runtime.SessionCookie()
-	session, ok := cookie.Get(r)
+	sessionID, ok := cookie.Get(r)
 	if !ok {
 		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
 		return
 	}
-	// TODO: Delete session from DB
-	_ = session
-	serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
-	// TODO: Invoke handle if UserSession exists
-	_ = handle
+	session, err := api.runtime.DataStore().GetUserSession(r.Context(), sessionID)
+	if err != nil {
+		serverhttp.SendError(api.runtime.Logger(), w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if session == nil || !session.IsValid() {
+		serverhttp.SendApplicationJSONResponse(api.runtime.Logger(), w, r, response.Status, response)
+		return
+	}
+	//TODO: Update last_access_time
+	handle(w, r, session)
 }
 
 func (api *API) logAPIFailure(r *http.Request, status int, cause error) {

@@ -20,22 +20,16 @@ CREATE TABLE user_session_request(
 --
 -- User Session (active authenticated sessions)
 --
-CREATE TABLE session(
+CREATE TABLE user_session(
     id TEXT NOT NULL,
-    user_session_request_id TEXT NOT NULL,
     login TEXT NOT NULL,
+    remember INTEGER NOT NULL,
     verification TEXT NOT NULL,
-    strong INTEGER NOT NULL DEFAULT 0,
-    remember INTEGER NOT NULL DEFAULT 0,
-    terminated INTEGER NOT NULL DEFAULT 0,
-    verification_audit_info TEXT NOT NULL DEFAULT '',
-    last_access_audit_info TEXT NOT NULL DEFAULT '',
+    terminated INTEGER NOT NULL,
     create_time INTEGER NOT NULL,
     last_access_time INTEGER NOT NULL,
-    PRIMARY KEY(id),
-    FOREIGN KEY(user_session_request_id) REFERENCES user_session_request(id)
+    PRIMARY KEY(id)
 );
-CREATE INDEX idx_session_login ON session(login);
 --
 -- OAuth2
 --
