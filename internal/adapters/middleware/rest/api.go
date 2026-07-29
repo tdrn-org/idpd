@@ -163,18 +163,22 @@ func (api *API) sessionGet(w http.ResponseWriter, r *http.Request, userSession *
 	if len(user.EmailAddresses) > 0 {
 		userEmail = user.EmailAddresses[0]
 	}
+	userShortname := user.Nickname
+	if userShortname == "" {
+		userShortname = user.GivenName
+	}
 	response := &SessionInfoResponse{
 		Success: true,
 		Status:  http.StatusOK,
 		Data: &SessionInfo{
 			StrongAuth: userSession.Verification.IsStrong(),
 			User: UserInfo{
-				Login:    user.Login,
-				Name:     user.Name,
-				Nickname: user.Nickname,
-				Picture:  user.Picture,
-				Email:    userEmail,
-				Groups:   user.GroupNames(),
+				Login:     user.Login,
+				FullName:  user.Name,
+				ShortName: userShortname,
+				Picture:   user.Picture,
+				Email:     userEmail,
+				Groups:    user.GroupNames(),
 			},
 		},
 	}
@@ -360,6 +364,7 @@ func (api *API) sessionVerifyGet(w http.ResponseWriter, r *http.Request, userSes
 //	@Success		200		{object}	StatusResponse
 //	@Failure		400		{object}	StatusResponse
 //	@Failure		403		{object}	StatusResponse
+//	@Failure		500		{string}	string	"Internal Server Error"
 //	@Router			/api/session/verify/{id} [post]
 func (api *API) SessionVerifyPost(w http.ResponseWriter, r *http.Request) {
 	api.handleWithUserSessionRequest(w, r, api.sessionVerifyPost)

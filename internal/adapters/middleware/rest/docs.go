@@ -330,6 +330,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/rest.StatusResponse"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -499,7 +505,7 @@ const docTemplate = `{
         "rest.SessionVerifyRequest": {
             "type": "object",
             "properties": {
-                "code": {
+                "response": {
                     "description": "Response is the response to the verification challenge",
                     "type": "string"
                 }
@@ -536,6 +542,9 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "full_name": {
+                    "type": "string"
+                },
                 "groups": {
                     "type": "array",
                     "items": {
@@ -545,13 +554,10 @@ const docTemplate = `{
                 "login": {
                     "type": "string"
                 },
-                "name": {
-                    "type": "string"
-                },
-                "nickname": {
-                    "type": "string"
-                },
                 "picture": {
+                    "type": "string"
+                },
+                "short_name": {
                     "type": "string"
                 }
             }

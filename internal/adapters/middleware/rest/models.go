@@ -53,12 +53,12 @@ type SessionInfo struct {
 }
 
 type UserInfo struct {
-	Login    string   `json:"login"`
-	Name     string   `json:"name"`
-	Nickname string   `json:"nickname"`
-	Picture  string   `json:"picture"`
-	Email    string   `json:"email"`
-	Groups   []string `json:"groups"`
+	Login     string   `json:"login"`
+	FullName  string   `json:"full_name"`
+	ShortName string   `json:"short_name"`
+	Picture   string   `json:"picture"`
+	Email     string   `json:"email"`
+	Groups    []string `json:"groups"`
 }
 
 type SessionInfoResponse ExtendedStatusResponse[SessionInfo]
@@ -96,5 +96,5 @@ type SessionVerifyInfoResponse ExtendedStatusResponse[SessionVerifyInfo]
 
 type SessionVerifyRequest struct {
 	// Response is the response to the verification challenge
-	Response string `json:"code"`
+	Response string `json:"response"`
 }

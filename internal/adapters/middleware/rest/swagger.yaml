@@ -117,7 +117,7 @@ definitions:
     type: object
   rest.SessionVerifyRequest:
     properties:
-      code:
+      response:
         description: Response is the response to the verification challenge
         type: string
     type: object
@@ -142,17 +142,17 @@ definitions:
     properties:
       email:
         type: string
+      full_name:
+        type: string
       groups:
         items:
           type: string
         type: array
       login:
         type: string
-      name:
-        type: string
-      nickname:
-        type: string
       picture:
+        type: string
+      short_name:
         type: string
     type: object
 host: localhost:9123
@@ -374,5 +374,9 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/rest.StatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
       summary: Verify authentication
 swagger: "2.0"
