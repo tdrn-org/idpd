@@ -20,11 +20,13 @@ import (
 	"context"
 	"fmt"
 	stdmail "net/mail"
+	"strconv"
 
 	mailnotification "github.com/tdrn-org/go-notify/mail"
 	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/internal/crypto"
 	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/i18n"
 	"github.com/tdrn-org/idpd/internal/verification"
 	"github.com/tdrn-org/idpd/internal/web"
 )
@@ -88,10 +90,29 @@ func (h *Handler) prepareMessage(ctx context.Context, user *domain.User, code st
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to parse email address '%s' for login '%s' (cause: %w)", user.EmailAddresses[0], user.Login, err)
 	}
+	auditLogInfo, err := h.runtime.AuditLog().LookupAuditLogInfo(ctx)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to determine Audit Log Info email verification (cause: %w)", err)
+	}
+	locale := i18n.Locale(ctx)
 	params := &templateParams{
 		Recipients: []*stdmail.Address{recipient},
-		Code:       code,
 		Icon:       web.FavIcon(),
+		Code:       code,
+		Host:       auditLogInfo.Host,
+		Address:    auditLogInfo.Address.String(),
+		Lat:        strconv.FormatFloat(auditLogInfo.Lat, 'f', -1, 64),
+		Lng:        strconv.FormatFloat(auditLogInfo.Lng, 'f', -1, 64),
+		City:       i18n.Name(auditLogInfo.City).Get(locale),
+		Country:    i18n.Name(auditLogInfo.Country).Get(locale),
+	}
+	addressURL := h.runtime.ExternalAddressURL(auditLogInfo.Address)
+	if addressURL != nil {
+		params.AddressURL = addressURL.String()
+	}
+	locationURL := h.runtime.ExternalLocationURL(auditLogInfo.Lat, auditLogInfo.Lng)
+	if locationURL != nil {
+		params.LocationURL = locationURL.String()
 	}
 	subject, err := loadAndExecuteSubjectTemplate(ctx, params)
 	if err != nil {

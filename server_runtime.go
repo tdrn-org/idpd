@@ -19,13 +19,13 @@ package idpd
 import (
 	"context"
 	"log/slog"
-	"maps"
+	"net/netip"
 	"net/url"
-	"slices"
 
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/internal/data"
 	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/geoip"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/userstore/demo"
 	"github.com/tdrn-org/idpd/internal/web"
@@ -55,6 +55,14 @@ func (runtime *serverRuntime) VerifyURL(id string) *url.URL {
 	return web.VerifyURL(runtime.server.baseURL, id)
 }
 
+func (runtime *serverRuntime) ExternalAddressURL(address netip.Addr) *url.URL {
+	return geoip.AddressURL(runtime.server.cfg.GeoIP.AddressURLTemplate, address)
+}
+
+func (runtime *serverRuntime) ExternalLocationURL(lat, lng float64) *url.URL {
+	return geoip.LocationURL(runtime.server.cfg.GeoIP.LocationURLTemplate, lat, lng)
+}
+
 func (runtime *serverRuntime) DataStore() *data.Store {
 	return runtime.server.dataStore
 }
@@ -71,16 +79,16 @@ func (runtime *serverRuntime) DemoUser() *domain.User {
 	return user
 }
 
+func (runtime *serverRuntime) AuditLog() domain.AuditLog {
+	return runtime.server.auditLog
+}
+
 func (runtime *serverRuntime) GetHandler(name scheme.Name) scheme.Handler {
 	return runtime.server.schemeHandlers[scheme.Name(name)]
 }
 
 func (runtime *serverRuntime) GetVerificationHandlerRegistry() domain.VerificationHandlerRegistry {
 	return runtime.server.verificationHandlers
-}
-
-func (runtime *serverRuntime) ListVerifications() []domain.Verification {
-	return slices.Collect(maps.Keys(runtime.server.verificationHandlers))
 }
 
 func (runtime *serverRuntime) Logger() *slog.Logger {

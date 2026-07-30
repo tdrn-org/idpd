@@ -14,21 +14,31 @@
  * limitations under the License.
  */
 
-package verification
+package domain
 
 import (
+	"context"
 	"net/netip"
-	"net/url"
 
-	"github.com/tdrn-org/idpd/internal/domain"
+	"golang.org/x/text/language"
 )
 
-type Runtime interface {
-	AuditLog() domain.AuditLog
-	ExternalAddressURL(address netip.Addr) *url.URL
-	ExternalLocationURL(lat, lng float64) *url.URL
+type AuditLogEntry struct {
+	ID string
+	AuditLogInfo
 }
 
-type Handler interface {
-	domain.VerificationHandler
+type AuditLogInfo struct {
+	Address netip.Addr
+	Host    string
+	Lat     float64
+	Lng     float64
+	City    map[language.Tag]string
+	Country map[language.Tag]string
+}
+
+type AuditLog interface {
+	LookupAuditLogInfo(ctx context.Context) (*AuditLogInfo, error)
+	RecordAuditLogEntry(ctx context.Context) (*AuditLogEntry, error)
+	GetAuditLogEntry(ctx context.Context, id string) (*AuditLogEntry, error)
 }

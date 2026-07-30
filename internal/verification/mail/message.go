@@ -43,11 +43,11 @@ type templateParams struct {
 	Host        string
 	Address     string
 	AddressURL  string
-	City        string
-	Country     string
 	Lat         string
 	Lng         string
 	LocationURL string
+	City        string
+	Country     string
 }
 
 func (p *templateParams) ResolveRecipients() ([]*stdmail.Address, error) {

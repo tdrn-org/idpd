@@ -35,6 +35,9 @@ type UserSession struct {
 }
 
 func (s *UserSession) ToDomain() *domain.UserSession {
+	if s == nil {
+		return nil
+	}
 	return &domain.UserSession{
 		ID:             s.ID,
 		Login:          s.Login,

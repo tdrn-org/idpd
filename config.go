@@ -18,6 +18,7 @@ package idpd
 
 import (
 	"log/slog"
+	"net/netip"
 	"reflect"
 	"time"
 
@@ -100,6 +101,16 @@ func httpServerOptions(cfg *config.ServerConfig) []httpserver.OptionSetter {
 		httpServerOptions = append(httpServerOptions, httpserver.WithAccessLog(accessLogLogger))
 	}
 	return httpServerOptions
+}
+
+func geoipNetworkMapping(cfg *config.GeoIPConfig) map[netip.Prefix]string {
+	networkMapping := make(map[netip.Prefix]string)
+	for _, mapping := range cfg.Mappings {
+		for _, prefix := range mapping.Networks.Prefixes() {
+			networkMapping[prefix] = mapping.Host
+		}
+	}
+	return networkMapping
 }
 
 func ldapUserstoreConfig(cfg *config.UserstoreConfig) userstore.Config {

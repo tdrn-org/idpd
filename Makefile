@@ -53,7 +53,7 @@ endif
 	$(GO) mod download -x
 
 .PHONY: build
-build: fmt deps generate
+build: deps fmt generate
 	@echo "Building artifacts..."
 ifeq (1, $(WEB))
 	# cd internal/web && $(NPM) $(NPMOPTS) run build

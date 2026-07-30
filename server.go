@@ -33,9 +33,12 @@ import (
 	"github.com/tdrn-org/go-httpserver"
 	"github.com/tdrn-org/idpd/config"
 	"github.com/tdrn-org/idpd/internal/adapters/middleware/rest"
+	"github.com/tdrn-org/idpd/internal/audit"
 	"github.com/tdrn-org/idpd/internal/data"
 	"github.com/tdrn-org/idpd/internal/data/model"
 	"github.com/tdrn-org/idpd/internal/domain"
+	"github.com/tdrn-org/idpd/internal/geoip"
+	"github.com/tdrn-org/idpd/internal/geoip/maxminddb"
 	"github.com/tdrn-org/idpd/internal/scheme"
 	"github.com/tdrn-org/idpd/internal/scheme/forward"
 	"github.com/tdrn-org/idpd/internal/scheme/oauth2"
@@ -57,6 +60,8 @@ type Server struct {
 	httpServer           *httpserver.Instance
 	baseURL              *url.URL
 	sessionCookie        *httpserver.CookieHandler
+	geoipProvider        geoip.Provider
+	auditLog             *audit.Log
 	schemeHandlers       map[scheme.Name]scheme.Handler
 	verificationHandlers verificationHandlerRegistry
 	jobTicker            *time.Ticker
@@ -81,6 +86,8 @@ func StartServer(ctx context.Context, cfg *config.Config) (*Server, error) {
 		s.startStore,
 		s.startUserstore,
 		s.startHttpServer,
+		s.startGeoipProvider,
+		s.startAuditLog,
 		s.startRestAPI,
 		s.startWebUI,
 		s.startVerificationHandlers,
@@ -120,6 +127,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 func (s *Server) Close() error {
 	closeFuncs := []func() error{
+		s.closeGeoipProvider,
 		s.closeHttpServer,
 		s.closeUserstore,
 		s.closeStore,
@@ -237,6 +245,42 @@ func (s *Server) closeHttpServer() error {
 	}
 	s.logger.Info("closing HTTP server...")
 	return s.httpServer.Close()
+}
+
+func (s *Server) startGeoipProvider(_ context.Context, cfg *config.Config) error {
+	s.logger.Info("starting GeoIP provider...", slog.String("type", string(cfg.GeoIP.Provider)))
+	mapping := geoipNetworkMapping(&cfg.GeoIP)
+	var provider geoip.Provider
+	var err error
+	switch cfg.GeoIP.Provider {
+	case config.GeoIPProvider(geoip.NoneProviderName):
+		provider, err = geoip.Open(&geoip.None{}, mapping)
+	case config.GeoIPProvider(maxminddb.ProviderName):
+		provider, err = geoip.Open(&maxminddb.Config{File: cfg.GeoIP.MaxMindDB.File}, mapping)
+	default:
+		err = fmt.Errorf("unrecognized GeoIP provider '%s'", cfg.GeoIP.Provider)
+	}
+	if err != nil {
+		return err
+	}
+	s.geoipProvider = provider
+	return nil
+}
+
+func (s *Server) closeGeoipProvider() error {
+	if s.geoipProvider == nil {
+		return nil
+	}
+	return s.geoipProvider.Close()
+}
+
+func (s *Server) startAuditLog(_ context.Context, _ *config.Config) error {
+	auditLog, err := audit.NewLog(s.runtime(), s.geoipProvider)
+	if err != nil {
+		return err
+	}
+	s.auditLog = auditLog
+	return nil
 }
 
 func (s *Server) startRestAPI(_ context.Context, _ *config.Config) error {

@@ -37,8 +37,8 @@ password = ""
 
 [geoip]
 provider = "none"
-address_url_template = "https://whois.domaintools.com/{{.Address}}"
-location_url_template = "https://maps.google.com/?q={{.Lat}},{{.Lng}}"
+address_url_template = "https://whois.domaintools.com/%s"
+location_url_template = "https://maps.google.com/?q=%.6f,%.6f"
 
 [geoip.none]
 

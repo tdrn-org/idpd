@@ -8,6 +8,20 @@ CREATE TABLE integrity_context_key(
     PRIMARY KEY(id)
 );
 --
+-- Audit Log
+--
+CREATE TABLE audit_log_entry(
+    id TEXT NOT NULL,
+    address TEXT NOT NULL,
+    host TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    city TEXT NOT NULL,
+    country TEXT NOT NULL,
+    country_code TEXT NOT NULL,
+    PRIMARY KEY(id)
+);
+--
 -- User Session Request (shared kernel for all auth flows)
 --
 CREATE TABLE user_session_request(
