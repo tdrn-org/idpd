@@ -4,9 +4,9 @@ target = "stdout"
 color = "auto"
 file_name = "./idpd.log"
 file_size_limit = 0
-syslog_network = "tcp"
-syslog_address = "localhost:601"
-syslog_encoding = "rfc5424"
+syslog_network = "unixgram"
+syslog_address = "/dev/log"
+syslog_encoding = "local"
 syslog_facility = 4
 
 [server]
