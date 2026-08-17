@@ -11,9 +11,9 @@ require (
 	github.com/tdrn-org/go-diff v0.1.4
 	github.com/tdrn-org/go-notify v0.0.6
 	github.com/tdrn-org/go-tlsconf v0.0.12
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.55.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.41.0
 )
 
 require (
