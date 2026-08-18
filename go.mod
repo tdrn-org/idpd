@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v1.16.1
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/uuid v1.6.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	github.com/tdrn-org/go-conf v0.0.8
 	github.com/tdrn-org/go-diff v0.1.4
 	github.com/tdrn-org/go-notify v0.0.6
@@ -83,11 +83,9 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/oschwald/maxminddb-golang/v2 v2.5.0
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rs/cors v1.11.1
 	github.com/swaggo/swag v1.16.6
 	github.com/tdrn-org/go-cache v0.0.6
