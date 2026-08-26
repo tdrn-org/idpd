@@ -88,7 +88,7 @@ require (
 	github.com/oschwald/maxminddb-golang/v2 v2.5.0
 	github.com/rs/cors v1.11.1
 	github.com/swaggo/swag v1.16.6
-	github.com/tdrn-org/go-cache v0.0.6
+	github.com/tdrn-org/go-cache v0.1.2
 	github.com/tdrn-org/go-database v0.1.3
 	github.com/tdrn-org/go-httpserver v0.1.3
 	github.com/tdrn-org/go-log v0.6.1
