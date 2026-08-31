@@ -27,7 +27,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
-	github.com/go-chi/chi/v5 v5.3.1 // indirect
+	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
@@ -93,7 +93,7 @@ require (
 	github.com/tdrn-org/go-httpserver v0.1.3
 	github.com/tdrn-org/go-log v0.6.1
 	github.com/tdrn-org/go-pool v0.0.3
-	github.com/zitadel/oidc/v3 v3.49.2
+	github.com/zitadel/oidc/v3 v3.49.4
 	github.com/zitadel/saml v0.4.1
 )
 
