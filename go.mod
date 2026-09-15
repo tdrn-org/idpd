@@ -12,7 +12,7 @@ require (
 	github.com/tdrn-org/go-notify v0.0.6
 	github.com/tdrn-org/go-tlsconf v0.0.12
 	golang.org/x/crypto v0.57.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/text v0.42.0
 )
 
