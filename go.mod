@@ -85,7 +85,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/maxmind/mmdbwriter v1.2.0
-	github.com/oschwald/maxminddb-golang/v2 v2.5.0
+	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/rs/cors v1.11.1
 	github.com/swaggo/swag v1.16.6
 	github.com/tdrn-org/go-cache v0.1.2
