@@ -1,6 +1,6 @@
 module github.com/tdrn-org/idpd
 
-go 1.26.5
+go 1.26.7
 
 require (
 	github.com/alecthomas/kong v1.16.1
@@ -9,7 +9,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/tdrn-org/go-conf v0.0.8
 	github.com/tdrn-org/go-diff v0.1.4
-	github.com/tdrn-org/go-notify v0.0.6
+	github.com/tdrn-org/go-notify v0.0.7
 	github.com/tdrn-org/go-tlsconf v0.0.12
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
