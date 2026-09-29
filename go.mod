@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.12.1
 	github.com/tdrn-org/go-conf v0.0.8
-	github.com/tdrn-org/go-diff v0.1.4
+	github.com/tdrn-org/go-diff v0.1.5
 	github.com/tdrn-org/go-notify v0.0.7
 	github.com/tdrn-org/go-tlsconf v0.0.12
 	golang.org/x/crypto v0.57.0
