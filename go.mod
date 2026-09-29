@@ -10,7 +10,7 @@ require (
 	github.com/tdrn-org/go-conf v0.0.8
 	github.com/tdrn-org/go-diff v0.1.5
 	github.com/tdrn-org/go-notify v0.0.7
-	github.com/tdrn-org/go-tlsconf v0.0.12
+	github.com/tdrn-org/go-tlsconf v0.0.13
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/text v0.42.0
