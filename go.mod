@@ -1,20 +1,6 @@
 module github.com/tdrn-org/idpd
 
-go 1.26.7
-
-require (
-	github.com/alecthomas/kong v1.16.1
-	github.com/go-jose/go-jose/v4 v4.1.5
-	github.com/google/uuid v1.6.0
-	github.com/stretchr/testify v1.12.1
-	github.com/tdrn-org/go-conf v0.0.8
-	github.com/tdrn-org/go-diff v0.1.5
-	github.com/tdrn-org/go-notify v0.0.7
-	github.com/tdrn-org/go-tlsconf v0.0.13
-	golang.org/x/crypto v0.57.0
-	golang.org/x/oauth2 v0.37.0
-	golang.org/x/text v0.42.0
-)
+go 1.27.0
 
 require (
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
@@ -83,18 +69,29 @@ require (
 
 require (
 	github.com/BurntSushi/toml v1.6.0
+	github.com/alecthomas/kong v1.16.1
+	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/go-ldap/ldap/v3 v3.4.14
+	github.com/google/uuid v1.6.0
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/rs/cors v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/swag v1.16.6
-	github.com/tdrn-org/go-cache v0.1.2
+	github.com/tdrn-org/go-cache v0.1.3
+	github.com/tdrn-org/go-conf v0.0.8
 	github.com/tdrn-org/go-database v0.1.3
+	github.com/tdrn-org/go-diff v0.1.5
 	github.com/tdrn-org/go-httpserver v0.1.3
 	github.com/tdrn-org/go-log v0.6.1
+	github.com/tdrn-org/go-notify v0.0.7
 	github.com/tdrn-org/go-pool v0.0.4
+	github.com/tdrn-org/go-tlsconf v0.0.13
 	github.com/zitadel/oidc/v3 v3.51.3
 	github.com/zitadel/saml v0.4.1
+	golang.org/x/crypto v0.57.0
+	golang.org/x/oauth2 v0.37.0
+	golang.org/x/text v0.42.0
 )
 
 tool github.com/swaggo/swag/cmd/swag
