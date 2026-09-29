@@ -169,8 +169,8 @@ github.com/tdrn-org/go-notify v0.0.7 h1:v5nqzv43Nat7JvraC5XLS1fZOY097V6LGvJ9GAxd
 github.com/tdrn-org/go-notify v0.0.7/go.mod h1:RrpidmEwjMMIzgFVVEswK5Qh5FjOgYuBgxHTpxKwQGI=
 github.com/tdrn-org/go-pool v0.0.4 h1:Fwj6BRmJsq27hq6dRzjp4t2+yXkDr3Yf8WQugea8VDU=
 github.com/tdrn-org/go-pool v0.0.4/go.mod h1:UP++oRBqQu5u5aplulG+ldRa0M4qrG97n5gQIFf6RJ0=
-github.com/tdrn-org/go-tlsconf v0.0.12 h1:o2LayL47FtaNzM4QjgYnHnlAvOb373zOsUbA1QSR0os=
-github.com/tdrn-org/go-tlsconf v0.0.12/go.mod h1:mfzcHAGoJ46LFfhHTfk9plFph0OrRpQk3eHV2uO/vDY=
+github.com/tdrn-org/go-tlsconf v0.0.13 h1:n02iiHfo/PxZlSOGQ1i1FXqsdmxk1O6GLJvRg9Z17Ac=
+github.com/tdrn-org/go-tlsconf v0.0.13/go.mod h1:0auwEFG0RMWnNqUT1hw7zXJTWzlsA7fUeUC4+/HHQOY=
 github.com/urfave/cli/v2 v2.27.7 h1:bH59vdhbjLv3LAvIu6gd0usJHgoTTPhCFib8qqOwXYU=
 github.com/urfave/cli/v2 v2.27.7/go.mod h1:CyNAG/xg+iAOg0N4MPGZqVmv2rCoP267496AOXUZjA4=
 github.com/wneessen/go-mail v0.8.1 h1:tVcncj02/QySVFw3zr/kXOzZcuFQqBNT6K+Rbgm/pcM=
