@@ -87,7 +87,7 @@ require (
 	github.com/tdrn-org/go-notify v0.0.9
 	github.com/tdrn-org/go-pool v0.0.5
 	github.com/tdrn-org/go-tlsconf v0.0.15
-	github.com/zitadel/oidc/v3 v3.51.10
+	github.com/zitadel/oidc/v3 v3.51.11
 	github.com/zitadel/saml v0.4.1
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
