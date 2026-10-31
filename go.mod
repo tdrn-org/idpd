@@ -35,7 +35,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
-	github.com/maypok86/otter/v2 v2.3.0 // indirect
+	github.com/maypok86/otter/v2 v2.4.0 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/muhlemmer/httpforwarded v0.1.0 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
@@ -79,7 +79,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/swag v1.16.6
-	github.com/tdrn-org/go-cache v0.1.6
+	github.com/tdrn-org/go-cache v0.1.9
 	github.com/tdrn-org/go-conf v0.0.10
 	github.com/tdrn-org/go-database v0.1.9
 	github.com/tdrn-org/go-diff v0.1.6
