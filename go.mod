@@ -64,7 +64,7 @@ require (
 	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
-	modernc.org/sqlite v1.60.1 // indirect
+	modernc.org/sqlite v1.61.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
@@ -81,7 +81,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/tdrn-org/go-cache v0.1.6
 	github.com/tdrn-org/go-conf v0.0.10
-	github.com/tdrn-org/go-database v0.1.9
+	github.com/tdrn-org/go-database v0.1.11
 	github.com/tdrn-org/go-diff v0.1.6
 	github.com/tdrn-org/go-httpserver v0.1.6
 	github.com/tdrn-org/go-log v0.6.4
