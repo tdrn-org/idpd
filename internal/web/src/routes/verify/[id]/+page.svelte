@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { api, m } from '$lib';
-  import type { SessionVerifyInfo } from '$lib/types.js';
+  import { api, m } from '#lib';
+  import type { SessionVerifyInfo } from '#lib/types.js';
   import { ShieldCheck, Loader, TriangleAlert } from '@lucide/svelte';
 
   let id = $state('');
