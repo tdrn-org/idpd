@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { api, m } from '$lib';
+  import { api, m } from '#lib';
   import { LogIn, FingerprintPattern, Loader } from '@lucide/svelte';
 
   let checking = $state(true);

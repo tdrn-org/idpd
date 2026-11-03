@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, m } from '$lib';
-  import type { SessionInfo } from '$lib/types.js';
+  import { api, m } from '#lib';
+  import type { SessionInfo } from '#lib/types.js';
   import { LogOut, User, Loader, TriangleAlert } from '@lucide/svelte';
 
   let session = $state<SessionInfo | null>(null);
