@@ -7,7 +7,7 @@ require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/amdonov/xmlsig v0.1.0 // indirect
 	github.com/beevik/etree v1.8.1 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.3 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.10.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
@@ -88,7 +88,7 @@ require (
 	github.com/tdrn-org/go-notify v0.0.10
 	github.com/tdrn-org/go-pool v0.0.5
 	github.com/tdrn-org/go-tlsconf v0.0.15
-	github.com/zitadel/oidc/v3 v3.51.16
+	github.com/zitadel/oidc/v3 v3.51.17
 	github.com/zitadel/saml v0.4.1
 	golang.org/x/crypto v0.58.0
 	golang.org/x/oauth2 v0.37.0
