@@ -165,8 +165,8 @@ github.com/tdrn-org/go-httpserver v0.1.6 h1:rtCIaPGnYLswQmUd4WZIx+oK1BhsOCkQVllo
 github.com/tdrn-org/go-httpserver v0.1.6/go.mod h1:FMywF9Fu9S+4sW89vXxcgJzup8dZyNnoAO0m84f3AYI=
 github.com/tdrn-org/go-log v0.6.4 h1:AvpO/nizfq5O+wq6rJNocXG4HsIvsUAhgIG/MOg5LGI=
 github.com/tdrn-org/go-log v0.6.4/go.mod h1:BlnqMMnt1DwQjJZuxMy0qSffPttdv6ubcod6mgGBvzA=
-github.com/tdrn-org/go-notify v0.0.10 h1:4XUEayR0dneSxmpZpvgzKgAGo9bZNkTcTcbol6OGw9I=
-github.com/tdrn-org/go-notify v0.0.10/go.mod h1:wQEdDAwDFRq5ueWZqS1Fddf+NgHzFdUn8vjD63YoD4U=
+github.com/tdrn-org/go-notify v0.0.11 h1:1ti9qRtH+wyctFN0eEB38o7krkY0MXQf5vA2Y+kaSB4=
+github.com/tdrn-org/go-notify v0.0.11/go.mod h1:nHoz5qHUsfyDqE6mNihK9EwkraqPlPwFPzOycv8gSPE=
 github.com/tdrn-org/go-pool v0.0.5 h1:II5N93Ab/L2ELErGtiA2uk461lPqOzBEspwQjld5J9c=
 github.com/tdrn-org/go-pool v0.0.5/go.mod h1:lYB6dLEe92oA61iKimwYWC5JANfk4qG7ZYzu2Kdfyik=
 github.com/tdrn-org/go-tlsconf v0.0.15 h1:VscbpWYkvVY8fJf3ncGgFRRAmRQWTL1Uxr5JP9zRz2U=
