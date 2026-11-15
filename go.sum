@@ -161,8 +161,8 @@ github.com/tdrn-org/go-database v0.1.12 h1:LL7IkZVtbFY5dp6R+s0nnMLKi9V4w57WfAOQy
 github.com/tdrn-org/go-database v0.1.12/go.mod h1:uvmD3DFrR9vBsdXpkj9pVMSxO5FVTC5cWrV2+jo1oyY=
 github.com/tdrn-org/go-diff v0.1.6 h1:BkUtmLu8wDhN3i2vTM0xf79XH8e5Fr1vhyrPpdiwaYg=
 github.com/tdrn-org/go-diff v0.1.6/go.mod h1:zJpE11Rlvvjw8Jw/QljhwAIgsyCclTO6ALF5myR+zpI=
-github.com/tdrn-org/go-httpserver v0.1.6 h1:rtCIaPGnYLswQmUd4WZIx+oK1BhsOCkQVllonoNJQas=
-github.com/tdrn-org/go-httpserver v0.1.6/go.mod h1:FMywF9Fu9S+4sW89vXxcgJzup8dZyNnoAO0m84f3AYI=
+github.com/tdrn-org/go-httpserver v0.1.7 h1:h0FsOPQN3VnJ9PbAXAsR92Xx5CCEqjeLFnTAWyUpEjM=
+github.com/tdrn-org/go-httpserver v0.1.7/go.mod h1:g0ePyPycL3RfUIyD5us9oR+McSHVG1qh8GDAbwcXJRU=
 github.com/tdrn-org/go-log v0.6.4 h1:AvpO/nizfq5O+wq6rJNocXG4HsIvsUAhgIG/MOg5LGI=
 github.com/tdrn-org/go-log v0.6.4/go.mod h1:BlnqMMnt1DwQjJZuxMy0qSffPttdv6ubcod6mgGBvzA=
 github.com/tdrn-org/go-notify v0.0.11 h1:1ti9qRtH+wyctFN0eEB38o7krkY0MXQf5vA2Y+kaSB4=

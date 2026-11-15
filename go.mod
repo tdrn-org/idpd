@@ -84,7 +84,7 @@ require (
 	github.com/tdrn-org/go-conf v0.0.10
 	github.com/tdrn-org/go-database v0.1.12
 	github.com/tdrn-org/go-diff v0.1.6
-	github.com/tdrn-org/go-httpserver v0.1.6
+	github.com/tdrn-org/go-httpserver v0.1.7
 	github.com/tdrn-org/go-log v0.6.4
 	github.com/tdrn-org/go-notify v0.0.11
 	github.com/tdrn-org/go-pool v0.0.5
