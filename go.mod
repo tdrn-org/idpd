@@ -59,8 +59,8 @@ require (
 	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect
 	modernc.org/libc v1.79.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -91,9 +91,9 @@ require (
 	github.com/tdrn-org/go-tlsconf v0.0.15
 	github.com/zitadel/oidc/v3 v3.51.17
 	github.com/zitadel/saml v0.4.1
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/oauth2 v0.38.0
-	golang.org/x/text v0.43.0
+	golang.org/x/text v0.44.0
 )
 
 tool github.com/swaggo/swag/cmd/swag
