@@ -45,7 +45,7 @@ require (
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/tdrn-org/go-trace v0.0.1 // indirect
 	github.com/urfave/cli/v2 v2.27.7 // indirect
-	github.com/wneessen/go-mail v0.8.1 // indirect
+	github.com/wneessen/go-mail v0.8.2 // indirect
 	github.com/xrash/smetrics v0.0.0-20261013231157-39c47d93efba // indirect
 	github.com/zitadel/logging v0.7.0 // indirect
 	github.com/zitadel/schema v1.3.2 // indirect
@@ -86,7 +86,7 @@ require (
 	github.com/tdrn-org/go-diff v0.1.6
 	github.com/tdrn-org/go-httpserver v0.1.7
 	github.com/tdrn-org/go-log v0.6.4
-	github.com/tdrn-org/go-notify v0.1.0
+	github.com/tdrn-org/go-notify v0.1.1
 	github.com/tdrn-org/go-pool v0.0.5
 	github.com/tdrn-org/go-tlsconf v0.0.15
 	github.com/zitadel/oidc/v3 v3.51.17

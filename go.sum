@@ -165,8 +165,8 @@ github.com/tdrn-org/go-httpserver v0.1.7 h1:h0FsOPQN3VnJ9PbAXAsR92Xx5CCEqjeLFnTA
 github.com/tdrn-org/go-httpserver v0.1.7/go.mod h1:g0ePyPycL3RfUIyD5us9oR+McSHVG1qh8GDAbwcXJRU=
 github.com/tdrn-org/go-log v0.6.4 h1:AvpO/nizfq5O+wq6rJNocXG4HsIvsUAhgIG/MOg5LGI=
 github.com/tdrn-org/go-log v0.6.4/go.mod h1:BlnqMMnt1DwQjJZuxMy0qSffPttdv6ubcod6mgGBvzA=
-github.com/tdrn-org/go-notify v0.1.0 h1:CeO2My5CZh3guA2ubwoJzDrEjySODzdvOu8oE1HezpQ=
-github.com/tdrn-org/go-notify v0.1.0/go.mod h1:bAaMibhXd+yUXdeHuCnYYUWfWNlIHAbtFys9JA3g7Z4=
+github.com/tdrn-org/go-notify v0.1.1 h1:EsehrickDCZ+qjj9XxgsQkQqovs1Fo8HPbqbqmiiKnI=
+github.com/tdrn-org/go-notify v0.1.1/go.mod h1:zKrxsDrrjOaVN1sKzRymbJf/NPWgXi7m5VsyDG5SCNg=
 github.com/tdrn-org/go-pool v0.0.5 h1:II5N93Ab/L2ELErGtiA2uk461lPqOzBEspwQjld5J9c=
 github.com/tdrn-org/go-pool v0.0.5/go.mod h1:lYB6dLEe92oA61iKimwYWC5JANfk4qG7ZYzu2Kdfyik=
 github.com/tdrn-org/go-tlsconf v0.0.15 h1:VscbpWYkvVY8fJf3ncGgFRRAmRQWTL1Uxr5JP9zRz2U=
@@ -175,8 +175,8 @@ github.com/tdrn-org/go-trace v0.0.1 h1:t2ArApsCzLI9+BZ0sz3XD9W8VSdMOeYRWlZSFbwvo
 github.com/tdrn-org/go-trace v0.0.1/go.mod h1:bTYCPJHd/p/+FwAAUltLx9bi3BbZVigr1rkk0vksfHo=
 github.com/urfave/cli/v2 v2.27.7 h1:bH59vdhbjLv3LAvIu6gd0usJHgoTTPhCFib8qqOwXYU=
 github.com/urfave/cli/v2 v2.27.7/go.mod h1:CyNAG/xg+iAOg0N4MPGZqVmv2rCoP267496AOXUZjA4=
-github.com/wneessen/go-mail v0.8.1 h1:tVcncj02/QySVFw3zr/kXOzZcuFQqBNT6K+Rbgm/pcM=
-github.com/wneessen/go-mail v0.8.1/go.mod h1:dWZ61zadzCIyvB4y1/YzC5O7MrbbzBfPkARmbosdf8w=
+github.com/wneessen/go-mail v0.8.2 h1:JVeSmRX9oPjYFH77irWIFy8t1vJRDU/+ri4H38FMAK8=
+github.com/wneessen/go-mail v0.8.2/go.mod h1:rJb+LDvSMcOzSeNZ4rFyS7PLMy0DEFz/uU3A0T5JY50=
 github.com/xrash/smetrics v0.0.0-20261013231157-39c47d93efba h1:tXo8fNGjrZLpWGM8lqTozHJj36oppn3p0En+ZiE6Jwo=
 github.com/xrash/smetrics v0.0.0-20261013231157-39c47d93efba/go.mod h1:Ohn+xnUBiLI6FVj/9LpzZWtj1/D6lUovWYBkxHVV3aM=
 github.com/zitadel/logging v0.7.0 h1:eugftwMM95Wgqwftsvj81isL0JK/hoScVqp/7iA2adQ=
